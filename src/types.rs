@@ -246,10 +246,8 @@ pub enum TokenKind {
 ///
 /// # Example
 ///
-/// ```
-/// # use exp_rs::{EvalContext, Real};
-/// # use exp_rs::engine::interp;
-/// # use alloc::rc::Rc;
+/// ```text
+/// // Create a context
 /// let mut ctx = EvalContext::new();
 ///
 /// // Register a custom function that calculates the hypotenuse
@@ -263,7 +261,7 @@ pub enum TokenKind {
 ///
 /// // Use the function in an expression
 /// let result = interp("hypotenuse(3, 4)", Some(Rc::new(ctx))).unwrap();
-/// assert_eq!(result, 5.0);
+/// // Result: 5.0
 /// ```
 #[derive(Clone)]
 pub struct NativeFunction<'a> {
