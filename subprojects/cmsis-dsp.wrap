@@ -1,0 +1,10 @@
+[wrap-git]
+directory = cmsis-dsp
+url = https://github.com/ARM-software/CMSIS-DSP.git
+revision = main
+depth = 1
+clone-recursive = false
+patch_directory = cmsis-dsp
+
+[provide]
+cmsis-dsp = cmsis_dsp_dep

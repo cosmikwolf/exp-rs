@@ -1,0 +1,14 @@
+option(
+  'build_target',
+  type: 'combo',
+  choices: ['qemu_tests', 'library'],
+  value: 'qemu_tests',
+  description: 'Which target to build',
+)
+
+option(
+  'enable_f64',
+  type: 'boolean',
+  value: false,
+  description: 'Enable 64-bit floating point (double precision) support in CMSIS-DSP',
+)

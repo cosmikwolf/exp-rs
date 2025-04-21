@@ -1,0 +1,70 @@
+diff --git a/meson.build b/meson.build
+new file mode 100644
+index 0000000000000000000000000000000000000000..1111111111111111111111111111111111111111
+--- /dev/null
++++ b/meson.build
+@@ -0,0 +1,59 @@
++project('cmsis-dsp', 'c')
++
++# Get CMSIS-Core dependency for headers like cmsis_compiler.h
++cmsis_core_proj = subproject('cmsis-core')
++cmsis_core_dep = cmsis_core_proj.get_variable('cmsis_core_dep')
++
++# Link the CMSIS-Core Include directory into the CMSIS-DSP Include directory
++cmsis_link = run_command('ln', '-sf', '../cmsis-core/CMSIS/Core/Include', meson.current_source_dir() + '/Include/cmsis', check: true)
++
++# Include directories for CMSIS-DSP
++cmsis_dsp_inc = include_directories(
++  'Include',
++  'PrivateInclude',
++  '.',
++  '../cmsis-core/CMSIS/Core/Include'
++)
++
++# Compiler flags for CMSIS-DSP with 64-bit FPU support
++cmsis_dsp_args = [
++  '-DARM_MATH_CM7',         # For Cortex-M7
++  '-D__FPU_PRESENT=1',      # Enable FPU
++  '-DARM_MATH_MVEF',        # Enable MVE (64-bit vector extensions)
++  '-DARM_MATH_AUTOVECTORIZE', # Enable auto-vectorization
++  '-DFLOAT16_SUPPORTED'     # Enable half-precision float support
++]
++
++# Define CMSIS-DSP source files needed for our test
++cmsis_dsp_sources = [
++  # Basic Math Functions
++  'Source/BasicMathFunctions/BasicMathFunctions.c',
++  'Source/BasicMathFunctions/BasicMathFunctionsF16.c',
++  
++  # Fast Math Functions (trig functions, etc.)
++  'Source/FastMathFunctions/FastMathFunctions.c',
++  'Source/FastMathFunctions/FastMathFunctionsF16.c',
++  'Source/FastMathFunctions/arm_sin_f32.c',
++  'Source/FastMathFunctions/arm_cos_f32.c',
++  'Source/FastMathFunctions/arm_sqrt_q15.c',
++  'Source/FastMathFunctions/arm_sqrt_q31.c',
++  # Note: arm_sqrt_f32 is inline in fast_math_functions.h
++  
++  # Support Functions
++  'Source/SupportFunctions/SupportFunctions.c',
++  'Source/SupportFunctions/SupportFunctionsF16.c',
++  
++  # Common Tables
++  'Source/CommonTables/CommonTables.c',
++  'Source/CommonTables/CommonTablesF16.c'
++]
++
++# Create a static library with the CMSIS-DSP sources
++cmsis_dsp_lib = static_library('cmsis-dsp', cmsis_dsp_sources,
++  c_args: cmsis_dsp_args,
++  include_directories: cmsis_dsp_inc,
++  dependencies: [cmsis_core_dep]
++)
++
++# Create a dependency object that other targets can depend on
++cmsis_dsp_dep = declare_dependency(
++  include_directories: cmsis_dsp_inc,
++  link_with: cmsis_dsp_lib,
++  compile_args: cmsis_dsp_args,
++  dependencies: [cmsis_core_dep]
++)

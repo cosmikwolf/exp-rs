@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <claude@anthropic.com>
+Date: Sat, 19 Apr 2025 00:00:00 +0000
+Subject: [PATCH] Add meson build files
+
+---
+ meson.build       | 55 +++++++++++++++++++++++++++++++++++++++++++++++
+ meson_options.txt |  3 +++
+ 2 files changed, 58 insertions(+)
+ create mode 100644 meson.build
+ create mode 100644 meson_options.txt
+
+diff --git a/meson.build b/meson.build
+new file mode 100644
+index 0000000..7fd45cd
+--- /dev/null
++++ b/meson.build
+@@ -0,0 +1,55 @@
++project('cmsis-dsp', 'c')
++
++# Include directories for CMSIS-DSP
++cmsis_dsp_inc = include_directories(
++  'Include',
++  'PrivateInclude',
++  '.',  # For compatibility
++)
++
++# Compiler flags for CMSIS-DSP with 64-bit FPU support
++cmsis_dsp_args = [
++  '-DARM_MATH_CM7',         # For Cortex-M7
++  '-D__FPU_PRESENT=1',      # Enable FPU
++  '-DARM_MATH_MVEF',        # Enable MVE (64-bit vector extensions)
++  '-DARM_MATH_AUTOVECTORIZE', # Enable auto-vectorization
++  '-DFLOAT16_SUPPORTED'     # Enable half-precision float support
++]
++
++# Define CMSIS-DSP source files needed for our test
++# Note: For a full build, you would include more source files
++cmsis_dsp_sources = [
++  # Basic Math Functions
++  'Source/BasicMathFunctions/BasicMathFunctions.c',
++  'Source/BasicMathFunctions/BasicMathFunctionsF16.c',
++  
++  # Fast Math Functions (trig functions, etc.)
++  'Source/FastMathFunctions/FastMathFunctions.c',
++  'Source/FastMathFunctions/FastMathFunctionsF16.c',
++  'Source/FastMathFunctions/arm_sin_f32.c',
++  'Source/FastMathFunctions/arm_cos_f32.c',
++  'Source/FastMathFunctions/arm_sqrt_f32.c',
++  
++  # Support Functions
++  'Source/SupportFunctions/SupportFunctions.c',
++  'Source/SupportFunctions/SupportFunctionsF16.c',
++  
++  # Common Tables
++  'Source/CommonTables/CommonTables.c',
++  'Source/CommonTables/CommonTablesF16.c',
++]
++
++# Create a static library with the CMSIS-DSP sources
++cmsis_dsp_lib = static_library(
++  'cmsis-dsp',
++  cmsis_dsp_sources,
++  c_args: cmsis_dsp_args,
++  include_directories: cmsis_dsp_inc,
++)
++
++# Create a dependency object that other targets can depend on
++cmsis_dsp_dep = declare_dependency(
++  include_directories: cmsis_dsp_inc,
++  link_with: cmsis_dsp_lib,
++  compile_args: cmsis_dsp_args
++)
+diff --git a/meson_options.txt b/meson_options.txt
+new file mode 100644
+index 0000000..6d44dd3
+--- /dev/null
++++ b/meson_options.txt
+@@ -0,0 +1,3 @@
++# CMSIS-DSP options
++option('enable_mvef', type: 'boolean', value: true, description: 'Enable MVE (M-Profile Vector Extension) for 64-bit FPU support')
++option('enable_fp16', type: 'boolean', value: true, description: 'Enable 16-bit floating point support')
+-- 
+2.41.0

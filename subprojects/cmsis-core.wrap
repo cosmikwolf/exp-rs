@@ -1,0 +1,10 @@
+[wrap-git]
+directory = cmsis-core
+url = https://github.com/ARM-software/CMSIS_6.git
+revision = main
+depth = 1
+clone-recursive = false
+patch_directory = cmsis-core
+
+[provide]
+cmsis-core = cmsis_core_dep

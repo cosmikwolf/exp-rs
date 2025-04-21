@@ -1,0 +1,9 @@
+diff --git a/meson_options.txt b/meson_options.txt
+new file mode 100644
+index 0000000000000000000000000000000000000000..2222222222222222222222222222222222222222
+--- /dev/null
++++ b/meson_options.txt
+@@ -0,0 +1,3 @@
++# CMSIS-DSP options
++option('enable_mvef', type: 'boolean', value: true, description: 'Enable MVE (M-Profile Vector Extension) for 64-bit FPU support')
++option('enable_fp16', type: 'boolean', value: true, description: 'Enable 16-bit floating point support')

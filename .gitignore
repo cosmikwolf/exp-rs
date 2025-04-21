@@ -1,0 +1,7 @@
+.aider*
+!.aider.model.conf
+!.aider.conf
+target/
+build*
+CLAUDE.md
+CONVENTIONS.md

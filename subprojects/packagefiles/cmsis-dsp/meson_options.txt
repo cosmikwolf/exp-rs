@@ -1,0 +1,4 @@
+# CMSIS-DSP options
+option('enable_mvef', type: 'boolean', value: true, description: 'Enable MVE (M-Profile Vector Extension) for 64-bit FPU support')
+option('enable_fp16', type: 'boolean', value: true, description: 'Enable 16-bit floating point support')
+option('enable_f64', type: 'boolean', value: false, description: 'Enable 64-bit floating point (double precision) support')

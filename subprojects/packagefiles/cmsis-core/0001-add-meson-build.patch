@@ -1,0 +1,31 @@
+From: User <user@example.com>
+Date: Wed, 17 Apr 2025 00:00:00 +0000
+Subject: [PATCH] Add meson build
+
+---
+ meson.build | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+ create mode 100644 meson.build
+
+diff --git a/meson.build b/meson.build
+new file mode 100644
+index 0000000..4ef1e9e
+--- /dev/null
++++ b/meson.build
+@@ -0,0 +1,13 @@
++project('cmsis-core', 'c',
++  version : '6.0.0',
++  default_options : ['warning_level=0']
++)
++
++# Define include directories
++cmsis_core_inc = include_directories(
++  'CMSIS/Core/Include'
++)
++
++# Provide a dependency for other subprojects to use
++cmsis_core_dep = declare_dependency(
++  include_directories : cmsis_core_inc
++)
+--
+2.31.1
