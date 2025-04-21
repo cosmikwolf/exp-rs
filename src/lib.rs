@@ -6,7 +6,7 @@ A minimal, extensible, no_std-friendly math expression parser and evaluator for 
 
 ## Overview
 
-exp-rs is a math expression parser and evaluator library designed to be simple, extensible, and compatible with no_std environments. It was inspired by [TinyExpr](https://github.com/codeplea/tinyexpr) and [TinyExpr++](https://github.com/Blake-Madden/tinyexpr-plusplus), but with additional features and Rust-native design.
+exp-rs is a math expression parser and evaluator library designed to be simple, extensible, and compatible with no_std environments, designed for use on embedded targets.
 
 Key features:
 - Configurable floating-point precision (f32/f64)
@@ -25,7 +25,8 @@ Key features:
 Here's a basic example of evaluating a math expression:
 
 ```rust
-use exp_rs::engine::interp;
+use exp_rs::interp;
+
 
 fn main() {
     // Simple expression evaluation
@@ -40,7 +41,11 @@ fn main() {
 
 ## Using Variables and Constants
 
-```text
+```rust
+extern crate alloc;
+use exp_rs::context::EvalContext;
+use exp_rs::interp;
+use alloc::rc::Rc;
 // Example of using variables and constants:
 
 // Create an evaluation context
@@ -60,9 +65,16 @@ let result = interp("x + y * FACTOR", Some(Rc::new(ctx))).unwrap();
 
 ## Arrays and Object Attributes
 
-```text
+```rust
+extern crate alloc;
+use exp_rs::interp;
+use exp_rs::context::EvalContext;
+use hashbrown::HashMap;
+use alloc::rc::Rc;
 // Example for arrays and object attributes:
 
+// Create an evaluation context
+let mut ctx = EvalContext::new();
 // Add an array
 ctx.arrays.insert("data".to_string(), vec![10.0, 20.0, 30.0, 40.0, 50.0]);
 
@@ -71,23 +83,28 @@ let mut point = HashMap::new();
 point.insert("x".to_string(), 3.0);
 point.insert("y".to_string(), 4.0);
 ctx.attributes.insert("point".to_string(), point);
+let ctx_rc = Rc::new(ctx);
 
 // Access array elements in expressions
-interp("data[2]", Some(Rc::new(ctx))).unwrap(); // Returns 30.0
+interp("data[2]", Some(Rc::clone(&ctx_rc))).unwrap(); // Returns 30.0
 
 // Access attributes in expressions
-interp("point.x + point.y", Some(Rc::new(ctx))).unwrap(); // Returns 7.0
+interp("point.x + point.y", Some(Rc::clone(&ctx_rc))).unwrap(); // Returns 7.0
 
 // Combine array and attribute access in expressions
-interp("sqrt(point.x^2 + point.y^2) + data[0]", Some(Rc::new(ctx))).unwrap();
+interp("sqrt(point.x^2 + point.y^2) + data[0]", Some(Rc::clone(&ctx_rc))).unwrap();
 // Result: sqrt(3^2 + 4^2) + 10 = 5 + 10 = 15
 ```
 
 ## Custom Functions
 
+exp-rs allows you to define custom functions in two ways: native functions and expression functions.
+
 ### Native Functions
 
-```rust,no_run
+Native functions can be defined at compile time:
+
+```rust
 extern crate alloc;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
@@ -108,6 +125,8 @@ fn main() {
 ```
 
 ### Expression Functions
+
+Expression functions can be registered and passed into the library at runtime:
 
 ```rust,no_run
 extern crate alloc;
