@@ -74,12 +74,12 @@ if [ "$CLEAN_BUILD" -eq 1 ]; then
 fi
 
 # Make sure Rust library is built with the correct float mode
-echo "Building Rust library in $FLOAT_MODE mode..."
-if [ "$FLOAT_MODE" = "f32" ]; then
-	cargo build --no-default-features --features="f32"
-else
-	cargo build # f64 mode (default)
-fi
+# echo "Building Rust library in $FLOAT_MODE mode..."
+# if [ "$FLOAT_MODE" = "f32" ]; then
+# 	cargo build --no-default-features --features="f32"
+# else
+# 	cargo build # f64 mode (default)
+# fi
 
 # Setup Meson build for QEMU tests
 echo "Setting up QEMU test build with $FLOAT_MODE mode..."

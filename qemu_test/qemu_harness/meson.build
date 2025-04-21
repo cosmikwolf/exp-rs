@@ -29,7 +29,7 @@ else
 endif
 
 # Add executable for QEMU test with linker script
-if meson.is_cross_build() and get_option('build_target') == 'exp_rs_qemu_tests'
+if meson.is_cross_build()
   # qemu_test_exe = executable(
   #   'qemu_test',
   #   'qemu_test.c',
