@@ -1,5 +1,5 @@
 # To build for QEMU:
-# meson setup build-qemu --cross-file qemu_test/qemu_harness/arm-cortex-m7-qemu.ini -Dbuild_target=qemu_tests
+# meson setup build-qemu --cross-file qemu_test/qemu_harness/arm-cortex-m7-qemu.ini -Dbuild_target=exp_rs_qemu_tests
 # meson compile -C build-qemu
 # meson test -C build-qemu
 
@@ -45,6 +45,6 @@ exp_rs_dep = declare_dependency(
 )
 
 # Include the qemu_test subdir if building qemu tests
-if get_option('build_target') == 'qemu_tests'
+if get_option('build_target') == 'exp_rs_qemu_tests'
   subdir('qemu_test')
 endif

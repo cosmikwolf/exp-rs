@@ -1,8 +1,8 @@
 option(
   'build_target',
   type: 'combo',
-  choices: ['qemu_tests', 'library'],
-  value: 'qemu_tests',
+  choices: ['exp_rs_qemu_tests', 'library'],
+  value: 'exp_rs_qemu_tests',
   description: 'Which target to build',
 )
 
