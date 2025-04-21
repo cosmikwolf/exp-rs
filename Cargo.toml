@@ -17,7 +17,7 @@ crate-type = ["rlib", "staticlib"]
 bitflags = "2.9.0"
 libm = "0.2"
 serde = { version = "1.0", features = ["derive"], default-features = false }
-hashbrown = "0.14"
+hashbrown = "0.15.2"
 
 [features]
 default = ["f64"]
