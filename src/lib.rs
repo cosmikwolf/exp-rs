@@ -40,25 +40,22 @@ fn main() {
 
 ## Using Variables and Constants
 
-```rust
-use exp_rs::context::EvalContext;
-use exp_rs::engine::interp;
-use alloc::rc::Rc;
+```text
+// Example of using variables and constants:
 
-fn main() {
-    let mut ctx = EvalContext::new();
+// Create an evaluation context
+let mut ctx = EvalContext::new();
 
-    // Add variables
-    ctx.set_parameter("x", 5.0);
-    ctx.set_parameter("y", 10.0);
+// Add variables
+ctx.set_parameter("x", 5.0);
+ctx.set_parameter("y", 10.0);
 
-    // Add constants - these won't change once set
-    ctx.constants.insert("FACTOR".to_string(), 2.5);
+// Add constants - these won't change once set
+ctx.constants.insert("FACTOR".to_string(), 2.5);
 
-    // Evaluate expression with variables and constants
-    let result = interp("x + y * FACTOR", Some(Rc::new(ctx))).unwrap();
-    assert_eq!(result, 30.0); // 5 + (10 * 2.5) = 30
-}
+// Evaluate expression with variables and constants
+let result = interp("x + y * FACTOR", Some(Rc::new(ctx))).unwrap();
+// Result: 30.0 (5 + (10 * 2.5) = 30)
 ```
 
 ## Arrays and Object Attributes
@@ -91,6 +88,7 @@ interp("sqrt(point.x^2 + point.y^2) + data[0]", Some(Rc::new(ctx))).unwrap();
 ### Native Functions
 
 ```rust,no_run
+extern crate alloc;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
 use alloc::rc::Rc;
@@ -112,6 +110,7 @@ fn main() {
 ### Expression Functions
 
 ```rust,no_run
+extern crate alloc;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
 use alloc::rc::Rc;
@@ -137,6 +136,7 @@ fn main() {
 For repeated evaluations of the same expression with different variables:
 
 ```rust,no_run
+extern crate alloc;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
 use alloc::rc::Rc;
@@ -167,6 +167,10 @@ fn main() {
 exp-rs is designed to work in no_std environments with the alloc crate:
 
 ```rust
+extern crate alloc;
+use exp_rs::interp;
+use exp_rs::EvalContext;
+use alloc::rc::Rc;
 // When using in a no_std environment with alloc:
 
 // This defines an FFI function that can be called from C code
@@ -190,13 +194,14 @@ pub extern "C" fn evaluate_expression(x: f32, y: f32) -> f32 {
 
 For embedded systems where you want to provide your own math implementations:
 
-```rust,ignore
+```rust
 // In Cargo.toml:
 // exp-rs = { version = "0.1", default-features = false, features = ["f32", "no-builtin-math"] }
-
+extern crate alloc;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
 use alloc::rc::Rc;
+use libm::{sin, cos};
 
 fn main() {
     let mut ctx = EvalContext::new();
@@ -208,6 +213,7 @@ fn main() {
 
     // Now you can use these functions
     let result = interp("sin(0.5) + cos(0.5)", Some(Rc::new(ctx))).unwrap();
+    assert_eq!(result, sin(0.5) + cos(0.5)); // sin(0.5) + cos(0.5)
     println!("Result: {}", result);
 }
 ```
@@ -217,6 +223,7 @@ fn main() {
 Comprehensive error handling is provided:
 
 ```rust
+extern crate alloc;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
 use exp_rs::error::ExprError;

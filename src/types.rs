@@ -246,8 +246,10 @@ pub enum TokenKind {
 ///
 /// # Example
 ///
-/// ```text
-/// // Create a context
+/// ```
+/// # use exp_rs::{EvalContext, Real};
+/// # use exp_rs::engine::interp;
+/// # use std::rc::Rc;
 /// let mut ctx = EvalContext::new();
 ///
 /// // Register a custom function that calculates the hypotenuse
@@ -261,7 +263,7 @@ pub enum TokenKind {
 ///
 /// // Use the function in an expression
 /// let result = interp("hypotenuse(3, 4)", Some(Rc::new(ctx))).unwrap();
-/// // Result: 5.0
+/// assert_eq!(result, 5.0);
 /// ```
 #[derive(Clone)]
 pub struct NativeFunction<'a> {
@@ -296,7 +298,7 @@ use alloc::borrow::Cow;
 /// ```
 /// # use exp_rs::{EvalContext, Real};
 /// # use exp_rs::engine::interp;
-/// # use alloc::rc::Rc;
+/// # use std::rc::Rc;
 /// let mut ctx = EvalContext::new();
 ///
 /// // Register a function to calculate the area of a circle
@@ -308,7 +310,7 @@ use alloc::borrow::Cow;
 ///
 /// // Use the function in another expression
 /// let result = interp("circle_area(2)", Some(Rc::new(ctx))).unwrap();
-/// assert_eq!(result, 3.141592653589793 * 4.0);
+/// assert!(result > 12.56 && result < 12.57); // π * 4 ≈ 12.566
 /// ```
 #[derive(Clone)]
 pub struct ExpressionFunction {

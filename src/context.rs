@@ -46,8 +46,11 @@ use core::cell::RefCell;
 ///
 /// # Examples
 ///
-/// ```text
-/// // Create a new evaluation context
+/// ```
+/// use exp_rs::context::EvalContext;
+/// use exp_rs::engine::interp;
+/// use std::rc::Rc;
+/// 
 /// let mut ctx = EvalContext::new();
 /// 
 /// // Add variables
@@ -67,12 +70,13 @@ use core::cell::RefCell;
 ///
 /// Contexts can be nested to create scopes:
 ///
-/// ```text
-/// // Create a parent context
+/// ```
+/// use exp_rs::context::EvalContext;
+/// use std::rc::Rc;
+/// 
 /// let mut parent = EvalContext::new();
 /// parent.set_parameter("x", 1.0);
 /// 
-/// // Create a child context
 /// let mut child = EvalContext::new();
 /// child.set_parameter("y", 2.0); 
 /// child.parent = Some(Rc::new(parent));
@@ -145,7 +149,7 @@ impl<'a> EvalContext<'a> {
     /// ```
     /// use exp_rs::context::EvalContext;
     /// use exp_rs::engine::interp;
-    /// use alloc::rc::Rc;
+    /// use std::rc::Rc;
     ///
     /// let mut ctx = EvalContext::new();
     /// ctx.set_parameter("x", 42.0);
@@ -170,8 +174,11 @@ impl<'a> EvalContext<'a> {
     ///
     /// # Examples
     ///
-    /// ```text
-    /// // Create a context
+    /// ```
+    /// use exp_rs::context::EvalContext;
+    /// use exp_rs::engine::interp;
+    /// use std::rc::Rc;
+    ///
     /// let mut ctx = EvalContext::new();
     ///
     /// // Register a function that adds all its arguments
@@ -179,25 +186,26 @@ impl<'a> EvalContext<'a> {
     ///     args.iter().sum()
     /// });
     ///
-    /// // Use the function in expressions
     /// let result = interp("sum(10, 20, 30)", Some(Rc::new(ctx))).unwrap();
-    /// // Result: 60.0
+    /// assert_eq!(result, 60.0);
     /// ```
     ///
     /// Functions with variable argument counts:
     ///
-    /// ```text
-    /// // Create a context
+    /// ```
+    /// use exp_rs::context::EvalContext; 
+    /// use exp_rs::engine::interp;
+    /// use std::rc::Rc;
+    ///
     /// let mut ctx = EvalContext::new();
     ///
-    /// // Register a function that accepts a fixed number of arguments
+    /// // Register a function that calculates the mean of its arguments
     /// ctx.register_native_function("mean", 5, |args| {
     ///     args.iter().sum::<f64>() / args.len() as f64
     /// });
     ///
-    /// // Use the function in expressions
     /// let result = interp("mean(1, 2, 3, 4, 5)", Some(Rc::new(ctx))).unwrap();
-    /// // Result: 3.0
+    /// assert_eq!(result, 3.0);
     /// ```
     pub fn register_native_function<F>(&mut self, name: &str, arity: usize, implementation: F)
     where
@@ -234,8 +242,11 @@ impl<'a> EvalContext<'a> {
     ///
     /// # Examples
     ///
-    /// ```text
-    /// // Create a context
+    /// ```
+    /// use exp_rs::context::EvalContext;
+    /// use exp_rs::engine::interp;
+    /// use std::rc::Rc;
+    ///
     /// let mut ctx = EvalContext::new();
     ///
     /// // Register a function to calculate the hypotenuse
@@ -245,15 +256,17 @@ impl<'a> EvalContext<'a> {
     ///     "sqrt(a^2 + b^2)"
     /// ).unwrap();
     ///
-    /// // Use the function in expressions
     /// let result = interp("hypotenuse(3, 4)", Some(Rc::new(ctx))).unwrap();
-    /// // Result: 5.0
+    /// assert_eq!(result, 5.0);
     /// ```
     ///
     /// Expression functions can call other functions:
     ///
-    /// ```text
-    /// // Create a context
+    /// ```
+    /// use exp_rs::context::EvalContext;
+    /// use exp_rs::engine::interp;
+    /// use std::rc::Rc;
+    ///
     /// let mut ctx = EvalContext::new();
     ///
     /// // Register a polynomial function
@@ -263,9 +276,8 @@ impl<'a> EvalContext<'a> {
     ///     "x^3 + 2*x^2 + 3*x + 4"
     /// ).unwrap();
     ///
-    /// // Use the function in expressions
     /// let result = interp("polynomial(2)", Some(Rc::new(ctx))).unwrap();
-    /// // Result: 26.0 (2^3 + 2*2^2 + 3*2 + 4 = 8 + 8 + 6 + 4 = 26)
+    /// assert_eq!(result, 26.0); // 2^3 + 2*2^2 + 3*2 + 4 = 8 + 8 + 6 + 4 = 26
     /// ```
     pub fn register_expression_function(
         &mut self,
@@ -308,7 +320,7 @@ impl<'a> EvalContext<'a> {
     /// ```
     /// use exp_rs::context::EvalContext;
     /// use exp_rs::engine::interp;
-    /// use alloc::rc::Rc;
+    /// use std::rc::Rc;
     ///
     /// let mut ctx = EvalContext::new();
     /// ctx.enable_ast_cache();
@@ -316,10 +328,12 @@ impl<'a> EvalContext<'a> {
     /// // First evaluation will parse and cache the AST
     /// ctx.set_parameter("x", 1.0);
     /// let result1 = interp("x^2 + 2*x + 1", Some(Rc::new(ctx.clone()))).unwrap();
+    /// assert_eq!(result1, 4.0); // 1^2 + 2*1 + 1 = 4
     ///
     /// // Subsequent evaluations will reuse the cached AST
     /// ctx.set_parameter("x", 2.0);
     /// let result2 = interp("x^2 + 2*x + 1", Some(Rc::new(ctx))).unwrap();
+    /// assert_eq!(result2, 9.0); // 2^2 + 2*2 + 1 = 9
     /// ```
     pub fn enable_ast_cache(&self) {
         if self.ast_cache.is_none() {
