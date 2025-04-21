@@ -1,13 +1,12 @@
-# QEMU test harness sources
-qemu_harness_inc = include_directories('.')
-
-qemu_harness_sources = [
-  'qemu_test_harness.c',
-  'stubs.c',
-]
-
 # Compile the QEMU test harness library
-if meson.is_cross_build() and get_option('build_target') == 'exp_rs_qemu_tests'
+if meson.is_cross_build()
+  # QEMU test harness sources
+  qemu_harness_inc = include_directories('.')
+
+  qemu_harness_sources = [
+    'qemu_test_harness.c',
+    'stubs.c',
+  ]
   qemu_harness_lib = static_library(
     'qemu_test_harness',
     qemu_harness_sources,

@@ -12,3 +12,10 @@ option(
   value: false,
   description: 'Enable 64-bit floating point (double precision) support in CMSIS-DSP',
 )
+
+option(
+  'enable_exprs_qemu_tests',
+  type: 'boolean',
+  value: false,
+  description: 'Enables building of qemu tests',
+)

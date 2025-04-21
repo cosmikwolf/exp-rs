@@ -45,6 +45,6 @@ exp_rs_dep = declare_dependency(
 )
 
 # Include the qemu_test subdir if building qemu tests
-if get_option('build_target') == 'exp_rs_qemu_tests'
+if get_option('enable_exprs_qemu_tests')
   subdir('qemu_test')
 endif
