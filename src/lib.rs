@@ -18,7 +18,6 @@ Key features:
 - Function application by juxtaposition (`sin x` is equivalent to `sin(x)`)
 - Comprehensive error handling
 - No_std compatibility for embedded systems
-- Integration with CMSIS-DSP for ARM Cortex-M
 
 ## Quick Start
 
@@ -38,7 +37,72 @@ fn main() {
     assert!(result - 1.414 < 0.001); // Approximately √2
 }
 ```
+## Supported Grammar
 
+exp-rs supports a superset of the original TinyExpr grammar, closely matching the [tinyexpr++](https://github.com/Blake-Madden/tinyexpr-plusplus) grammar, including:
+
+- Multi-character operators: `&&`, `||`, `==`, `!=`, `<=`, `>=`, `<<`, `>>`, `<<<`, `>>>`, `**`, `<>`
+- Logical, comparison, bitwise, and exponentiation operators with correct precedence and associativity
+- List expressions and both comma and semicolon as separators
+- Function call syntax supporting both parentheses and juxtaposition
+- Array and attribute access
+- Right-associative exponentiation
+
+### Operator Precedence and Associativity
+
+From lowest to highest precedence:
+
+| Precedence | Operators                                 | Associativity      |
+|------------|-------------------------------------------|--------------------|
+| 1          | `,` `;`                                   | Left               |
+| 2          | `\|\|`                                      | Left               |
+| 3          | `&&`                                      | Left               |
+| 4          | `\|`                                       | Left (bitwise OR)  |
+| 6          | `&`                                       | Left (bitwise AND) |
+| 7          | `==` `!=` `<` `>` `<=` `>=` `<>`          | Left (comparison)  |
+| 8          | `<<` `>>` `<<<` `>>>`                     | Left (bit shifts)  |
+| 9          | `+` `-`                                   | Left               |
+| 10         | `*` `/` `%`                               | Left               |
+| 14         | unary `+` `-` `~`                         | Right (unary)      |
+| 15         | `^`                                       | Right              |
+| 16         | `**`                                      | Right              |
+
+### Built-in Functions
+
+The following functions are available by default. Enabling the feature `no-builtin-math` will skip automatic registration of these functions, so they can be defined by the user with native or expression functions
+
+- Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
+- Hyperbolic: `sinh`, `cosh`, `tanh`
+- Exponential/Logarithmic: `exp`, `log`, `log10`, `ln`
+- Power/Root: `sqrt`, `pow`
+- Rounding: `ceil`, `floor`
+- Comparison: `max`, `min`
+- Misc: `abs`, `sign`
+
+### Built-in Constants
+
+- `pi`: 3.14159... (π)
+- `e`: 2.71828... (Euler's number)
+
+## Feature Flags
+
+- `no-builtin-math`: Disables all built-in math functions. You must register your own.
+- `f32`: Use 32-bit floating point (single precision) for calculations
+- `f64`: Use 64-bit floating point (double precision) for calculations (default)
+
+Only one of `f32` or `f64` can be enabled at a time.
+
+## Embedded Systems Support
+
+exp-rs provides extensive support for embedded systems:
+
+- `no_std` compatible with the `alloc` crate
+- Configurable precision with `f32`/`f64` options
+- Option to disable built-in math functions and provide custom implementations
+- Tested example using qemu CMSIS-DSP math functions (test in repo)
+- Meson build system integration for cross-compilation
+- QEMU test harness for validating on ARM hardware
+- Optional C FFI for calling from non-Rust code
 ## Using Variables and Constants
 
 ```rust
@@ -98,7 +162,7 @@ interp("sqrt(point.x^2 + point.y^2) + data[0]", Some(Rc::clone(&ctx_rc))).unwrap
 
 ## Custom Functions
 
-exp-rs allows you to define custom functions in two ways: native functions and expression functions.
+exp-rs allows you to define custom functions in two ways
 
 ### Native Functions
 
@@ -154,7 +218,7 @@ fn main() {
 
 For repeated evaluations of the same expression with different variables:
 
-```rust,no_run
+```rust
 extern crate alloc;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
@@ -183,7 +247,7 @@ fn main() {
 
 ## Using on Embedded Systems (no_std)
 
-exp-rs is designed to work in no_std environments with the alloc crate:
+exp-rs is designed to work in no_std environments with the alloc crate. A C header is automatically generated at compile time using Cbindgen for thumbv7em-none-eabihf targets. Check the original GitHub repository for a qemu example. Please file a GitHub issue on the original repo if you need this library generated for a different target.
 
 ```rust
 extern crate alloc;
@@ -279,72 +343,6 @@ fn main() {
 }
 ```
 
-## Supported Grammar
-
-exp-rs supports a superset of the original TinyExpr grammar, closely matching the [tinyexpr++](https://github.com/Blake-Madden/tinyexpr-plusplus) grammar, including:
-
-- Multi-character operators: `&&`, `||`, `==`, `!=`, `<=`, `>=`, `<<`, `>>`, `<<<`, `>>>`, `**`, `<>`
-- Logical, comparison, bitwise, and exponentiation operators with correct precedence and associativity
-- List expressions and both comma and semicolon as separators
-- Function call syntax supporting both parentheses and juxtaposition
-- Array and attribute access
-- Right-associative exponentiation
-
-### Operator Precedence and Associativity
-
-From lowest to highest precedence:
-
-| Precedence | Operators                                 | Associativity      |
-|------------|-------------------------------------------|--------------------|
-| 1          | `,` `;`                                   | Left               |
-| 2          | `||`                                      | Left               |
-| 3          | `&&`                                      | Left               |
-| 4          | `|`                                       | Left (bitwise OR)  |
-| 6          | `&`                                       | Left (bitwise AND) |
-| 7          | `==` `!=` `<` `>` `<=` `>=` `<>`          | Left (comparison)  |
-| 8          | `<<` `>>` `<<<` `>>>`                     | Left (bit shifts)  |
-| 9          | `+` `-`                                   | Left               |
-| 10         | `*` `/` `%`                               | Left               |
-| 14         | unary `+` `-` `~`                         | Right (unary)      |
-| 15         | `^`                                       | Right              |
-| 16         | `**`                                      | Right              |
-
-### Built-in Functions
-
-The following functions are available by default (unless `no-builtin-math` is enabled):
-
-- Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
-- Hyperbolic: `sinh`, `cosh`, `tanh`
-- Exponential/Logarithmic: `exp`, `log`, `log10`, `ln`
-- Power/Root: `sqrt`, `pow`
-- Rounding: `ceil`, `floor`
-- Comparison: `max`, `min`
-- Misc: `abs`, `sign`
-
-### Built-in Constants
-
-- `pi`: 3.14159... (π)
-- `e`: 2.71828... (Euler's number)
-
-## Feature Flags
-
-- `no-builtin-math`: Disables all built-in math functions. You must register your own.
-- `f32`: Use 32-bit floating point (single precision) for calculations
-- `f64`: Use 64-bit floating point (double precision) for calculations (default)
-
-Only one of `f32` or `f64` can be enabled at a time.
-
-## Embedded Systems Support
-
-exp-rs provides extensive support for embedded systems:
-
-- `no_std` compatible with the `alloc` crate
-- Configurable precision with `f32`/`f64` options
-- Option to disable built-in math functions and provide custom implementations
-- Integration with CMSIS-DSP for ARM Cortex-M processors
-- Meson build system integration for cross-compilation
-- QEMU test harness for validating on ARM hardware
-- Optional C FFI for calling from non-Rust code
 
 ## Attribution
 
