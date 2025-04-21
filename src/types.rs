@@ -248,22 +248,21 @@ pub enum TokenKind {
 ///
 /// ```
 /// # use exp_rs::{EvalContext, Real};
-/// # use std::rc::Rc;
-/// # use std::cell::RefCell;
-/// let ctx = Rc::new(RefCell::new(EvalContext::new()));
+/// # use exp_rs::engine::interp;
+/// # use alloc::rc::Rc;
+/// let mut ctx = EvalContext::new();
 ///
 /// // Register a custom function that calculates the hypotenuse
-/// ctx.borrow_mut().register_native_function(
+/// ctx.register_native_function(
 ///     "hypotenuse",     // Function name
 ///     2,                // Takes 2 arguments
 ///     |args: &[Real]| { // Implementation
 ///         (args[0] * args[0] + args[1] * args[1]).sqrt()
-///     },
-///     Some("Calculates the hypotenuse of a right triangle")
+///     }
 /// );
 ///
 /// // Use the function in an expression
-/// let result = exp_rs::interp("hypotenuse(3, 4)", Some(ctx.clone())).unwrap();
+/// let result = interp("hypotenuse(3, 4)", Some(Rc::new(ctx))).unwrap();
 /// assert_eq!(result, 5.0);
 /// ```
 #[derive(Clone)]
@@ -298,21 +297,20 @@ use alloc::borrow::Cow;
 ///
 /// ```
 /// # use exp_rs::{EvalContext, Real};
-/// # use std::rc::Rc;
-/// # use std::cell::RefCell;
-/// let ctx = Rc::new(RefCell::new(EvalContext::new()));
+/// # use exp_rs::engine::interp;
+/// # use alloc::rc::Rc;
+/// let mut ctx = EvalContext::new();
 ///
 /// // Register a function to calculate the area of a circle
-/// ctx.borrow_mut().register_expression_function(
-///     "circle_area",                  // Function name
-///     vec!["radius".to_string()],     // Parameter names
-///     "pi * radius * radius",         // Function body as an expression
-///     Some("Calculates the area of a circle")
+/// ctx.register_expression_function(
+///     "circle_area",            // Function name
+///     &["radius"],              // Parameter names
+///     "pi * radius * radius"    // Function body as an expression
 /// ).unwrap();
 ///
 /// // Use the function in another expression
-/// let result = exp_rs::interp("circle_area(2)", Some(ctx.clone())).unwrap();
-/// assert_eq!(result, std::f64::consts::PI * 4.0);
+/// let result = interp("circle_area(2)", Some(Rc::new(ctx))).unwrap();
+/// assert_eq!(result, 3.141592653589793 * 4.0);
 /// ```
 #[derive(Clone)]
 pub struct ExpressionFunction {

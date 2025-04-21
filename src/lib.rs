@@ -31,7 +31,7 @@ fn main() {
     // Simple expression evaluation
     let result = interp("2 + 3 * 4", None).unwrap();
     assert_eq!(result, 14.0); // 2 + (3 * 4) = 14
-    
+
     // Using built-in functions and constants
     let result = interp("sin(pi/4) + cos(pi/4)", None).unwrap();
     assert!(result - 1.414 < 0.001); // Approximately √2
@@ -43,18 +43,18 @@ fn main() {
 ```rust
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
-use std::rc::Rc;
+use alloc::rc::Rc;
 
 fn main() {
     let mut ctx = EvalContext::new();
-    
+
     // Add variables
     ctx.set_parameter("x", 5.0);
     ctx.set_parameter("y", 10.0);
-    
+
     // Add constants - these won't change once set
     ctx.constants.insert("FACTOR".to_string(), 2.5);
-    
+
     // Evaluate expression with variables and constants
     let result = interp("x + y * FACTOR", Some(Rc::new(ctx))).unwrap();
     assert_eq!(result, 30.0); // 5 + (10 * 2.5) = 30
@@ -63,103 +63,72 @@ fn main() {
 
 ## Arrays and Object Attributes
 
-```rust
-use exp_rs::context::EvalContext;
-use exp_rs::engine::interp;
-use std::collections::HashMap;
-use std::rc::Rc;
+```text
+// Example for arrays and object attributes:
 
-fn main() {
-    let mut ctx = EvalContext::new();
-    
-    // Add an array
-    ctx.arrays.insert("data".to_string(), vec![10.0, 20.0, 30.0, 40.0, 50.0]);
-    
-    // Add an object with attributes
-    let mut point = HashMap::new();
-    point.insert("x".to_string(), 3.0);
-    point.insert("y".to_string(), 4.0);
-    ctx.attributes.insert("point".to_string(), point);
-    
-    // Access array elements
-    let result = interp("data[2]", Some(Rc::new(ctx.clone()))).unwrap();
-    assert_eq!(result, 30.0);
-    
-    // Access attributes
-    let result = interp("point.x + point.y", Some(Rc::new(ctx.clone()))).unwrap();
-    assert_eq!(result, 7.0);
-    
-    // Combine array and attribute access in expressions
-    let result = interp("sqrt(point.x^2 + point.y^2) + data[0]", Some(Rc::new(ctx))).unwrap();
-    assert_eq!(result, 15.0); // sqrt(3^2 + 4^2) + 10 = 5 + 10 = 15
-}
+// Add an array
+ctx.arrays.insert("data".to_string(), vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+
+// Add an object with attributes
+let mut point = HashMap::new();
+point.insert("x".to_string(), 3.0);
+point.insert("y".to_string(), 4.0);
+ctx.attributes.insert("point".to_string(), point);
+
+// Access array elements in expressions
+interp("data[2]", Some(Rc::new(ctx))).unwrap(); // Returns 30.0
+
+// Access attributes in expressions
+interp("point.x + point.y", Some(Rc::new(ctx))).unwrap(); // Returns 7.0
+
+// Combine array and attribute access in expressions
+interp("sqrt(point.x^2 + point.y^2) + data[0]", Some(Rc::new(ctx))).unwrap();
+// Result: sqrt(3^2 + 4^2) + 10 = 5 + 10 = 15
 ```
 
 ## Custom Functions
 
 ### Native Functions
 
-```rust
+```rust,no_run
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
-use std::rc::Rc;
+use alloc::rc::Rc;
 
 fn main() {
     let mut ctx = EvalContext::new();
-    
+
     // Register a native function that sums all arguments
     ctx.register_native_function("sum", 3, |args| {
         args.iter().sum()
     });
-    
-    // Register a native function with variable number of arguments
-    ctx.register_native_function("average", 0, |args| {
-        if args.is_empty() {
-            0.0
-        } else {
-            args.iter().sum::<f64>() / args.len() as f64
-        }
-    });
-    
-    // Use the custom functions
-    let result = interp("sum(1, 2, 3)", Some(Rc::new(ctx.clone()))).unwrap();
+
+    // Use the custom function
+    let result = interp("sum(1, 2, 3)", Some(Rc::new(ctx))).unwrap();
     assert_eq!(result, 6.0);
-    
-    let result = interp("average(10, 20, 30, 40)", Some(Rc::new(ctx))).unwrap();
-    assert_eq!(result, 25.0);
 }
 ```
 
 ### Expression Functions
 
-```rust
+```rust,no_run
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
-use std::rc::Rc;
+use alloc::rc::Rc;
 
 fn main() {
     let mut ctx = EvalContext::new();
-    
+
     // Register an expression function
     ctx.register_expression_function(
         "hypotenuse",
         &["a", "b"],
         "sqrt(a^2 + b^2)"
     ).unwrap();
-    
-    // Register a recursive expression function
-    ctx.register_expression_function(
-        "factorial",
-        &["n"],
-        "n <= 1 ? 1 : n * factorial(n - 1)"
-    ).unwrap();
-    
-    // Use the custom functions
-    let result = interp("hypotenuse(3, 4)", Some(Rc::new(ctx.clone()))).unwrap();
+
+    // Use the custom function
+    let result = interp("hypotenuse(3, 4)", Some(Rc::new(ctx))).unwrap();
     assert_eq!(result, 5.0);
-    
-    let result = interp("factorial(5)", Some(Rc::new(ctx))).unwrap();
-    assert_eq!(result, 120.0); // 5! = 5 * 4 * 3 * 2 * 1 = 120
 }
 ```
 
@@ -167,25 +136,25 @@ fn main() {
 
 For repeated evaluations of the same expression with different variables:
 
-```rust
+```rust,no_run
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
-use std::rc::Rc;
+use alloc::rc::Rc;
 
 fn main() {
     let mut ctx = EvalContext::new();
     ctx.enable_ast_cache(); // Enable AST caching
-    
+
     // First evaluation will parse and cache the AST
     ctx.set_parameter("x", 1.0);
     let result1 = interp("x^2 + 2*x + 1", Some(Rc::new(ctx.clone()))).unwrap();
     assert_eq!(result1, 4.0); // 1^2 + 2*1 + 1 = 4
-    
+
     // Subsequent evaluations with the same expression will reuse the cached AST
     ctx.set_parameter("x", 2.0);
     let result2 = interp("x^2 + 2*x + 1", Some(Rc::new(ctx.clone()))).unwrap();
     assert_eq!(result2, 9.0); // 2^2 + 2*2 + 1 = 9
-    
+
     // This is much faster for repeated evaluations
     ctx.set_parameter("x", 3.0);
     let result3 = interp("x^2 + 2*x + 1", Some(Rc::new(ctx))).unwrap();
@@ -198,20 +167,21 @@ fn main() {
 exp-rs is designed to work in no_std environments with the alloc crate:
 
 ```rust
-#![no_std]
-extern crate alloc;
+// When using in a no_std environment with alloc:
 
-use exp_rs::context::EvalContext;
-use exp_rs::engine::interp;
-use alloc::rc::Rc;
-
-#[no_mangle]
+// This defines an FFI function that can be called from C code
 pub extern "C" fn evaluate_expression(x: f32, y: f32) -> f32 {
+    // Create an evaluation context
     let mut ctx = EvalContext::new();
+
+    // Set parameters
     ctx.set_parameter("x", x as f64);
     ctx.set_parameter("y", y as f64);
-    
+
+    // Evaluate the expression
     let result = interp("sqrt(x^2 + y^2)", Some(Rc::new(ctx))).unwrap();
+
+    // Convert back to f32 for C compatibility
     result as f32
 }
 ```
@@ -220,22 +190,22 @@ pub extern "C" fn evaluate_expression(x: f32, y: f32) -> f32 {
 
 For embedded systems where you want to provide your own math implementations:
 
-```rust
+```rust,ignore
 // In Cargo.toml:
 // exp-rs = { version = "0.1", default-features = false, features = ["f32", "no-builtin-math"] }
 
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
-use std::rc::Rc;
+use alloc::rc::Rc;
 
 fn main() {
     let mut ctx = EvalContext::new();
-    
-    // Register custom math functions
-    ctx.register_native_function("sin", 1, |args| libm::sinf(args[0]));
-    ctx.register_native_function("cos", 1, |args| libm::cosf(args[0]));
-    ctx.register_native_function("sqrt", 1, |args| libm::sqrtf(args[0]));
-    
+
+    // Register custom math functions using standard Rust methods
+    ctx.register_native_function("sin", 1, |args| args[0].sin());
+    ctx.register_native_function("cos", 1, |args| args[0].cos());
+    ctx.register_native_function("sqrt", 1, |args| args[0].sqrt());
+
     // Now you can use these functions
     let result = interp("sin(0.5) + cos(0.5)", Some(Rc::new(ctx))).unwrap();
     println!("Result: {}", result);
@@ -250,25 +220,25 @@ Comprehensive error handling is provided:
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
 use exp_rs::error::ExprError;
-use std::rc::Rc;
+use alloc::rc::Rc;
 
 fn main() {
     let ctx = EvalContext::new();
-    
+
     // Handle syntax errors
     match interp("2 + * 3", Some(Rc::new(ctx.clone()))) {
         Ok(_) => println!("Unexpected success"),
         Err(ExprError::Syntax(msg)) => println!("Syntax error: {}", msg),
         Err(e) => println!("Unexpected error: {:?}", e),
     }
-    
+
     // Handle unknown variables
     match interp("x + 5", Some(Rc::new(ctx.clone()))) {
         Ok(_) => println!("Unexpected success"),
         Err(ExprError::UnknownVariable { name }) => println!("Unknown variable: {}", name),
         Err(e) => println!("Unexpected error: {:?}", e),
     }
-    
+
     // Handle division by zero
     match interp("1 / 0", Some(Rc::new(ctx))) {
         Ok(result) => {

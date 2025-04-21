@@ -46,7 +46,10 @@ typedef struct EvalResult {
 } EvalResult;
 
 /**
- * Opaque EvalContext handle for C
+ * Opaque handle to an evaluation context for C code.
+ *
+ * This is an opaque type that C code can use to reference an EvalContext.
+ * C code should only store and pass this pointer, never dereferencing it directly.
  */
 typedef struct EvalContextOpaque {
   uint8_t _private[0];
@@ -61,22 +64,81 @@ typedef struct EvalContextOpaque {
 #endif
 
 /**
- * Free a string allocated by exp_rs_eval error result.
+ * Frees a string allocated by exp_rs FFI functions.
+ *
+ * This function should be called to free the error message string in an EvalResult
+ * when status is non-zero. Not calling this function will result in a memory leak.
+ *
+ * # Parameters
+ *
+ * * `ptr` - Pointer to the string to free. Must be a pointer returned in an EvalResult error field.
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences a raw pointer. The caller must ensure that:
+ * 1. The pointer is valid and was allocated by one of the exp_rs FFI functions
+ * 2. The pointer is not used after calling this function
+ * 3. The pointer is not freed more than once
  */
 void exp_rs_free_error(char *ptr);
 
 /**
- * @return EvalResult structure
+ * Evaluates a mathematical expression without a context.
+ *
+ * This function evaluates a mathematical expression string and returns the result.
+ * Without a context, only built-in functions and constants are available.
+ *
+ * # Parameters
+ *
+ * * `expr` - Null-terminated string containing the expression to evaluate
+ *
+ * # Returns
+ *
+ * An EvalResult structure containing either the result value or an error message.
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences a raw pointer. The caller must ensure that:
+ * 1. The pointer is valid and points to a null-terminated string
+ * 2. The string contains valid UTF-8 data
  */
 struct EvalResult exp_rs_eval(const char *expr);
 
 /**
- * Create a new EvalContext and return a pointer to it
+ * Creates a new evaluation context.
+ *
+ * This function creates a new evaluation context that can be used to store
+ * variables, constants, and functions for use in expressions. The context
+ * must be freed with exp_rs_context_free when no longer needed.
+ *
+ * # Returns
+ *
+ * A pointer to the new context, or NULL if allocation failed.
+ *
+ * # Safety
+ *
+ * This function is safe to call from C code. The returned pointer must be
+ * passed to exp_rs_context_free when no longer needed to avoid memory leaks.
  */
 struct EvalContextOpaque *exp_rs_context_new(void);
 
 /**
- * Free an EvalContext previously created by exp_rs_context_new
+ * Frees an evaluation context previously created by exp_rs_context_new.
+ *
+ * This function releases all resources associated with the given context.
+ * After calling this function, the context pointer is no longer valid and
+ * should not be used.
+ *
+ * # Parameters
+ *
+ * * `ctx` - Pointer to the context to free, as returned by exp_rs_context_new
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences a raw pointer. The caller must ensure that:
+ * 1. The pointer was returned by exp_rs_context_new
+ * 2. The pointer has not already been freed
+ * 3. The pointer is not used after calling this function
  */
 void exp_rs_context_free(struct EvalContextOpaque *ctx);
 
@@ -97,7 +159,26 @@ int32_t exp_rs_context_register_expression_function(struct EvalContextOpaque *ct
 int32_t exp_rs_context_set_parameter(struct EvalContextOpaque *ctx, const char *name, Real value);
 
 /**
- * @return EvalResult structure
+ * Evaluates a mathematical expression using the given context.
+ *
+ * This function evaluates a mathematical expression string using the specified context,
+ * which can contain variables, constants, and custom functions.
+ *
+ * # Parameters
+ *
+ * * `expr` - Null-terminated string containing the expression to evaluate
+ * * `ctx` - Pointer to the context to use, as returned by exp_rs_context_new
+ *
+ * # Returns
+ *
+ * An EvalResult structure containing either the result value or an error message.
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences raw pointers. The caller must ensure that:
+ * 1. The expression pointer is valid and points to a null-terminated string
+ * 2. The string contains valid UTF-8 data
+ * 3. The context pointer was returned by exp_rs_context_new and has not been freed
  */
 struct EvalResult exp_rs_context_eval(const char *expr, struct EvalContextOpaque *ctx);
 
