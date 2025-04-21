@@ -19,6 +19,7 @@ endif
 exp_rs_build = custom_target(
   'cargo_build',
   output: 'libexp_rs.a',
+  directory: meson.current_source_dir(),
   command: [
     'pwd',
     '&&',
