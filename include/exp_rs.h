@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define USE_F32
+#define USE_F64
 
 #if defined(USE_F32)
 /**
@@ -22,9 +22,26 @@ typedef float Real;
 typedef double Real;
 #endif
 
+/**
+ * Result structure returned by evaluation functions.
+ *
+ * This structure returns either a successful result value or an error message.
+ * When status is 0, the value field contains the result of the expression evaluation.
+ * When status is non-zero, the error field contains a null-terminated string with
+ * the error message, which must be freed using exp_rs_free_error.
+ */
 typedef struct EvalResult {
+  /**
+   * Status code: 0 for success, non-zero for errors
+   */
   int32_t status;
+  /**
+   * The result value (valid when status is 0)
+   */
   Real value;
+  /**
+   * Error message (valid when status is non-zero, must be freed by caller)
+   */
   const char *error;
 } EvalResult;
 

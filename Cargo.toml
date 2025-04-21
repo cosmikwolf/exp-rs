@@ -6,7 +6,7 @@ homepage = "https://github.com/cosmikwolf/exp-rs"
 documentation = "https://docs.rs/exp-rs"
 edition = "2024"
 version = "0.1.2"
-description = "Tiny recursive descent expression parser, compiler, and evaluation engine for math expressions. A work in progress port of TinyExpr library to Rust."
+description = "no_std expression parser, compiler, and evaluation engine for math expressions designed for embedded, with qemu examples"
 keywords = ["tinyexpr", "math", "expression", "parser"]
 license = "MIT/Apache-2.0"
 

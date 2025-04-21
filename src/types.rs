@@ -196,18 +196,38 @@ pub enum ExprKind {
     Attribute,
 }
 
+/// Classifies the kind of token produced during lexical analysis.
+/// 
+/// These token types are used by the lexer to categorize different elements
+/// in the expression string during the parsing phase.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum TokenKind {
+    /// A numerical literal.
     Number,
+    
+    /// A variable identifier.
     Variable,
+    
+    /// An operator such as +, -, *, /, ^, etc.
     Operator,
+    
+    /// An opening delimiter like '(' or '['.
     Open,
+    
+    /// A closing delimiter like ')' or ']'.
     Close,
+    
+    /// A separator between items, typically a comma.
     Separator,
+    
+    /// End of the expression.
     End,
+    
+    /// An error token representing invalid input.
     Error,
+    
+    /// A null or placeholder token.
     Null,
-    // Add more as needed
 }
 
 /*
@@ -218,12 +238,46 @@ pub enum TokenKind {
 */
 
 
-/// Represents a native function that can be registered with the evaluation context.
+/// Represents a native Rust function that can be registered with the evaluation context.
+/// 
+/// Native functions allow users to extend the expression evaluator with custom
+/// functionality written in Rust. These functions can be called from within expressions
+/// like any built-in function.
+///
+/// # Example
+///
+/// ```
+/// # use exp_rs::{EvalContext, Real};
+/// # use std::rc::Rc;
+/// # use std::cell::RefCell;
+/// let ctx = Rc::new(RefCell::new(EvalContext::new()));
+///
+/// // Register a custom function that calculates the hypotenuse
+/// ctx.borrow_mut().register_native_function(
+///     "hypotenuse",     // Function name
+///     2,                // Takes 2 arguments
+///     |args: &[Real]| { // Implementation
+///         (args[0] * args[0] + args[1] * args[1]).sqrt()
+///     },
+///     Some("Calculates the hypotenuse of a right triangle")
+/// );
+///
+/// // Use the function in an expression
+/// let result = exp_rs::interp("hypotenuse(3, 4)", Some(ctx.clone())).unwrap();
+/// assert_eq!(result, 5.0);
+/// ```
 #[derive(Clone)]
 pub struct NativeFunction<'a> {
+    /// Number of arguments the function takes.
     pub arity: usize,
+    
+    /// The actual implementation of the function as a Rust closure.
     pub implementation: Rc<dyn Fn(&[Real]) -> Real>,
+    
+    /// The name of the function as it will be used in expressions.
     pub name: Cow<'a, str>,
+    
+    /// Optional description of what the function does.
     pub description: Option<String>,
 }
 
@@ -233,27 +287,74 @@ pub struct NativeFunction<'a> {
 
 use alloc::borrow::Cow;
 
-/// Represents a function defined by an expression string.
+/// Represents a function defined by an expression string rather than Rust code.
+/// 
+/// Expression functions allow users to define custom functions using the expression
+/// language itself. These functions are compiled once when registered and can be called
+/// from other expressions. They support parameters and can access variables from the
+/// evaluation context.
+///
+/// # Example
+///
+/// ```
+/// # use exp_rs::{EvalContext, Real};
+/// # use std::rc::Rc;
+/// # use std::cell::RefCell;
+/// let ctx = Rc::new(RefCell::new(EvalContext::new()));
+///
+/// // Register a function to calculate the area of a circle
+/// ctx.borrow_mut().register_expression_function(
+///     "circle_area",                  // Function name
+///     vec!["radius".to_string()],     // Parameter names
+///     "pi * radius * radius",         // Function body as an expression
+///     Some("Calculates the area of a circle")
+/// ).unwrap();
+///
+/// // Use the function in another expression
+/// let result = exp_rs::interp("circle_area(2)", Some(ctx.clone())).unwrap();
+/// assert_eq!(result, std::f64::consts::PI * 4.0);
+/// ```
 #[derive(Clone)]
 pub struct ExpressionFunction {
+    /// The name of the function as it will be used in expressions.
     pub name: String,
+    
+    /// The parameter names that the function accepts.
     pub params: Vec<String>,
+    
+    /// The original expression string defining the function body.
     pub expression: String,
+    
+    /// The pre-compiled AST of the expression for faster evaluation.
     pub compiled_ast: AstExpr,
+    
+    /// Optional description of what the function does.
     pub description: Option<String>,
 }
 
 
+/// Internal representation of a variable in the evaluation system.
+/// 
+/// This is an implementation detail and should not be used directly by library users.
+/// Variables are normally managed through the `EvalContext` interface.
 #[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct Variable<'a> {
+    /// The name of the variable.
     pub name: Cow<'a, str>,
+    
+    /// Internal address/identifier for the variable.
     pub address: i8,
+    
+    /// Function associated with the variable (if any).
     pub function: fn(Real, Real) -> Real,
+    
+    /// Context or associated AST nodes.
     pub context: Vec<AstExpr>,
 }
 
 impl<'a> Variable<'a> {
+    /// Creates a new variable with the given name and default values.
     pub fn new(name: &'a str) -> Variable<'a> {
         Variable {
             name: Cow::Borrowed(name),

@@ -1,3 +1,16 @@
+//! Built-in mathematical functions for expression evaluation.
+//!
+//! This module provides the implementation of all built-in functions that can be used
+//! in expressions. These include common mathematical operations like trigonometric functions,
+//! logarithms, exponentials, and more. The functions handle special cases like division
+//! by zero and out-of-range inputs gracefully by returning appropriate values like NaN
+//! or infinity.
+//!
+//! All functions use the `libm` crate for their implementations, which ensures
+//! compatibility with no_std environments. Depending on the selected floating-point
+//! precision (f32 or f64, controlled by the "f32" feature), different versions of the
+//! math functions are used.
+
 #[cfg(feature = "f32")]
 use libm::{
     acosf as libm_acos, asinf as libm_asin, atan2f as libm_atan2, atanf as libm_atan,
@@ -16,10 +29,24 @@ use libm::{
 
 use crate::Real;
 
+/// Dummy function that panics when called.
+///
+/// This function is used internally as a placeholder for uninitialized functions.
+/// It should never be called in normal operation.
 pub fn dummy(_: Real, _: Real) -> Real {
     panic!("called dummy!")
 }
 
+/// Returns the maximum of two values.
+///
+/// # Parameters
+///
+/// * `a` - First value
+/// * `b` - Second value
+///
+/// # Returns
+///
+/// The larger of `a` and `b`.
 pub fn max(a: Real, b: Real) -> Real {
     if a > b {
         a
@@ -27,9 +54,31 @@ pub fn max(a: Real, b: Real) -> Real {
         b
     }
 }
+
+/// Adds two values.
+///
+/// # Parameters
+///
+/// * `a` - First value
+/// * `b` - Second value
+///
+/// # Returns
+///
+/// The sum of `a` and `b`.
 pub fn add(a: Real, b: Real) -> Real {
     a + b
 }
+
+/// Returns the minimum of two values.
+///
+/// # Parameters
+///
+/// * `a` - First value
+/// * `b` - Second value
+///
+/// # Returns
+///
+/// The smaller of `a` and `b`.
 pub fn min(a: Real, b: Real) -> Real {
     if a < b {
         a
@@ -37,12 +86,50 @@ pub fn min(a: Real, b: Real) -> Real {
         b
     }
 }
+
+/// Subtracts the second value from the first.
+///
+/// # Parameters
+///
+/// * `a` - Value to subtract from
+/// * `b` - Value to subtract
+///
+/// # Returns
+///
+/// The difference `a - b`.
 pub fn sub(a: Real, b: Real) -> Real {
     a - b
 }
+
+/// Multiplies two values.
+///
+/// # Parameters
+///
+/// * `a` - First value
+/// * `b` - Second value
+///
+/// # Returns
+///
+/// The product of `a` and `b`.
 pub fn mul(a: Real, b: Real) -> Real {
     a * b
 }
+
+/// Divides the first value by the second.
+///
+/// This function handles division by zero gracefully by returning:
+/// - NaN for 0/0
+/// - Positive infinity for positive/0
+/// - Negative infinity for negative/0
+///
+/// # Parameters
+///
+/// * `a` - Numerator
+/// * `b` - Denominator
+///
+/// # Returns
+///
+/// The quotient `a / b`, or appropriate value for division by zero.
 pub fn div(a: Real, b: Real) -> Real {
     if b == 0.0 {
         if a == 0.0 {
@@ -167,6 +254,24 @@ pub fn log10(a: Real, _: Real) -> Real {
 pub fn pi(_: Real, _: Real) -> Real {
     crate::constants::PI
 }
+/// Raises a value to a power.
+///
+/// This function computes `a` raised to the power of `b` (a^b).
+/// It handles various special cases and edge conditions:
+///
+/// - 0^0 = 1 (by mathematical convention)
+/// - Negative base with non-integer exponent returns NaN
+/// - Very large exponents that would cause overflow return infinity
+/// - Very small values that would cause underflow return 0
+///
+/// # Parameters
+///
+/// * `a` - Base value
+/// * `b` - Exponent
+///
+/// # Returns
+///
+/// The value of `a` raised to the power of `b`.
 pub fn pow(a: Real, b: Real) -> Real {
     #[cfg(test)]
     println!("pow function called with a={}, b={}", a, b);

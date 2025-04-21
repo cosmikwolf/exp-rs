@@ -1,7 +1,55 @@
 /*!
  * C FFI interface for exp-rs.
- * This exposes a minimal, safe C API for evaluating expressions.
- * More functions can be added as needed.
+ * 
+ * This module provides a Foreign Function Interface (FFI) that allows calling exp-rs
+ * functionality from C code. It exposes a safe, minimal C-compatible API for evaluating
+ * expressions and managing evaluation contexts.
+ * 
+ * # Usage from C
+ * 
+ * ```c
+ * #include "exp_rs.h"
+ * 
+ * int main() {
+ *     // Simple evaluation without context
+ *     EvalResult result = exp_rs_eval("2 * (3 + 4)");
+ *     if (result.status == 0) {
+ *         printf("Result: %f\n", result.value);  // Prints: Result: 14.000000
+ *     } else {
+ *         printf("Error: %s\n", result.error);
+ *         exp_rs_free_error((char*)result.error);
+ *     }
+ *     
+ *     // Using a context for variables and functions
+ *     ExpContext* ctx = exp_rs_context_new();
+ *     
+ *     // Set variables
+ *     exp_rs_context_set_parameter(ctx, "x", 10.0);
+ *     exp_rs_context_set_parameter(ctx, "y", 5.0);
+ *     
+ *     // Register a custom function
+ *     const char* params[] = {"a", "b"};
+ *     exp_rs_context_register_expression_function(
+ *         ctx, "add_squared", params, 2, "a*a + b*b"
+ *     );
+ *     
+ *     // Evaluate with context
+ *     result = exp_rs_context_eval("add_squared(x, y)", ctx);
+ *     if (result.status == 0) {
+ *         printf("Result: %f\n", result.value);  // Prints: Result: 125.000000
+ *     } else {
+ *         printf("Error: %s\n", result.error);
+ *         exp_rs_free_error((char*)result.error);
+ *     }
+ *     
+ *     // Clean up
+ *     exp_rs_context_free(ctx);
+ *     
+ *     return 0;
+ * }
+ * ```
+ * 
+ * See the include/exp_rs.h header file for the complete C API definition.
  */
 
 extern crate alloc;
@@ -61,14 +109,39 @@ use core::ptr;
 use crate::Real;
 
 // Use the appropriate floating point type for EvalResult
+/// Result structure returned by evaluation functions.
+///
+/// This structure returns either a successful result value or an error message.
+/// When status is 0, the value field contains the result of the expression evaluation.
+/// When status is non-zero, the error field contains a null-terminated string with
+/// the error message, which must be freed using exp_rs_free_error.
 #[repr(C)]
 pub struct EvalResult {
-    pub status: i32,          // 0 = OK, nonzero = error
-    pub value: Real,          // valid if status == 0, using the Real type alias
-    pub error: *const c_char, // valid if status != 0, must be freed by caller
+    /// Status code: 0 for success, non-zero for errors
+    pub status: i32,
+    
+    /// The result value (valid when status is 0)
+    pub value: Real,
+    
+    /// Error message (valid when status is non-zero, must be freed by caller)
+    pub error: *const c_char,
 }
 
-/// Free a string allocated by exp_rs_eval error result.
+/// Frees a string allocated by exp_rs FFI functions.
+///
+/// This function should be called to free the error message string in an EvalResult
+/// when status is non-zero. Not calling this function will result in a memory leak.
+///
+/// # Parameters
+///
+/// * `ptr` - Pointer to the string to free. Must be a pointer returned in an EvalResult error field.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure that:
+/// 1. The pointer is valid and was allocated by one of the exp_rs FFI functions
+/// 2. The pointer is not used after calling this function
+/// 3. The pointer is not freed more than once
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_free_error(ptr: *mut c_char) {
     if !ptr.is_null() {
@@ -78,8 +151,25 @@ pub extern "C" fn exp_rs_free_error(ptr: *mut c_char) {
     }
 }
 
+/// Evaluates a mathematical expression without a context.
+///
+/// This function evaluates a mathematical expression string and returns the result.
+/// Without a context, only built-in functions and constants are available.
+///
+/// # Parameters
+///
+/// * `expr` - Null-terminated string containing the expression to evaluate
+///
+/// # Returns
+///
+/// An EvalResult structure containing either the result value or an error message.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure that:
+/// 1. The pointer is valid and points to a null-terminated string
+/// 2. The string contains valid UTF-8 data
 #[unsafe(no_mangle)]
-/// @return EvalResult structure
 pub extern "C" fn exp_rs_eval(expr: *const c_char) -> EvalResult {
     if expr.is_null() {
         return EvalResult {
@@ -119,20 +209,51 @@ pub extern "C" fn exp_rs_eval(expr: *const c_char) -> EvalResult {
     }
 }
 
-/// Opaque EvalContext handle for C
+/// Opaque handle to an evaluation context for C code.
+///
+/// This is an opaque type that C code can use to reference an EvalContext.
+/// C code should only store and pass this pointer, never dereferencing it directly.
 #[repr(C)]
 pub struct EvalContextOpaque {
     _private: [u8; 0],
 }
 
-/// Create a new EvalContext and return a pointer to it
+/// Creates a new evaluation context.
+///
+/// This function creates a new evaluation context that can be used to store
+/// variables, constants, and functions for use in expressions. The context
+/// must be freed with exp_rs_context_free when no longer needed.
+///
+/// # Returns
+///
+/// A pointer to the new context, or NULL if allocation failed.
+///
+/// # Safety
+///
+/// This function is safe to call from C code. The returned pointer must be
+/// passed to exp_rs_context_free when no longer needed to avoid memory leaks.
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_context_new() -> *mut EvalContextOpaque {
     let ctx = Box::new(EvalContext::new());
     Box::into_raw(ctx) as *mut EvalContextOpaque
 }
 
-/// Free an EvalContext previously created by exp_rs_context_new
+/// Frees an evaluation context previously created by exp_rs_context_new.
+///
+/// This function releases all resources associated with the given context.
+/// After calling this function, the context pointer is no longer valid and
+/// should not be used.
+///
+/// # Parameters
+///
+/// * `ctx` - Pointer to the context to free, as returned by exp_rs_context_new
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer. The caller must ensure that:
+/// 1. The pointer was returned by exp_rs_context_new
+/// 2. The pointer has not already been freed
+/// 3. The pointer is not used after calling this function
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_context_free(ctx: *mut EvalContextOpaque) {
     if ctx.is_null() {
@@ -219,8 +340,27 @@ pub extern "C" fn exp_rs_context_set_parameter(
     0
 }
 
+/// Evaluates a mathematical expression using the given context.
+///
+/// This function evaluates a mathematical expression string using the specified context,
+/// which can contain variables, constants, and custom functions.
+///
+/// # Parameters
+///
+/// * `expr` - Null-terminated string containing the expression to evaluate
+/// * `ctx` - Pointer to the context to use, as returned by exp_rs_context_new
+///
+/// # Returns
+///
+/// An EvalResult structure containing either the result value or an error message.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers. The caller must ensure that:
+/// 1. The expression pointer is valid and points to a null-terminated string
+/// 2. The string contains valid UTF-8 data
+/// 3. The context pointer was returned by exp_rs_context_new and has not been freed
 #[unsafe(no_mangle)]
-/// @return EvalResult structure
 pub extern "C" fn exp_rs_context_eval(
     expr: *const c_char,
     ctx: *mut EvalContextOpaque,
