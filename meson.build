@@ -31,19 +31,20 @@ exp_rs_build = custom_target(
     '--features', ','.join(rust_features),
     # '--target-dir', meson.current_build_dir(),
     '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
-    '--target-dir', meson.current_build_dir() + '/exp-rs',
+    # '--target-dir', meson.current_build_dir() + '/exp-rs',
     '--lib', '&&',
     'cp',
     meson.current_source_dir() + '/include/exp_rs.h',
     meson.current_build_dir(),
     '&&',
     'cp',
-    meson.current_build_dir()
-    + '/exp-rs/thumbv7em-none-eabihf/release/libexp_rs.a',
+    # meson.current_build_dir() + '/exp-rs/thumbv7em-none-eabihf/release/libexp_rs.a',
+    meson.current_source_dir()
+    + '/target/thumbv7em-none-eabihf/release/libexp_rs.a',
     meson.current_build_dir() + '/libexp_rs.a',
   ],
-  build_always_stale: true,
-  build_by_default: true,
+  build_always_stale: false,
+  build_by_default: false,
   # install: true,
   console: true,
 )
@@ -52,8 +53,6 @@ exp_rs_dep = declare_dependency(
   # sources: ['src/ffi.rs'],
   include_directories: include_directories('include'),
   link_with: exp_rs_build,
-  link_args: ['-flto'], # Link-time optimization
-  # link_args: ['-L' + meson.current_build_dir(), '-lexp_rs'],
 )
 
 # Include the qemu_test subdir if building qemu tests

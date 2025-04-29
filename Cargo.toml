@@ -24,6 +24,7 @@ default = ["f64"]
 f32 = []
 f64 = []
 no-builtin-math = []
+custom_cbindgen_alloc = []  # Use exp_rs_malloc and exp_rs_free instead of malloc/free
 
 # Ensure only one of f32 or f64 can be enabled at a time
 # This is enforced by mutually exclusive features

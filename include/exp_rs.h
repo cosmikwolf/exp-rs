@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define USE_F64
+#define USE_F32
 
 #if defined(USE_F32)
 /**
@@ -181,6 +181,10 @@ int32_t exp_rs_context_set_parameter(struct EvalContextOpaque *ctx, const char *
  * 3. The context pointer was returned by exp_rs_context_new and has not been freed
  */
 struct EvalResult exp_rs_context_eval(const char *expr, struct EvalContextOpaque *ctx);
+
+extern void *exp_rs_malloc(uintptr_t size);
+
+extern void exp_rs_free(void *ptr);
 
 extern void *malloc(uintptr_t size);
 

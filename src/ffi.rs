@@ -66,16 +66,51 @@ use core::ffi::{CStr, c_char};
 mod allocator {
     use core::alloc::{GlobalAlloc, Layout};
 
-    // Simple wrapper for C stdlib malloc/free
-    struct CAllocator;
+    // Choose between standard and custom allocator based on feature
+    #[cfg(feature = "custom_cbindgen_alloc")]
+    struct CustomAllocator;
 
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    struct StandardAllocator;
+
+    // External function declarations
+    #[cfg(feature = "custom_cbindgen_alloc")]
     unsafe extern "C" {
-        // Use void* type compatibility with stdlib.h
+        // Use custom allocation functions provided by the user
+        fn exp_rs_malloc(size: usize) -> *mut core::ffi::c_void;
+        fn exp_rs_free(ptr: *mut core::ffi::c_void);
+    }
+
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    unsafe extern "C" {
+        // Use standard C malloc/free
         fn malloc(size: usize) -> *mut core::ffi::c_void;
         fn free(ptr: *mut core::ffi::c_void);
     }
 
-    unsafe impl GlobalAlloc for CAllocator {
+    // Implementation for custom allocator (using exp_rs_malloc/exp_rs_free)
+    #[cfg(feature = "custom_cbindgen_alloc")]
+    unsafe impl GlobalAlloc for CustomAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            let size = layout.size();
+            if size == 0 {
+                return layout.align() as *mut u8;
+            }
+            // Cast the void* to u8*
+            unsafe { exp_rs_malloc(size) as *mut u8 }
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+            if !ptr.is_null() {
+                // Cast the u8* to void*
+                unsafe { exp_rs_free(ptr as *mut core::ffi::c_void) };
+            }
+        }
+    }
+
+    // Implementation for standard allocator (using malloc/free)
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    unsafe impl GlobalAlloc for StandardAllocator {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             let size = layout.size();
             if size == 0 {
@@ -93,8 +128,14 @@ mod allocator {
         }
     }
 
+    // Choose the appropriate allocator
+    #[cfg(feature = "custom_cbindgen_alloc")]
     #[global_allocator]
-    static ALLOCATOR: CAllocator = CAllocator;
+    static ALLOCATOR: CustomAllocator = CustomAllocator;
+
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    #[global_allocator]
+    static ALLOCATOR: StandardAllocator = StandardAllocator;
 }
 
 // Panic handler for no_std

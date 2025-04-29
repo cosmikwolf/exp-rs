@@ -6,6 +6,13 @@ option(
 )
 
 option(
+  'enable_custom_alloc',
+  type: 'boolean',
+  value: false,
+  description: 'Use custom allocation functions (exp_rs_malloc/exp_rs_free) instead of stdlib',
+)
+
+option(
   'enable_exprs_qemu_tests',
   type: 'boolean',
   value: false,
