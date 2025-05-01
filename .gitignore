@@ -2,6 +2,6 @@
 !.aider.model.conf
 !.aider.conf
 target/
-build*
+build*/
 CLAUDE.md
 CONVENTIONS.md
