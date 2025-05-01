@@ -1,14 +1,11 @@
 use crate::types::TokenKind;
-#[cfg(test)]
-use crate::Real;
-#[cfg(not(test))]
 use crate::{Real, String, ToString};
-#[cfg(not(test))]
-use alloc::format;
+
 #[cfg(test)]
 use std::format;
-#[cfg(test)]
-use std::string::{String, ToString};
+
+#[cfg(all(not(test), target_arch = "arm"))]
+use alloc::format;
 
 /// A token produced by the lexer.
 #[derive(Debug, Clone, PartialEq)]

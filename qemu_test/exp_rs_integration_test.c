@@ -131,8 +131,27 @@ test_result_t test_context_integration() {
     }
     
     // Set parameters
-    exp_rs_context_set_parameter(ctx, "x", 0.5);
-    exp_rs_context_set_parameter(ctx, "y", 2.0);
+    struct EvalResult set_result_x = exp_rs_context_set_parameter(ctx, "x", 0.5);
+    if (set_result_x.status != 0) {
+        qemu_print("Error setting parameter 'x'\n");
+        if (set_result_x.error) {
+            qemu_printf("Error: %s\n", set_result_x.error);
+            exp_rs_free_error((char*)set_result_x.error);
+        }
+        exp_rs_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    struct EvalResult set_result_y = exp_rs_context_set_parameter(ctx, "y", 2.0);
+    if (set_result_y.status != 0) {
+        qemu_print("Error setting parameter 'y'\n");
+        if (set_result_y.error) {
+            qemu_printf("Error: %s\n", set_result_y.error);
+            exp_rs_free_error((char*)set_result_y.error);
+        }
+        exp_rs_context_free(ctx);
+        return TEST_FAIL;
+    }
     
     // Register a function that uses our math functions
     const char* func_name = "my_math_func";
@@ -141,11 +160,15 @@ test_result_t test_context_integration() {
     const char* params[] = {param1_name, param2_name};
     const char* expr = "sin(a) + cos(b) + sqrt(a*b)";
     
-    int status = exp_rs_context_register_expression_function(
+    struct EvalResult reg_result = exp_rs_context_register_expression_function(
         ctx, func_name, (const char**)params, 2, expr);
     
-    if (status != 0) {
-        qemu_printf("Failed to register function, status=%d\n", status);
+    if (reg_result.status != 0) {
+        qemu_printf("Failed to register function\n");
+        if (reg_result.error) {
+            qemu_printf("Error: %s\n", reg_result.error);
+            exp_rs_free_error((char*)reg_result.error);
+        }
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }

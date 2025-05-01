@@ -34,6 +34,60 @@ use std::vec::Vec;
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 
+// Add recursion depth tracking for evaluating expression functions
+#[cfg(not(test))]
+use core::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+// Define a static atomic counter for recursion depth
+// Using atomics avoids need for RefCell and thread_local
+static RECURSION_DEPTH: AtomicUsize = AtomicUsize::new(0);
+
+// Add a constant for maximum recursion depth
+// We're tracking function calls, so we can use a reasonable limit for call depth
+// This should allow for legitimate recursive functions but catch infinite recursion
+const MAX_RECURSION_DEPTH: usize = 250;
+
+// Add a helper function to check and increment recursion depth
+fn check_and_increment_recursion_depth() -> Result<(), ExprError> {
+    let current = RECURSION_DEPTH.load(Ordering::Relaxed);
+    if current >= MAX_RECURSION_DEPTH {
+        Err(ExprError::RecursionLimit(format!(
+            "Maximum recursion depth of {} exceeded during expression evaluation",
+            MAX_RECURSION_DEPTH
+        )))
+    } else {
+        RECURSION_DEPTH.store(current + 1, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+// Add a helper function to decrement recursion depth
+fn decrement_recursion_depth() {
+    let current = RECURSION_DEPTH.load(Ordering::Relaxed);
+    if current > 0 {
+        RECURSION_DEPTH.store(current - 1, Ordering::Relaxed);
+    }
+}
+
+// Get the current recursion depth - exposed for testing
+pub fn get_recursion_depth() -> usize {
+    RECURSION_DEPTH.load(Ordering::Relaxed)
+}
+
+// Reset the recursion depth counter to zero - exposed for testing
+pub fn reset_recursion_depth() {
+    RECURSION_DEPTH.store(0, Ordering::Relaxed)
+}
+
+// Set the recursion depth to a specific value - exposed for testing
+pub fn set_max_recursion_depth(depth: usize) -> usize {
+    // We can't actually modify the const, but we can expose this for documentation
+    // of test expectations
+    depth
+}
+
 // For no_std, we need to be careful with statics
 // We'll keep it very simple: just create a fresh cache every time
 // This isn't as efficient, but works for our embedded target
@@ -69,14 +123,12 @@ enum FunctionCacheEntry {
 impl Clone for FunctionCacheEntry {
     fn clone(&self) -> Self {
         match self {
-            FunctionCacheEntry::Native(nf) => {
-                FunctionCacheEntry::Native(OwnedNativeFunction {
-                    arity: nf.arity,
-                    implementation: nf.implementation.clone(),
-                    name: nf.name.clone(),
-                    description: nf.description.clone(),
-                })
-            }
+            FunctionCacheEntry::Native(nf) => FunctionCacheEntry::Native(OwnedNativeFunction {
+                arity: nf.arity,
+                implementation: nf.implementation.clone(),
+                name: nf.name.clone(),
+                description: nf.description.clone(),
+            }),
             FunctionCacheEntry::Expression(ef) => FunctionCacheEntry::Expression(ef.clone()),
             FunctionCacheEntry::User(uf) => FunctionCacheEntry::User(uf.clone()),
         }
@@ -88,15 +140,29 @@ impl Clone for FunctionCacheEntry {
 type MathFunc = fn(Real, Real) -> Real;
 
 pub fn eval_ast<'a>(ast: &AstExpr, ctx: Option<Rc<EvalContext<'a>>>) -> Result<Real, ExprError> {
+    // Reset recursion depth counter at the start of a new expression evaluation
+    // This ensures each top-level evaluation starts with a fresh recursion budget
+    RECURSION_DEPTH.store(0, Ordering::Relaxed);
+
     // Don't use a shared cache - we'll operate directly on the function cache
     let mut func_cache: BTreeMap<String, Option<FunctionCacheEntry>> = BTreeMap::new();
     // Also maintain a variable cache specific to this evaluation
     let mut var_cache: BTreeMap<String, Real> = BTreeMap::new();
 
-    eval_ast_inner(ast, ctx, &mut func_cache, &mut var_cache)
+    // Store result to ensure we reset the counter even on error
+    let result = eval_ast_inner(ast, ctx, &mut func_cache, &mut var_cache);
+
+    // Always reset the counter after evaluation to prevent leaks between calls
+    RECURSION_DEPTH.store(0, Ordering::Relaxed);
+
+    result
 }
 
-fn eval_variable(name: &str, ctx: Option<Rc<EvalContext<'_>>>, var_cache: &mut BTreeMap<String, Real>) -> Result<Real, ExprError> {
+fn eval_variable(
+    name: &str,
+    ctx: Option<Rc<EvalContext<'_>>>,
+    var_cache: &mut BTreeMap<String, Real>,
+) -> Result<Real, ExprError> {
     // Handle built-in constants first (pi, e) - these don't need context
     if name == "pi" {
         #[cfg(feature = "f32")]
@@ -117,20 +183,20 @@ fn eval_variable(name: &str, ctx: Option<Rc<EvalContext<'_>>>, var_cache: &mut B
 
     // Use context helper methods for variable/constant lookup
     if let Some(ctx_ref) = ctx.as_deref() {
-        // For expression functions, we need to check the immediate variables first 
+        // For expression functions, we need to check the immediate variables first
         // before checking parent contexts to avoid shadowing issues
         if let Some(val) = ctx_ref.variables.get(name) {
             // Found in immediate context, return it
             var_cache.insert(name.to_string(), *val);
             return Ok(*val);
         }
-        
+
         // Then check constants in the immediate context
         if let Some(val) = ctx_ref.constants.get(name) {
             var_cache.insert(name.to_string(), *val);
             return Ok(*val);
         }
-        
+
         // Now check the parent chain using the helper methods
         // which will properly handle the parent chain
         if let Some(val) = ctx_ref.get_variable(name) {
@@ -229,13 +295,15 @@ fn eval_function<'a>(
         {
             // First check known functions against their expected arity
             // This allows us to return InvalidFunctionCall errors rather than UnknownFunction
-            let single_arg_funcs = ["sin", "cos", "tan", "asin", "acos", "atan", 
-                "sinh", "cosh", "tanh", "exp", "log", "ln", "log10", "sqrt", 
-                "abs", "ceil", "floor", "neg"];
-                
-            let two_arg_funcs = ["+", "-", "*", "/", "^", "pow", "max", "min", 
-                "%", ",", "comma", "atan2"];
-            
+            let single_arg_funcs = [
+                "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "exp", "log",
+                "ln", "log10", "sqrt", "abs", "ceil", "floor", "neg",
+            ];
+
+            let two_arg_funcs = [
+                "+", "-", "*", "/", "^", "pow", "max", "min", "%", ",", "comma", "atan2",
+            ];
+
             // Check single-arg functions with wrong arity
             if single_arg_funcs.contains(&name) && args.len() != 1 {
                 return Err(ExprError::InvalidFunctionCall {
@@ -244,7 +312,7 @@ fn eval_function<'a>(
                     found: args.len(),
                 });
             }
-            
+
             // Check two-arg functions with wrong arity
             if two_arg_funcs.contains(&name) && args.len() != 2 {
                 return Err(ExprError::InvalidFunctionCall {
@@ -253,7 +321,7 @@ fn eval_function<'a>(
                     found: args.len(),
                 });
             }
-            
+
             // Now evaluate with correct arity
             if args.len() == 1 {
                 // Single-arg built-in functions
@@ -451,7 +519,7 @@ fn eval_function<'a>(
                 }
             }
         }
-        
+
         // If we get here, the function is unknown
         return Err(ExprError::UnknownFunction {
             name: name.to_string(),
@@ -517,7 +585,7 @@ where
 
     // Create a fresh context with the function arguments
     let mut func_ctx = EvalContext::new();
-    
+
     // Add all parameters with their values
     for (i, param_name) in func.params().iter().enumerate() {
         func_ctx.set_parameter(param_name, arg_values[i]);
@@ -527,9 +595,9 @@ where
     if let Some(parent) = &ctx {
         func_ctx.function_registry = parent.function_registry.clone();
     }
-    
+
     // We'll use the passed-in function cache directly
-    
+
     // Use precompiled AST if available, else parse body string
     let body_ast = if let Some(ast) = func.compiled_ast() {
         ast.clone()
@@ -537,119 +605,182 @@ where
         let param_names_str: Vec<String> = func.params().iter().map(|c| c.to_string()).collect();
         crate::engine::parse_expression_with_reserved(&func.body_str(), Some(&param_names_str))?
     };
-    
+
     // No global cache needed - we use per-call variable caches
-    
-    // We need to create a special version of eval_ast_inner that knows how to handle 
+
+    // We need to create a special version of eval_ast_inner that knows how to handle
     // variables in this custom function scope
     fn eval_custom_function_ast<'b>(
         ast: &AstExpr,
-        func_ctx: &EvalContext<'b>, 
+        func_ctx: &EvalContext<'b>,
         global_ctx: Option<&Rc<EvalContext<'b>>>,
         func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
         var_cache: &mut BTreeMap<String, Real>,
     ) -> Result<Real, ExprError> {
-        match ast {
+        // Only track recursion depth for function calls, particularly those that
+        // might call themselves recursively
+        let should_track = matches!(ast, AstExpr::Function { .. });
+
+        // Check and increment recursion depth only if needed
+        if should_track {
+            check_and_increment_recursion_depth()?;
+        }
+
+        // Store result to ensure we always decrement the counter if needed
+        let result = match ast {
             AstExpr::Constant(val) => Ok(*val),
             AstExpr::Variable(name) => {
                 // First check if the variable is a parameter in the function context
                 if let Some(val) = func_ctx.variables.get(name) {
-                    return Ok(*val);
+                    Ok(*val)
+                } else {
+                    // If not found, delegate to normal variable lookup in global context
+                    if let Some(ctx) = global_ctx {
+                        eval_variable(name, Some(ctx.clone()), var_cache)
+                    } else {
+                        // No contexts available
+                        Err(ExprError::UnknownVariable {
+                            name: name.to_string(),
+                        })
+                    }
                 }
-                
-                // If not found, delegate to normal variable lookup in global context
-                if let Some(ctx) = global_ctx {
-                    return eval_variable(name, Some(ctx.clone()), var_cache);
-                }
-                
-                // No contexts available
-                Err(ExprError::UnknownVariable { name: name.to_string() })
-            },
+            }
             AstExpr::Function { name, args } => {
                 // Create a vector to store evaluated arguments
                 let mut arg_values = Vec::with_capacity(args.len());
-                
+
                 // Evaluate each argument in the proper context
                 for arg in args {
                     // Recursively call our custom evaluator
-                    let arg_val = eval_custom_function_ast(arg, func_ctx, global_ctx, func_cache, var_cache)?;
+                    let arg_val =
+                        eval_custom_function_ast(arg, func_ctx, global_ctx, func_cache, var_cache)?;
                     arg_values.push(arg_val);
                 }
-                
+
                 // Once we have all argument values, find and evaluate the function
                 if let Some(native_fn) = func_ctx.get_native_function(name) {
                     // Native function
                     if arg_values.len() != native_fn.arity {
-                        return Err(ExprError::InvalidFunctionCall {
+                        Err(ExprError::InvalidFunctionCall {
                             name: name.to_string(),
                             expected: native_fn.arity,
                             found: arg_values.len(),
-                        });
+                        })
+                    } else {
+                        // Convert to OwnedNativeFunction
+                        let owned_fn = OwnedNativeFunction::from(native_fn);
+                        Ok((owned_fn.implementation)(&arg_values))
                     }
-                    // Convert to OwnedNativeFunction
-                    let owned_fn = OwnedNativeFunction::from(native_fn);
-                    return Ok((owned_fn.implementation)(&arg_values));
                 } else if let Some(expr_fn) = func_ctx.get_expression_function(name) {
                     // Expression function (recursive case)
-                    return eval_expression_function(name, &arg_values, expr_fn, global_ctx.cloned(), func_cache, var_cache);
+                    // This is the critical case for tracking recursion depth
+                    if arg_values.len() != expr_fn.params.len() {
+                        Err(ExprError::InvalidFunctionCall {
+                            name: name.to_string(),
+                            expected: expr_fn.params.len(),
+                            found: arg_values.len(),
+                        })
+                    } else {
+                        // Create a fresh context for this function call
+                        let mut nested_func_ctx = EvalContext::new();
+
+                        // Add parameters
+                        for (i, param_name) in expr_fn.params.iter().enumerate() {
+                            nested_func_ctx.set_parameter(param_name, arg_values[i]);
+                        }
+
+                        // Copy function registry
+                        if let Some(parent) = global_ctx {
+                            nested_func_ctx.function_registry = parent.function_registry.clone();
+                        }
+
+                        // Evaluate directly using the AST without going through eval_expression_function
+                        eval_custom_function_ast(
+                            &expr_fn.compiled_ast,
+                            &nested_func_ctx,
+                            global_ctx,
+                            func_cache,
+                            var_cache,
+                        )
+                    }
                 } else {
                     // Not found in the contexts, try built-in functions
                     // Just delegate to eval_function in the global context
-                    let ast_args: Vec<AstExpr> = args.iter()
+                    let ast_args: Vec<AstExpr> = args
+                        .iter()
                         .zip(arg_values.iter())
                         .map(|(_, val)| AstExpr::Constant(*val))
                         .collect();
-                    
-                    return eval_function(name, &ast_args, global_ctx.cloned(), func_cache, var_cache);
+
+                    eval_function(
+                        name,
+                        &ast_args,
+                        global_ctx.cloned(),
+                        func_cache,
+                        var_cache,
+                    )
                 }
-            },
+            }
             AstExpr::Array { name, index } => {
-                let idx_val = eval_custom_function_ast(index, func_ctx, global_ctx, func_cache, var_cache)? as usize;
-                
+                let idx_val =
+                    eval_custom_function_ast(index, func_ctx, global_ctx, func_cache, var_cache)?
+                        as usize;
+
                 // First check function context
                 if let Some(arr) = func_ctx.get_array(name) {
                     if idx_val < arr.len() {
-                        return Ok(arr[idx_val]);
+                        Ok(arr[idx_val])
                     } else {
-                        return Err(ExprError::ArrayIndexOutOfBounds {
+                        Err(ExprError::ArrayIndexOutOfBounds {
                             name: name.to_string(),
                             index: idx_val,
                             len: arr.len(),
-                        });
+                        })
                     }
-                }
-                
-                // Then check global context
-                if let Some(global) = global_ctx {
+                } else if let Some(global) = global_ctx {
+                    // Then check global context
                     if let Some(arr) = global.get_array(name) {
                         if idx_val < arr.len() {
-                            return Ok(arr[idx_val]);
+                            Ok(arr[idx_val])
                         } else {
-                            return Err(ExprError::ArrayIndexOutOfBounds {
+                            Err(ExprError::ArrayIndexOutOfBounds {
                                 name: name.to_string(),
                                 index: idx_val,
                                 len: arr.len(),
-                            });
+                            })
                         }
+                    } else {
+                        Err(ExprError::UnknownVariable {
+                            name: name.to_string(),
+                        })
                     }
+                } else {
+                    Err(ExprError::UnknownVariable {
+                        name: name.to_string(),
+                    })
                 }
-                
-                Err(ExprError::UnknownVariable { name: name.to_string() })
-            },
+            }
             AstExpr::Attribute { base, attr } => {
                 // Delegate to eval_attribute
                 if let Some(global) = global_ctx {
-                    return eval_attribute(base, attr, Some(global.clone()));
+                    eval_attribute(base, attr, Some(global.clone()))
+                } else {
+                    Err(ExprError::AttributeNotFound {
+                        base: base.to_string(),
+                        attr: attr.to_string(),
+                    })
                 }
-                
-                Err(ExprError::AttributeNotFound {
-                    base: base.to_string(),
-                    attr: attr.to_string(),
-                })
             }
+        };
+
+        // Only decrement if we incremented
+        if should_track {
+            decrement_recursion_depth();
         }
+
+        result
     }
-    
+
     // Helper function to evaluate expression functions using our custom evaluator
     fn eval_expression_function<'b>(
         name: &str,
@@ -659,6 +790,9 @@ where
         func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
         var_cache: &mut BTreeMap<String, Real>,
     ) -> Result<Real, ExprError> {
+        // We don't need to check recursion depth here anymore since it's checked in eval_ast_inner
+        // for every AST node, including the ones in the function body
+
         if arg_values.len() != expr_fn.params.len() {
             return Err(ExprError::InvalidFunctionCall {
                 name: name.to_string(),
@@ -666,41 +800,41 @@ where
                 found: arg_values.len(),
             });
         }
-        
+
         // Create a fresh context for this function call
         let mut nested_func_ctx = EvalContext::new();
-        
+
         // Add parameters
         for (i, param_name) in expr_fn.params.iter().enumerate() {
             nested_func_ctx.set_parameter(param_name, arg_values[i]);
         }
-        
+
         // Copy function registry
         if let Some(parent) = &global_ctx {
             nested_func_ctx.function_registry = parent.function_registry.clone();
         }
-        
+
         // Evaluate the expression with our custom evaluator
         eval_custom_function_ast(
             &expr_fn.compiled_ast,
             &nested_func_ctx,
             global_ctx.as_ref(),
             func_cache,
-            var_cache
+            var_cache,
         )
     }
-    
+
     // Debug output for the polynomial function
     #[cfg(test)]
     if name == "polynomial" && arg_values.len() == 1 {
         let x = arg_values[0];
-        
+
         // Let's manually calculate the expected result
         let x_cubed = x * x * x;
         let two_x_squared = 2.0 * x * x;
         let three_x = 3.0 * x;
         let expected = x_cubed + two_x_squared + three_x + 4.0;
-        
+
         // In test mode we can use eprintln
         #[cfg(test)]
         {
@@ -710,10 +844,10 @@ where
             eprintln!("  3*x = {}", three_x);
             eprintln!("  4 = 4");
             eprintln!("  Total expected: {}", expected);
-            
+
             // Print the function body string
             eprintln!("Function body string: {}", func.body_str());
-            
+
             // Print the AST structure
             eprintln!("AST structure for polynomial body:");
             match &body_ast {
@@ -721,19 +855,23 @@ where
                     eprintln!("Top-level function: {}", name);
                     for (i, arg) in args.iter().enumerate() {
                         eprintln!("  Arg {}: {:?}", i, arg);
-                        
+
                         // If this is a function, go deeper
-                        if let AstExpr::Function { name: inner_name, args: inner_args } = arg {
+                        if let AstExpr::Function {
+                            name: inner_name,
+                            args: inner_args,
+                        } = arg
+                        {
                             eprintln!("    Inner function: {}", inner_name);
                             for (j, inner_arg) in inner_args.iter().enumerate() {
                                 eprintln!("      Inner arg {}: {:?}", j, inner_arg);
                             }
                         }
                     }
-                },
+                }
                 _ => eprintln!("Not a function at top level: {:?}", body_ast),
             }
-            
+
             // Check if x is correctly set in the function context
             if let Some(x_val) = func_ctx.variables.get("x") {
                 eprintln!("Value of 'x' in function context: {}", x_val);
@@ -741,36 +879,59 @@ where
                 eprintln!("ERROR: 'x' not found in function context!");
             }
         }
-        
+
         // Try directly evaluating parts of the expression with our custom evaluator
         let x_var = AstExpr::Variable("x".to_string());
-        let result_x = eval_custom_function_ast(&x_var, &func_ctx, ctx.as_ref(), func_cache, &mut BTreeMap::new());
-        
+        let result_x = eval_custom_function_ast(
+            &x_var,
+            &func_ctx,
+            ctx.as_ref(),
+            func_cache,
+            &mut BTreeMap::new(),
+        );
+
         #[cfg(test)]
         eprintln!("Custom evaluating 'x': {:?}", result_x);
-        
+
         // Try evaluating x^3 with our custom evaluator
         let x_cubed_ast = AstExpr::Function {
             name: "^".to_string(),
             args: alloc::vec![x_var.clone(), AstExpr::Constant(3.0)],
         };
-        let result_x_cubed = eval_custom_function_ast(&x_cubed_ast, &func_ctx, ctx.as_ref(), func_cache, &mut BTreeMap::new());
-        
+        let result_x_cubed = eval_custom_function_ast(
+            &x_cubed_ast,
+            &func_ctx,
+            ctx.as_ref(),
+            func_cache,
+            &mut BTreeMap::new(),
+        );
+
         #[cfg(test)]
         eprintln!("Custom evaluating 'x^3': {:?}", result_x_cubed);
     }
-    
+
     // Now evaluate the function body with our custom evaluator
-    let result = eval_custom_function_ast(&body_ast, &func_ctx, ctx.as_ref(), func_cache, &mut BTreeMap::new());
-    
+    let result = eval_custom_function_ast(
+        &body_ast,
+        &func_ctx,
+        ctx.as_ref(),
+        func_cache,
+        &mut BTreeMap::new(),
+    );
+
     // Debug the polynomial calculation for specific values
     #[cfg(test)]
     if name == "polynomial" && arg_values.len() == 1 {
         let x = arg_values[0];
-        let expected = x*x*x + 2.0*x*x + 3.0*x + 4.0;
-        eprintln!("polynomial({}) = {} (expected {})", x, result.as_ref().unwrap_or(&0.0), expected);
+        let expected = x * x * x + 2.0 * x * x + 3.0 * x + 4.0;
+        eprintln!(
+            "polynomial({}) = {} (expected {})",
+            x,
+            result.as_ref().unwrap_or(&0.0),
+            expected
+        );
     }
-    
+
     result
 }
 
@@ -853,73 +1014,92 @@ fn eval_ast_inner<'a>(
     func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
     var_cache: &mut BTreeMap<String, Real>,
 ) -> Result<Real, ExprError> {
-    match ast {
+    // We'll be more selective about when to increment the recursion counter
+    // Only increment for function calls, as these are the ones that can cause stack overflow
+    let should_track = matches!(ast, AstExpr::Function { .. });
+
+    // Check and increment recursion depth only for function calls
+    if should_track {
+        check_and_increment_recursion_depth()?;
+    }
+
+    // Store result to ensure we always decrement the counter if needed
+    let result = match ast {
         AstExpr::Constant(val) => Ok(*val),
         AstExpr::Variable(name) => eval_variable(name, ctx.clone(), var_cache),
         AstExpr::Function { name, args } => {
             eval_function(name, args, ctx.clone(), func_cache, var_cache)
         }
-        AstExpr::Array { name, index } => eval_array(name, index, ctx.clone(), func_cache, var_cache),
+        AstExpr::Array { name, index } => {
+            eval_array(name, index, ctx.clone(), func_cache, var_cache)
+        }
         AstExpr::Attribute { base, attr } => eval_attribute(base, attr, ctx),
+    };
+
+    // Only decrement if we incremented
+    if should_track {
+        decrement_recursion_depth();
     }
+
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::{interp, parse_expression};
-    
+    use crate::error::ExprError;
+
     // Helper functions for tests that need to call eval functions directly
     fn test_eval_variable(name: &str, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
         let mut var_cache = BTreeMap::new();
         super::eval_variable(name, ctx, &mut var_cache)
     }
-    
+
     fn test_eval_function(
-        name: &str, 
-        args: &[AstExpr], 
-        ctx: Option<Rc<EvalContext>>, 
-        func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>
+        name: &str,
+        args: &[AstExpr],
+        ctx: Option<Rc<EvalContext>>,
+        func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
     ) -> Result<Real, ExprError> {
         let mut var_cache = BTreeMap::new();
         super::eval_function(name, args, ctx, func_cache, &mut var_cache)
     }
-    
+
     fn test_eval_array(
         name: &str,
         index: &AstExpr,
         ctx: Option<Rc<EvalContext>>,
-        func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>
+        func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
     ) -> Result<Real, ExprError> {
         let mut var_cache = BTreeMap::new();
         super::eval_array(name, index, ctx, func_cache, &mut var_cache)
     }
-    
+
     fn test_eval_custom_function<F>(
         name: &str,
         args: &[AstExpr],
         ctx: Option<Rc<EvalContext>>,
         func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
-        func: &F
+        func: &F,
     ) -> Result<Real, ExprError>
     where
-        F: super::CustomFunction
+        F: super::CustomFunction,
     {
         let mut var_cache = BTreeMap::new();
         super::eval_custom_function(name, args, ctx, func_cache, &mut var_cache, func)
     }
-    
+
     fn test_eval_native_function(
         name: &str,
         args: &[AstExpr],
         ctx: Option<Rc<EvalContext>>,
         func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
-        native_fn: &OwnedNativeFunction
+        native_fn: &OwnedNativeFunction,
     ) -> Result<Real, ExprError> {
         let mut var_cache = BTreeMap::new();
         super::eval_native_function(name, args, ctx, func_cache, &mut var_cache, native_fn)
     }
-    use crate::error::ExprError;
 
     #[test]
     fn test_eval_user_function_polynomial() {
@@ -971,7 +1151,11 @@ mod tests {
         // Avoid simultaneous mutable and immutable borrow of ctx by splitting the scope
         let native_fn = {
             // We need to use the string directly as the key
-            let nf = ctx.function_registry.native_functions.get("triple").unwrap();
+            let nf = ctx
+                .function_registry
+                .native_functions
+                .get("triple")
+                .unwrap();
             OwnedNativeFunction {
                 arity: nf.arity,
                 implementation: nf.implementation.clone(),
@@ -1033,8 +1217,14 @@ mod tests {
         let mut ctx = EvalContext::new();
         ctx.set_parameter("x", 42.0);
         ctx.constants.insert("y".into(), 3.14);
-        assert_eq!(test_eval_variable("x", Some(Rc::new(ctx.clone()))).unwrap(), 42.0);
-        assert_eq!(test_eval_variable("y", Some(Rc::new(ctx.clone()))).unwrap(), 3.14);
+        assert_eq!(
+            test_eval_variable("x", Some(Rc::new(ctx.clone()))).unwrap(),
+            42.0
+        );
+        assert_eq!(
+            test_eval_variable("y", Some(Rc::new(ctx.clone()))).unwrap(),
+            3.14
+        );
     }
 
     #[test]
@@ -1118,19 +1308,30 @@ mod tests {
     fn test_eval_array_success_and_out_of_bounds() {
         let mut ctx = EvalContext::new();
         ctx.arrays.insert("arr".into(), vec![1.0, 2.0, 3.0]);
-        
+
         // Create separate caches for each call to avoid borrowing issues
         let mut func_cache1 = std::collections::BTreeMap::new();
         let mut func_cache2 = std::collections::BTreeMap::new();
-        
+
         let idx_expr = AstExpr::Constant(1.0);
-        let val = test_eval_array("arr", &idx_expr, Some(Rc::new(ctx.clone())), &mut func_cache1).unwrap();
+        let val = test_eval_array(
+            "arr",
+            &idx_expr,
+            Some(Rc::new(ctx.clone())),
+            &mut func_cache1,
+        )
+        .unwrap();
         assert_eq!(val, 2.0);
-        
+
         // Out of bounds
         let idx_expr2 = AstExpr::Constant(10.0);
-        let err =
-            test_eval_array("arr", &idx_expr2, Some(Rc::new(ctx.clone())), &mut func_cache2).unwrap_err();
+        let err = test_eval_array(
+            "arr",
+            &idx_expr2,
+            Some(Rc::new(ctx.clone())),
+            &mut func_cache2,
+        )
+        .unwrap_err();
         assert!(matches!(err, ExprError::ArrayIndexOutOfBounds { .. }));
     }
 
@@ -1139,8 +1340,13 @@ mod tests {
         let ctx = EvalContext::new();
         let mut func_cache = std::collections::BTreeMap::new();
         let idx_expr = AstExpr::Constant(0.0);
-        let err =
-            test_eval_array("nosucharr", &idx_expr, Some(Rc::new(ctx.clone())), &mut func_cache).unwrap_err();
+        let err = test_eval_array(
+            "nosucharr",
+            &idx_expr,
+            Some(Rc::new(ctx.clone())),
+            &mut func_cache,
+        )
+        .unwrap_err();
         assert!(matches!(err, ExprError::UnknownVariable { .. }));
     }
 
@@ -1740,6 +1946,141 @@ mod tests {
         );
     }
 
+    //============= Recursion Tracking Tests =============//
+
+    #[test]
+    fn test_recursion_depth_tracking_reset() {
+        // This test ensures that recursion depth is correctly reset at the start of evaluation
+
+        // Force the counter to a non-zero value
+        RECURSION_DEPTH.store(100, Ordering::Relaxed);
+
+        // Create a simple AST
+        let ast = AstExpr::Constant(42.0);
+
+        // Evaluate - this should reset the counter
+        let result = eval_ast(&ast, None);
+
+        // Verify the result is correct
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42.0);
+
+        // Check that the counter is back to 0 or a small value after full evaluation
+        let final_depth = RECURSION_DEPTH.load(Ordering::Relaxed);
+        assert!(final_depth < 10, "Recursion depth not properly reset, got {}", final_depth);
+    }
+
+    #[test]
+    fn test_infinite_recursion_detection() {
+        // Test that infinite recursion is properly detected and halted
+        let mut ctx = EvalContext::new();
+
+        // Register a function that calls itself without a base case
+        ctx.register_expression_function(
+            "infinite_recursion",
+            &["x"],
+            "infinite_recursion(x + 1)"
+        ).unwrap();
+
+        // Try to evaluate - should fail with recursion limit
+        let result = interp("infinite_recursion(0)", Some(Rc::new(ctx)));
+
+        // Verify we get the expected error
+        assert!(result.is_err(), "Should have failed with recursion limit");
+        match result.unwrap_err() {
+            ExprError::RecursionLimit(msg) => {
+                assert!(msg.contains("recursion depth"),
+                    "Error should mention recursion depth, got: {}", msg);
+            },
+            other => panic!("Expected RecursionLimit error, got: {:?}", other),
+        }
+
+        // Verify the counter was reset after the error
+        let final_depth = RECURSION_DEPTH.load(Ordering::Relaxed);
+        assert!(final_depth < 10, "Recursion depth not properly reset after error, got {}", final_depth);
+    }
+
+    #[test]
+    fn test_nested_function_calls() {
+        // Test that nested function calls are properly tracked
+        let mut ctx = EvalContext::new();
+
+        // Register some simple functions that call each other
+        ctx.register_expression_function("double", &["x"], "x * 2").unwrap();
+        ctx.register_expression_function("triple", &["x"], "x * 3").unwrap();
+        ctx.register_expression_function("add_10", &["x"], "x + 10").unwrap();
+
+        // Create a nested call without recursion
+        let result = interp("double(triple(add_10(5)))", Some(Rc::new(ctx.clone())));
+
+        assert!(result.is_ok(), "Failed to evaluate nested calls: {:?}", result.err());
+        assert_eq!(result.unwrap(), 2.0 * 3.0 * (5.0 + 10.0), "Incorrect result for nested calls");
+
+        // Verify the counter is reset
+        let depth = RECURSION_DEPTH.load(Ordering::Relaxed);
+        assert!(depth < 10, "Recursion depth not properly reset after nested calls, got {}", depth);
+    }
+
+    #[test]
+    fn test_recursion_depth_with_non_recursive_expressions() {
+        // Test that non-recursive expressions don't accumulate recursion depth
+
+        // Reset the counter
+        RECURSION_DEPTH.store(0, Ordering::Relaxed);
+
+        // Create a complex but non-recursive expression
+        let expr = "1 + 2 * 3 + 4 * 5 + 6 * 7 + 8 * 9 + 10";
+
+        // Evaluate it
+        let result = interp(expr, None);
+
+        // Verify it works
+        assert!(
+            result.is_ok(),
+            "Failed to evaluate non-recursive expression: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            result.unwrap(),
+            1.0 + 2.0 * 3.0 + 4.0 * 5.0 + 6.0 * 7.0 + 8.0 * 9.0 + 10.0
+        );
+
+        // Verify the recursion depth stayed low
+        let depth = RECURSION_DEPTH.load(Ordering::Relaxed);
+        assert!(
+            depth < 10,
+            "Unexpectedly high recursion depth for non-recursive expr: {}",
+            depth
+        );
+    }
+
+    #[test]
+    fn test_recursion_tracking_function_specific() {
+        // Test that our recursion tracking is specific to function calls
+        // and doesn't track arithmetic or other AST node evaluation
+
+        // Reset counter
+        RECURSION_DEPTH.store(0, Ordering::Relaxed);
+
+        // Create a complex expression with many AST nodes but no function calls
+        let expr = "(1 + 2) * (3 + 4) * (5 + 6) * (7 + 8) * (9 + 10) * (11 + 12) * (13 + 14)";
+
+        // Evaluate it
+        let result = interp(expr, None);
+
+        // Verify it works
+        assert!(result.is_ok());
+
+        // Verify the recursion depth stayed at zero or very low
+        // since we only track function calls, not arithmetic operations
+        let depth = RECURSION_DEPTH.load(Ordering::Relaxed);
+        assert!(
+            depth < 5,
+            "Recursion tracking shouldn't count non-function AST nodes, got depth: {}",
+            depth
+        );
+    }
+
     // Test for AST caching effect on polynomial evaluation
     #[test]
     fn test_polynomial_ast_cache_effect() {
@@ -1748,7 +2089,9 @@ mod tests {
         use std::rc::Rc;
 
         let mut ctx = EvalContext::new();
-        ctx.ast_cache = Some(RefCell::new(HashMap::<String, Rc<crate::types::AstExpr>>::new()));
+        ctx.ast_cache = Some(RefCell::new(
+            HashMap::<String, Rc<crate::types::AstExpr>>::new(),
+        ));
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
 

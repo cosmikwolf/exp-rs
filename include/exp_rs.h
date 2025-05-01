@@ -63,6 +63,12 @@ typedef struct EvalContextOpaque {
 #define TEST_PRECISION 1e-10
 #endif
 
+extern int32_t *EXP_RS_PANIC_FLAG;
+
+extern const void *EXP_RS_LOG_FUNCTION;
+
+void exp_rs_register_panic_handler(int32_t *flag_ptr, const void *log_func);
+
 /**
  * Frees a string allocated by exp_rs FFI functions.
  *
@@ -144,19 +150,55 @@ void exp_rs_context_free(struct EvalContextOpaque *ctx);
 
 /**
  * Register an expression function with the given context.
- * Returns 0 on success, nonzero on error.
+ *
+ * This function registers a new function defined by an expression string
+ * that can be called in future expression evaluations.
+ *
+ * # Parameters
+ *
+ * * `ctx` - Pointer to the context, as returned by exp_rs_context_new
+ * * `name` - The name of the function to register
+ * * `params` - Array of parameter names the function will accept
+ * * `param_count` - Number of parameters in the array
+ * * `expression` - The expression string that defines the function behavior
+ *
+ * # Returns
+ *
+ * An EvalResult structure with:
+ * - status=0 on success
+ * - non-zero status with an error message on failure
+ *
+ * When status is non-zero, the error message must be freed with exp_rs_free_error.
  */
-int32_t exp_rs_context_register_expression_function(struct EvalContextOpaque *ctx,
-                                                    const char *name,
-                                                    const char *const *params,
-                                                    uintptr_t param_count,
-                                                    const char *expression);
+struct EvalResult exp_rs_context_register_expression_function(struct EvalContextOpaque *ctx,
+                                                              const char *name,
+                                                              const char *const *params,
+                                                              uintptr_t param_count,
+                                                              const char *expression);
 
 /**
- * Set a parameter value in the context
- * Returns 0 on success, nonzero on error
+ * Set a parameter value in the context.
+ *
+ * This function adds or updates a variable in the evaluation context that can be
+ * referenced in expressions evaluated with this context.
+ *
+ * # Parameters
+ *
+ * * `ctx` - Pointer to the context, as returned by exp_rs_context_new
+ * * `name` - The name of the parameter to set
+ * * `value` - The value to assign to the parameter
+ *
+ * # Returns
+ *
+ * An EvalResult structure with:
+ * - status=0 on success
+ * - non-zero status with an error message on failure
+ *
+ * When status is non-zero, the error message must be freed with exp_rs_free_error.
  */
-int32_t exp_rs_context_set_parameter(struct EvalContextOpaque *ctx, const char *name, Real value);
+struct EvalResult exp_rs_context_set_parameter(struct EvalContextOpaque *ctx,
+                                               const char *name,
+                                               Real value);
 
 /**
  * Evaluates a mathematical expression using the given context.

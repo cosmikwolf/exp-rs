@@ -10,9 +10,9 @@ enable_f64 = get_option('enable_f64')
 
 # Set Rust features based on configuration
 if enable_f64
-  rust_features = ['f64']
+  rust_features = ['f64']  # Use standard malloc/free
 else
-  rust_features = ['f32']
+  rust_features = ['f32']  # Use standard malloc/free
 endif
 
 # Build Rust static library using cargo build
@@ -29,7 +29,7 @@ exp_rs_build = custom_target(
     '--release',
     '--no-default-features',
     '--features', ','.join(rust_features),
-    # '--target-dir', meson.current_build_dir(),
+    '--target-dir', meson.current_build_dir(),
     '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
     # '--target-dir', meson.current_build_dir() + '/exp-rs',
     '--lib', '&&',
@@ -38,10 +38,11 @@ exp_rs_build = custom_target(
     meson.current_build_dir(),
     '&&',
     'cp',
-    # meson.current_build_dir() + '/exp-rs/thumbv7em-none-eabihf/release/libexp_rs.a',
-    meson.current_source_dir()
-    + '/target/thumbv7em-none-eabihf/release/libexp_rs.a',
-    meson.current_build_dir() + '/libexp_rs.a',
+    meson.current_build_dir() + '/thumbv7em-none-eabihf/release/libexp_rs.a',
+    # meson.current_source_dir()
+    # + '/target/thumbv7em-none-eabihf/release/libexp_rs.a',
+    meson.current_build_dir()
+    + '/libexp_rs.a',
   ],
   build_always_stale: false,
   build_by_default: false,

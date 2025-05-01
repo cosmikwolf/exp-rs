@@ -53,8 +53,27 @@ test_result_t test_param_set_get() {
     real_t a_val = 42.0;
     real_t b_val = 123.5;
     
-    exp_rs_context_set_parameter(ctx, "a", a_val);
-    exp_rs_context_set_parameter(ctx, "b", b_val);
+    struct EvalResult set_result_a = exp_rs_context_set_parameter(ctx, "a", a_val);
+    if (set_result_a.status != 0) {
+        qemu_print("Error setting parameter 'a'\n");
+        if (set_result_a.error) {
+            qemu_printf("Error: %s\n", set_result_a.error);
+            exp_rs_free_error((char*)set_result_a.error);
+        }
+        exp_rs_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    struct EvalResult set_result_b = exp_rs_context_set_parameter(ctx, "b", b_val);
+    if (set_result_b.status != 0) {
+        qemu_print("Error setting parameter 'b'\n");
+        if (set_result_b.error) {
+            qemu_printf("Error: %s\n", set_result_b.error);
+            exp_rs_free_error((char*)set_result_b.error);
+        }
+        exp_rs_context_free(ctx);
+        return TEST_FAIL;
+    }
     
     // Test getting parameters by using them in expressions
     struct EvalResult result_a = exp_rs_context_eval("a", ctx);
@@ -107,18 +126,41 @@ test_result_t test_expression_function() {
     const char* params[] = {param1_name, param2_name};
     const char* expr = "x^2 + y^2 + 2*x*y";
     
-    int status = exp_rs_context_register_expression_function(
+    struct EvalResult reg_result = exp_rs_context_register_expression_function(
         ctx, func_name, (const char**)params, 2, expr);
     
-    if (status != 0) {
-        qemu_printf("Failed to register function, status=%d\n", status);
+    if (reg_result.status != 0) {
+        qemu_printf("Failed to register function\n");
+        if (reg_result.error) {
+            qemu_printf("Error: %s\n", reg_result.error);
+            exp_rs_free_error((char*)reg_result.error);
+        }
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
     
     // Set parameters for testing
-    exp_rs_context_set_parameter(ctx, "a", 3.0);
-    exp_rs_context_set_parameter(ctx, "b", 4.0);
+    struct EvalResult set_result_a = exp_rs_context_set_parameter(ctx, "a", 3.0);
+    if (set_result_a.status != 0) {
+        qemu_print("Error setting parameter 'a'\n");
+        if (set_result_a.error) {
+            qemu_printf("Error: %s\n", set_result_a.error);
+            exp_rs_free_error((char*)set_result_a.error);
+        }
+        exp_rs_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    struct EvalResult set_result_b = exp_rs_context_set_parameter(ctx, "b", 4.0);
+    if (set_result_b.status != 0) {
+        qemu_print("Error setting parameter 'b'\n");
+        if (set_result_b.error) {
+            qemu_printf("Error: %s\n", set_result_b.error);
+            exp_rs_free_error((char*)set_result_b.error);
+        }
+        exp_rs_context_free(ctx);
+        return TEST_FAIL;
+    }
     
     // Test using the function
     struct EvalResult result = exp_rs_context_eval("my_func(a, b)", ctx);
@@ -168,11 +210,15 @@ test_result_t test_nested_functions() {
     const char* params1[] = {param1_name};
     const char* expr1 = "x^2";
     
-    int status = exp_rs_context_register_expression_function(
+    struct EvalResult reg_result1 = exp_rs_context_register_expression_function(
         ctx, func1_name, (const char**)params1, 1, expr1);
     
-    if (status != 0) {
-        qemu_printf("Failed to register function 1, status=%d\n", status);
+    if (reg_result1.status != 0) {
+        qemu_printf("Failed to register function 1\n");
+        if (reg_result1.error) {
+            qemu_printf("Error: %s\n", reg_result1.error);
+            exp_rs_free_error((char*)reg_result1.error);
+        }
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
@@ -184,18 +230,41 @@ test_result_t test_nested_functions() {
     const char* params2[] = {param2a_name, param2b_name};
     const char* expr2 = "squared(a) + squared(b)";
     
-    status = exp_rs_context_register_expression_function(
+    struct EvalResult reg_result2 = exp_rs_context_register_expression_function(
         ctx, func2_name, (const char**)params2, 2, expr2);
     
-    if (status != 0) {
-        qemu_printf("Failed to register function 2, status=%d\n", status);
+    if (reg_result2.status != 0) {
+        qemu_printf("Failed to register function 2\n");
+        if (reg_result2.error) {
+            qemu_printf("Error: %s\n", reg_result2.error);
+            exp_rs_free_error((char*)reg_result2.error);
+        }
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
     
     // Set parameters for testing
-    exp_rs_context_set_parameter(ctx, "x", 3.0);
-    exp_rs_context_set_parameter(ctx, "y", 4.0);
+    struct EvalResult set_result_x = exp_rs_context_set_parameter(ctx, "x", 3.0);
+    if (set_result_x.status != 0) {
+        qemu_print("Error setting parameter 'x'\n");
+        if (set_result_x.error) {
+            qemu_printf("Error: %s\n", set_result_x.error);
+            exp_rs_free_error((char*)set_result_x.error);
+        }
+        exp_rs_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    struct EvalResult set_result_y = exp_rs_context_set_parameter(ctx, "y", 4.0);
+    if (set_result_y.status != 0) {
+        qemu_print("Error setting parameter 'y'\n");
+        if (set_result_y.error) {
+            qemu_printf("Error: %s\n", set_result_y.error);
+            exp_rs_free_error((char*)set_result_y.error);
+        }
+        exp_rs_context_free(ctx);
+        return TEST_FAIL;
+    }
     
     // Test using the nested functions
     struct EvalResult result = exp_rs_context_eval("sum_of_squares(x, y)", ctx);

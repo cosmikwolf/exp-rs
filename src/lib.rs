@@ -1,3 +1,4 @@
+// #![cfg_attr(all(not(test), target_arch = "arm"), no_std)]
 #![cfg_attr(all(not(test), target_arch = "arm"), no_std)]
 #![doc = r#"
 # exp-rs
@@ -262,8 +263,8 @@ pub extern "C" fn evaluate_expression(x: f32, y: f32) -> f32 {
     let mut ctx = EvalContext::new();
 
     // Set parameters
-    ctx.set_parameter("x", x as f64);
-    ctx.set_parameter("y", y as f64);
+    ctx.set_parameter("x", x );
+    ctx.set_parameter("y", y );
 
     // Evaluate the expression
     let result = interp("sqrt(x^2 + y^2)", Some(Rc::new(ctx))).unwrap();
@@ -353,6 +354,15 @@ exp-rs began as a fork of [tinyexpr-rs](https://github.com/kondrak/tinyexpr-rs) 
 // Re-export alloc for no_std compatibility
 #[cfg(all(not(test), target_arch = "arm"))]
 extern crate alloc;
+
+// For tests, use std
+#[cfg(test)]
+extern crate std as alloc;
+
+#[cfg(test)]
+pub use std::string::{String, ToString};
+
+// Export common types regardless of mode
 #[cfg(all(not(test), target_arch = "arm"))]
 pub use alloc::boxed::Box;
 #[cfg(all(not(test), target_arch = "arm"))]
@@ -392,6 +402,10 @@ pub use functions::*;
 pub use types::*;
 
 pub use ffi::*;
+
+// Re-export recursion depth tracking functions for testing
+#[cfg(test)]
+pub use eval::{get_recursion_depth, reset_recursion_depth, set_max_recursion_depth};
 
 // Compile-time check: only one of f32 or f64 can be enabled
 #[cfg(all(feature = "f32", feature = "f64"))]
