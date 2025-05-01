@@ -12,6 +12,7 @@ pragma_once = true
 [defines]
 "feature = f32" = "USE_F32"
 "feature = f64" = "USE_F64"
+"feature = custom_cbindgen_alloc" = "EXP_RS_CUSTOM_ALLOC"
 
 # Ensure we include the necessary C headers
 # [header]

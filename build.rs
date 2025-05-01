@@ -11,34 +11,21 @@ fn main() {
     let mut config =
         cbindgen::Config::from_file("cbindgen.toml").expect("Failed to load cbindgen.toml");
 
+    let mut after_includes_string = Vec::new();
     // Set the define based on which feature is enabled
     // We only want to define one of these at a time to avoid C compilation errors
     if std::env::var("CARGO_FEATURE_F64").is_ok() {
-        let _ = config.after_includes.insert("#define USE_F64".to_string());
+        after_includes_string.push("#define USE_F64".to_string());
     } else if std::env::var("CARGO_FEATURE_F32").is_ok() {
-        let _ = config.after_includes.insert("#define USE_F32".to_string());
+        after_includes_string.push("#define USE_F32".to_string());
+    }
+    if std::env::var("CARGO_FEATURE_CUSTOM_CBINDGEN_ALLOC").is_ok() {
+        after_includes_string.push("#define EXP_RS_CUSTOM_ALLOC".to_string());
     }
 
-    if std::env::var("CARGO_FEATURE_USE_CUSTOM_ALLOC").is_ok() {
-        let _ = config
-            .after_includes
-            .insert("#define EXP_RS_USE_CUSTOM_ALLOC".to_string());
-    }
-    // Add FreeRTOS support if the freertos feature is enabled
-    if std::env::var("CARGO_FEATURE_FREERTOS").is_ok() {
-        let _ = config
-            .after_includes
-            .insert("#define USE_FREERTOS".to_string());
-
-        // Add FreeRTOS function declarations
-        let freertos_funcs = r#"
-extern void *pvPortMalloc(uintptr_t size);
-
-extern void vPortFree(void *ptr);
-"#;
-        let _ = config.after_includes.insert(freertos_funcs.to_string());
-    }
-
+    let _ = config
+        .after_includes
+        .insert(after_includes_string.join("\n"));
     // Add a custom prefix to the header with our type definitions
     // let mut prefix = String::new();
     // if std::env::var("CARGO_FEATURE_F32").is_ok() {

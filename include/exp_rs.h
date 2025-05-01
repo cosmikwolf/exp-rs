@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #define USE_F32
+#define EXP_RS_CUSTOM_ALLOC
 
 #if defined(USE_F32)
 /**
@@ -224,12 +225,20 @@ struct EvalResult exp_rs_context_set_parameter(struct EvalContextOpaque *ctx,
  */
 struct EvalResult exp_rs_context_eval(const char *expr, struct EvalContextOpaque *ctx);
 
+#if defined(EXP_RS_CUSTOM_ALLOC)
 extern void *exp_rs_malloc(uintptr_t size);
+#endif
 
+#if defined(EXP_RS_CUSTOM_ALLOC)
 extern void exp_rs_free(void *ptr);
+#endif
 
+#if !defined(EXP_RS_CUSTOM_ALLOC)
 extern void *malloc(uintptr_t size);
+#endif
 
+#if !defined(EXP_RS_CUSTOM_ALLOC)
 extern void free(void *ptr);
+#endif
 
 #endif  /* EXP_RS_H */
