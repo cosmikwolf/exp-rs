@@ -5,14 +5,15 @@
 
 project('exp-rs', 'c', version: '0.1.2', meson_version: '>=1.0.0')
 
-# Get configuration options
-enable_f64 = get_option('enable_f64')
-
 # Set Rust features based on configuration
-if enable_f64
-  rust_features = ['f64']  # Use standard malloc/free
+if get_option('enable_f64')
+  rust_features = ['f64'] # Use standard malloc/free
 else
-  rust_features = ['f32']  # Use standard malloc/free
+  rust_features = ['f32'] # Use standard malloc/free
+endif
+
+if get_option('custom_cbindgen_alloc')
+  rust_features += 'custom_cbindgen_alloc'
 endif
 
 # Build Rust static library using cargo build

@@ -12,6 +12,13 @@ fn main() {
         cbindgen::Config::from_file("cbindgen.toml").expect("Failed to load cbindgen.toml");
 
     let mut after_includes_string = Vec::new();
+
+    // after_includes_string.push(r#"#ifdef __cplusplus"#.to_string());
+    // after_includes_string.push(r#"extern "C" {"#.to_string());
+    // after_includes_string.push(r#"#endif"#.to_string());
+    //
+
+    config.cpp_compat = true;
     // Set the define based on which feature is enabled
     // We only want to define one of these at a time to avoid C compilation errors
     if std::env::var("CARGO_FEATURE_F64").is_ok() {

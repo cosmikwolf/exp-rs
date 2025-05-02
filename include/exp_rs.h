@@ -64,6 +64,10 @@ typedef struct EvalContextOpaque {
 #define TEST_PRECISION 1e-10
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
 extern int32_t *EXP_RS_PANIC_FLAG;
 
 extern const void *EXP_RS_LOG_FUNCTION;
@@ -240,5 +244,9 @@ extern void *malloc(uintptr_t size);
 #if !defined(EXP_RS_CUSTOM_ALLOC)
 extern void free(void *ptr);
 #endif
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif  // __cplusplus
 
 #endif  /* EXP_RS_H */

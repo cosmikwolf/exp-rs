@@ -6,7 +6,7 @@ option(
 )
 
 option(
-  'enable_custom_alloc',
+  'custom_cbindgen_alloc',
   type: 'boolean',
   value: false,
   description: 'Use custom allocation functions (exp_rs_malloc/exp_rs_free) instead of stdlib',
