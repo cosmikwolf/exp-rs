@@ -84,10 +84,14 @@ impl AstExpr {
     /// The constant raised to the given power, or 0.0 for non-constant expressions
     pub fn pow(self, exp: Real) -> Real {
         match self {
-            #[cfg(feature = "f32")]
-            AstExpr::Constant(val) => libm::powf(val, exp),
-            #[cfg(not(feature = "f32"))]
-            AstExpr::Constant(val) => libm::pow(val, exp),
+            AstExpr::Constant(val) => {
+                #[cfg(all(feature = "libm", feature = "f32"))]
+                { libm::powf(val, exp) }
+                #[cfg(all(feature = "libm", not(feature = "f32")))]
+                { libm::pow(val, exp) }
+                #[cfg(not(feature = "libm"))]
+                { val.powf(exp) } // Use core/std powf when libm is not available
+            },
             _ => 0.0, // Default for non-constant expressions
         }
     }
@@ -98,6 +102,9 @@ mod tests {
     use super::*;
     use crate::error::ExprError;
     use crate::eval::eval_ast;
+    use crate::context::{EvalContext, FunctionRegistry};
+    use std::collections::HashMap;
+    use std::rc::Rc;
 
     #[test]
     fn test_eval_ast_array_and_attribute_errors() {
@@ -128,12 +135,21 @@ mod tests {
 
     #[test]
     fn test_eval_ast_function_wrong_arity() {
-        // sin with 2 args (should be 1)
+        // Create a context that has 'sin' registered
+        let mut ctx = EvalContext::new();
+        
+        // Register sin function that takes exactly 1 argument
+        ctx.register_native_function("sin", 1, |args| args[0].sin());
+        let ctx = Rc::new(ctx);
+        
+        // Create AST for sin with 2 args (should be 1)
         let ast = AstExpr::Function {
             name: "sin".to_string(),
             args: vec![AstExpr::Constant(1.0), AstExpr::Constant(2.0)],
         };
-        let err = eval_ast(&ast, None).unwrap_err();
+        
+        // Should give InvalidFunctionCall error because sin takes 1 arg but we gave 2
+        let err = eval_ast(&ast, Some(ctx)).unwrap_err();
         match err {
             ExprError::InvalidFunctionCall {
                 name,

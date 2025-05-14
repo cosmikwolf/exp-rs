@@ -15,15 +15,15 @@ crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 bitflags = "2.9.0"
-libm = "0.2"
+libm = { version = "0.2", optional = true }
 serde = { version = "1.0", features = ["derive"], default-features = false }
 hashbrown = "0.15.2"
 
 [features]
-default = ["f64"]
+default = ["f64", "libm"]
 f32 = []
 f64 = []
-no-builtin-math = []
+libm = ["dep:libm"]
 custom_cbindgen_alloc = [
 ] # Use exp_rs_malloc and exp_rs_free instead of malloc/free
 
@@ -36,7 +36,7 @@ exclusive-features = ["f32", "f64"]
 
 [profile.release]
 panic = "abort"
-opt-level = "s"   # Optimize for size on embedded systems
+opt-level = "z"   # Optimize for size on embedded systems
 lto = true        # Enable link-time optimization
 codegen-units = 1 # Use single codegen unit for better optimization
 debug = false     # Disable debug info to reduce binary size

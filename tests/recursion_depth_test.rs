@@ -54,7 +54,7 @@ fn test_factorial_recursion_depth() {
         }
         
         // Return the max depth as a Real
-        max_depth as f64
+        max_depth as exp_rs::Real
     });
     
     // Create a special version of factorial that tracks max depth
@@ -77,7 +77,7 @@ fn test_factorial_recursion_depth() {
         let current = get_recursion_depth();
         
         // Return the current depth
-        current as f64
+        current as exp_rs::Real
     });
     
     // Create a version of factorial that manually tracks recursion depth

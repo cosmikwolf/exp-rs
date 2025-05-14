@@ -74,27 +74,7 @@ fn test_proper_recursion() {
     // and expected recursion limit errors
     
     // Helper function to check if a result is either the expected value or a recursion limit error
-    let check_result = |expr: &str, expected: f64| {
-        let result = interp(expr, Some(Rc::new(ctx.clone())));
-        match result {
-            Ok(val) => {
-                assert_eq!(val, expected, "Expected {} for expression {}", expected, expr);
-                println!("Successfully evaluated: {}", expr);
-                true // Indicate success
-            },
-            Err(ExprError::RecursionLimit(msg)) => {
-                // This is acceptable - the recursion depth limit is working as expected
-                println!("Recursion limit reached for: {} - {}", expr, msg);
-                false // Indicate recursion limit was hit
-            },
-            Err(e) => {
-                panic!("Unexpected error for {}: {:?}", expr, e);
-            }
-        }
-    };
-    
-    // Helper function to check if a result is either the expected value or a recursion limit error
-    let check_result = |expr: &str, expected: f64| {
+    let check_result = |expr: &str, expected: exp_rs::Real| {
         println!("Testing {}...", expr);
         let result = interp(expr, Some(Rc::new(ctx.clone())));
         match result {

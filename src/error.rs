@@ -59,7 +59,7 @@ pub enum ExprError {
     /// Unknown function error
     ///
     /// This error is returned when a function is called that is not registered in the context
-    /// and is not a built-in (if built-ins are enabled). If the `no-builtin-math` feature is enabled,
+    /// and is not a built-in (if built-ins are enabled). If the `libm` feature is not enabled,
     /// users must register their own native functions for all required math operations.
     /// 
     /// To resolve this error, register a native function with `EvalContext::register_native_function`

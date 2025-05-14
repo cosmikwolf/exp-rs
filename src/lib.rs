@@ -70,7 +70,7 @@ From lowest to highest precedence:
 
 ### Built-in Functions
 
-The following functions are available by default. Enabling the feature `no-builtin-math` will skip automatic registration of these functions, so they can be defined by the user with native or expression functions
+The following functions are available by default when the `libm` feature is enabled. Without the `libm` feature, these functions will not be automatically registered and must be defined by the user with native or expression functions
 
 - Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
 - Hyperbolic: `sinh`, `cosh`, `tanh`
@@ -87,7 +87,7 @@ The following functions are available by default. Enabling the feature `no-built
 
 ## Feature Flags
 
-- `no-builtin-math`: Disables all built-in math functions. You must register your own.
+- `libm`: Enables built-in math functions using the libm library. Without this feature, you must register your own math functions.
 - `f32`: Use 32-bit floating point (single precision) for calculations
 - `f64`: Use 64-bit floating point (double precision) for calculations (default)
 
@@ -280,12 +280,16 @@ For embedded systems where you want to provide your own math implementations:
 
 ```rust
 // In Cargo.toml:
-// exp-rs = { version = "0.1", default-features = false, features = ["f32", "no-builtin-math"] }
+// exp-rs = { version = "0.1", default-features = false, features = ["f32"] }
 extern crate alloc;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
 use alloc::rc::Rc;
-use libm::{sin, cos};
+#[cfg(feature = "libm")]
+use libm::{sin, cos}; 
+
+#[cfg(not(feature = "libm"))]
+use core::f64::{sin, cos};
 
 fn main() {
     let mut ctx = EvalContext::new();

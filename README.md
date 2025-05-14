@@ -1,5 +1,20 @@
 # exp-rs
 
+## Build Optimization
+
+For reducing binary size when using this library in embedded systems, you can exclude the libm dependency by building without the default features:
+
+```bash
+cargo build --release --no-default-features --features="f64"
+```
+
+This reduces the flash memory usage by removing the libm mathematical library dependency. When using this configuration in your application, you have two options:
+
+1. Use `ctx.register_default_math_functions()` - This will register all standard math functions using the Rust standard library implementations
+2. Register only the specific math functions you need for further binary size optimization
+
+Note that option 1 is only suitable for environments where the Rust standard library is available, and not for `no_std` environments.
+
 [![Crates.io](https://img.shields.io/crates/v/exp-rs.svg)](https://crates.io/crates/exp-rs)
 [![Documentation](https://docs.rs/exp-rs/badge.svg)](https://docs.rs/exp-rs)
 [![CI](https://github.com/cosmikwolf/exp-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/cosmikwolf/exp-rs/actions/workflows/rust.yml)
@@ -86,7 +101,7 @@ From lowest to highest precedence:
 ### Supported Operators
 
 - Arithmetic: `+`, `-`, `*`, `/`, `%`, `^`, `**`
-- Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`, `<>`
+- Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`, `<>` (native functions only)
 - Logical: `&&`, `||`
 - Bitwise: `&`, `|`, `~`, `<<`, `>>`, `<<<`, `>>>`
 - Comma/semicolon: `,`, `;` (list separator, returns last value)
@@ -124,16 +139,44 @@ exp-rs = { version = "0.1", default-features = false, features = ["f32"] }
 
 Note that only one precision mode (`f32` or `f64`) can be enabled at a time.
 
-### Custom Math Implementations (CMSIS-DSP Support)
+### Custom Math Implementations
 
-For embedded systems, you can disable built-in math functions and provide your own implementations (e.g., using CMSIS-DSP):
+For embedded systems, you can disable the libm dependency to reduce binary size and provide your own math function implementations:
 
 ```toml
-# Disable built-in math functions to use custom implementations
-exp-rs = { version = "0.1", default-features = false, features = ["f32", "no-builtin-math"] }
+# Disable libm dependency
+exp-rs = { version = "0.1", default-features = false, features = ["f64"] }
 ```
 
-The QEMU tests include examples of integrating with CMSIS-DSP for optimized math functions on ARM Cortex-M processors.
+When using exp-rs without libm, you have three options:
+
+1. **In a standard Rust environment**: Call `ctx.register_default_math_functions()` after creating your `EvalContext` to automatically register all math functions using the Rust standard library implementations:
+
+```rust
+let mut ctx = EvalContext::new();
+ctx.register_default_math_functions(); // Register all math functions using std
+let result = interp("sin(pi/4)", Some(Rc::new(ctx))).unwrap();
+```
+
+2. **In a no_std environment**: Register only the specific functions you need for maximum binary size optimization:
+
+```rust
+let mut ctx = EvalContext::new();
+// Register just the functions your application requires
+ctx.register_native_function("sin", 1, |args| my_custom_sin_implementation(args[0]));
+ctx.register_native_function("pow", 2, |args| my_custom_pow_implementation(args[0], args[1]));
+```
+
+3. **CMSIS-DSP Integration**: For ARM Cortex-M processors, integrate with CMSIS-DSP for optimized implementations:
+
+```rust
+let mut ctx = EvalContext::new();
+// Register CMSIS-DSP implementations
+ctx.register_native_function("sin", 1, |args| cmsis_dsp_sin(args[0]));
+ctx.register_native_function("cos", 1, |args| cmsis_dsp_cos(args[0]));
+```
+
+The QEMU tests in the repository include examples of integrating with CMSIS-DSP for optimized math functions on ARM Cortex-M processors.
 
 ### Basic Example
 
@@ -259,12 +302,20 @@ fn main() {
 
 ### Disabling Built-in Functions
 
-You can disable the built-in math functions with the `no-builtin-math` feature flag to provide your own implementations, for example when using CMSIS-DSP on embedded systems:
+You can disable the built-in math functions by not including the `libm` feature flag (which is enabled by default). This significantly reduces binary size by eliminating the entire libm dependency:
 
 ```toml
 [dependencies]
-exp-rs = { version = "0.1", default-features = false, features = ["f32", "no-builtin-math"] }
+exp-rs = { version = "0.1", default-features = false, features = ["f64"] }
 ```
+
+Benefits of disabling libm:
+- Reduced binary size (potentially saves over 1MB in flash usage)
+- More control over which math functions are included
+- Ability to provide custom implementations optimized for your target platform
+- Option to use platform-specific libraries like CMSIS-DSP on ARM Cortex-M
+
+See the [Custom Math Implementations](#custom-math-implementations) section above for details on how to provide your own math function implementations when libm is disabled.
 
 ## Constants
 

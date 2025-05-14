@@ -135,7 +135,7 @@ impl Clone for FunctionCacheEntry {
     }
 }
 
-#[cfg(not(feature = "no-builtin-math"))]
+#[cfg(feature = "libm")]
 #[allow(dead_code)]
 type MathFunc = fn(Real, Real) -> Real;
 
@@ -291,7 +291,7 @@ fn eval_function<'a>(
     } else {
         // Rest of the function remains the same...
         // Fallback to built-in functions...
-        #[cfg(not(feature = "no-builtin-math"))]
+        #[cfg(feature = "libm")]
         {
             // First check known functions against their expected arity
             // This allows us to return InvalidFunctionCall errors rather than UnknownFunction
@@ -1049,6 +1049,9 @@ mod tests {
     use super::*;
     use crate::engine::{interp, parse_expression};
     use crate::error::ExprError;
+    use crate::context::FunctionRegistry;
+    // Use std HashMap for tests
+    use std::collections::HashMap;
 
     // Helper functions for tests that need to call eval functions directly
     fn test_eval_variable(name: &str, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
@@ -1180,7 +1183,7 @@ mod tests {
     fn create_test_context<'a>() -> EvalContext<'a> {
         let mut ctx = EvalContext::new();
         // Register defaults only if the feature allows it
-        #[cfg(not(feature = "no-builtin-math"))]
+        #[cfg(feature = "libm")]
         {
             // Manually register built-ins needed for tests if register_defaults doesn't exist
             // or isn't comprehensive enough for test setup.
@@ -1353,7 +1356,7 @@ mod tests {
     #[test]
     fn test_eval_attribute_success_and_not_found() {
         let mut ctx = EvalContext::new();
-        let mut map = std::collections::HashMap::new();
+        let mut map = HashMap::new();
         map.insert("foo".to_string(), 123.0);
         ctx.attributes.insert("bar".to_string(), map);
         let val = super::eval_attribute("bar", "foo", Some(Rc::new(ctx.clone()))).unwrap();
@@ -1399,7 +1402,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "no-builtin-math"))] // This test relies on built-in fallback
+    #[cfg(feature = "libm")] // This test relies on built-in fallback
     fn test_neg_pow_eval() {
         // Test evaluation using built-in functions (no context needed for this specific expr)
         let val = interp("-2^2", None).unwrap();
@@ -1409,20 +1412,46 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "no-builtin-math")] // Test behavior when builtins are disabled
+    #[cfg(not(feature = "libm"))] // Test behavior when builtins are disabled
     fn test_neg_pow_eval_no_builtins() {
-        // Without builtins, neg and ^ must be provided in context
-        let mut ctx = EvalContext::new();
+        // Create a clean context with no auto-registered functions
+        let mut ctx = EvalContext {
+            variables: HashMap::new(),
+            constants: HashMap::new(),
+            arrays: HashMap::new(),
+            attributes: HashMap::new(),
+            nested_arrays: HashMap::new(),
+            function_registry: Rc::new(FunctionRegistry::default()),
+            parent: None,
+            ast_cache: None,
+        };
+        
+        // Manually register just what we need for this test
         ctx.register_native_function("neg", 1, |args| -args[0]);
         ctx.register_native_function("^", 2, |args| args[0].powf(args[1])); // Example using powf
 
-        let val = interp("-2^2", Some(&mut ctx)).unwrap();
+        // Convert to Rc<EvalContext> for interp function
+        let ctx_rc = Rc::new(ctx.clone());
+        
+        let val = interp("-2^2", Some(ctx_rc.clone())).unwrap();
         assert_eq!(val, -4.0);
-        let val2 = interp("(-2)^2", Some(&mut ctx)).unwrap();
+        let val2 = interp("(-2)^2", Some(ctx_rc)).unwrap();
         assert_eq!(val2, 4.0);
 
-        // Test that it fails without context
-        let err = interp("-2^2", None).unwrap_err();
+        // Create another completely empty context for error testing
+        let empty_ctx = Rc::new(EvalContext {
+            variables: HashMap::new(),
+            constants: HashMap::new(),
+            arrays: HashMap::new(),
+            attributes: HashMap::new(),
+            nested_arrays: HashMap::new(),
+            function_registry: Rc::new(FunctionRegistry::default()),
+            parent: None,
+            ast_cache: None,
+        });
+        
+        // Test that it fails with empty context (no functions registered)
+        let err = interp("-2^2", Some(empty_ctx)).unwrap_err();
         assert!(matches!(err, ExprError::UnknownFunction { .. }));
     }
 
@@ -1514,10 +1543,10 @@ mod tests {
     fn test_function_application_juxtaposition_eval() {
         // Test evaluation: abs(neg(42)) = 42
         // This requires 'abs' and 'neg' to be available.
-        let ctx = create_test_context(); // Gets defaults if enabled
+        let mut ctx = create_test_context(); // Gets defaults if enabled
 
         // If builtins disabled, manually add abs and neg
-        #[cfg(feature = "no-builtin-math")]
+        #[cfg(not(feature = "libm"))]
         {
             ctx.register_native_function("abs", 1, |args| args[0].abs());
             ctx.register_native_function("neg", 1, |args| -args[0]);
@@ -1532,7 +1561,7 @@ mod tests {
             }],
         };
 
-        let val = eval_ast(&ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let val = eval_ast(&ast, Some(Rc::new(ctx))).unwrap();
         assert_eq!(val, 42.0);
     }
 
@@ -1564,7 +1593,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "no-builtin-math"))] // Relies on built-in pow fallback logic for default exponent
+    #[cfg(feature = "libm")] // Relies on built-in pow fallback logic for default exponent
     fn test_pow_arity_eval() {
         // Test evaluation using built-in pow, which handles the default exponent case
         let result = interp("pow(2)", None).unwrap();
@@ -1575,19 +1604,37 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "no-builtin-math")] // Test with explicit pow needed
+    #[cfg(not(feature = "libm"))] // Test with explicit pow needed
     fn test_pow_arity_eval_no_builtins() {
-        let mut ctx = EvalContext::new();
-        // Provide pow that handles the default exponent itself if needed, or require 2 args
+        // Create a minimal context with only what we need
+        let mut ctx = EvalContext {
+            variables: HashMap::new(),
+            constants: HashMap::new(),
+            arrays: HashMap::new(),
+            attributes: HashMap::new(),
+            nested_arrays: HashMap::new(),
+            function_registry: Rc::new(FunctionRegistry::default()),
+            parent: None,
+            ast_cache: None,
+        };
+        
+        // Register a pow function that requires exactly 2 arguments
         ctx.register_native_function("pow", 2, |args| args[0].powf(args[1]));
-        // Or, if parser produces pow(2) as AST with 1 arg:
-        // ctx.register_native_function("pow", 1, |args| args[0].powf(2.0));
 
-        // Assuming parser produces pow(2, 2) or evaluator requires 2 args for registered fn:
-        let err = interp("pow(2)", Some(&mut ctx)).unwrap_err(); // Expect error if registered fn expects 2 args
-        assert!(matches!(err, ExprError::InvalidFunctionCall { .. }));
+        // Convert to Rc<EvalContext> for interp function
+        let ctx_rc = Rc::new(ctx);
+        
+        // Debug output for the parsed expression
+        let ast = crate::engine::parse_expression("pow(2)").unwrap();
+        println!("Parsed expression: {:?}", ast);
+        
+        // The parser now automatically adds a second argument (pow(2) -> pow(2, 2))
+        // So we need to expect this to succeed, not fail
+        let result = interp("pow(2)", Some(ctx_rc.clone())).unwrap();
+        assert_eq!(result, 4.0, "pow(2) should be interpreted as pow(2,2) = 4");
 
-        let result2 = interp("pow(2, 3)", Some(&mut ctx)).unwrap();
+        // Test that pow(2,3) works correctly 
+        let result2 = interp("pow(2, 3)", Some(ctx_rc)).unwrap();
         assert_eq!(result2, 8.0);
     }
 
@@ -1609,18 +1656,21 @@ mod tests {
     #[test]
     fn test_unknown_variable_and_function_eval() {
         // Test evaluation when a function name is used as a variable
-        let ctx = create_test_context(); // Gets defaults if enabled
+        let mut ctx = create_test_context(); // Gets defaults if enabled
 
         // If builtins disabled, manually add sin/abs so they are known *potential* functions
-        #[cfg(feature = "no-builtin-math")]
+        #[cfg(not(feature = "libm"))]
         {
             ctx.register_native_function("sin", 1, |args| args[0].sin());
             ctx.register_native_function("abs", 1, |args| args[0].abs());
         }
 
+        // Create Rc once and reuse with clone
+        let ctx_rc = Rc::new(ctx);
+
         // Evaluate AST for variable "sin"
         let sin_var_ast = AstExpr::Variable("sin".to_string());
-        let err = eval_ast(&sin_var_ast, Some(Rc::new(ctx.clone()))).unwrap_err();
+        let err = eval_ast(&sin_var_ast, Some(ctx_rc.clone())).unwrap_err();
         match err {
             ExprError::Syntax(msg) => {
                 assert!(msg.contains("Function 'sin' used without arguments"));
@@ -1630,7 +1680,7 @@ mod tests {
 
         // Evaluate AST for variable "abs"
         let abs_var_ast = AstExpr::Variable("abs".to_string());
-        let err2 = eval_ast(&abs_var_ast, Some(Rc::new(ctx.clone()))).unwrap_err();
+        let err2 = eval_ast(&abs_var_ast, Some(ctx_rc.clone())).unwrap_err();
         match err2 {
             ExprError::Syntax(msg) => {
                 assert!(msg.contains("Function 'abs' used without arguments"));
@@ -1640,7 +1690,7 @@ mod tests {
 
         // Test a truly unknown variable
         let unknown_var_ast = AstExpr::Variable("nosuchvar".to_string());
-        let err3 = eval_ast(&unknown_var_ast, Some(Rc::new(ctx.clone()))).unwrap_err();
+        let err3 = eval_ast(&unknown_var_ast, Some(ctx_rc)).unwrap_err();
         assert!(matches!(err3, ExprError::UnknownVariable { name } if name == "nosuchvar"));
     }
 
@@ -1655,29 +1705,34 @@ mod tests {
         // Also override '^' if it's treated separately by parser/evaluator
         ctx.register_native_function("^", 2, |args| args[0] + args[1]);
 
+        // Create Rc once and reuse with clone
+        let ctx_rc = Rc::new(ctx.clone());
+
         // Test overridden sin
-        let val_sin = interp("sin(0.5)", Some(Rc::new(ctx.clone()))).unwrap();
+        let val_sin = interp("sin(0.5)", Some(ctx_rc.clone())).unwrap();
         assert_eq!(val_sin, 100.0, "Native 'sin' override failed");
 
         // Test overridden pow
-        let val_pow = interp("pow(3, 4)", Some(Rc::new(ctx.clone()))).unwrap();
+        let val_pow = interp("pow(3, 4)", Some(ctx_rc.clone())).unwrap();
         assert_eq!(val_pow, 7.0, "Native 'pow' override failed");
 
         // Test overridden pow using operator ^
-        let val_pow_op = interp("3^4", Some(Rc::new(ctx.clone()))).unwrap();
+        let val_pow_op = interp("3^4", Some(ctx_rc.clone())).unwrap();
         assert_eq!(val_pow_op, 7.0, "Native '^' override failed");
 
         // Test a non-overridden function still works (cos)
         // Need to ensure 'cos' is available either via defaults or manual registration
-        #[cfg(feature = "no-builtin-math")]
+        #[cfg(not(feature = "libm"))]
         {
             ctx.register_native_function("cos", 1, |args| args[0].cos()); // Example impl
+            // After registration, we need to update our Rc
+            let ctx_rc = Rc::new(ctx.clone());
         }
-        // If cos wasn't registered by create_test_context and no-builtin-math is off, this might fail
+        // If cos wasn't registered by create_test_context and libm is enabled, this might fail
         if ctx.function_registry.native_functions.contains_key("cos")
-            || cfg!(not(feature = "no-builtin-math"))
+            || cfg!(feature = "libm")
         {
-            let val_cos = interp("cos(0)", Some(Rc::new(ctx.clone()))).unwrap();
+            let val_cos = interp("cos(0)", Some(ctx_rc.clone())).unwrap();
             // Use approx eq for floating point results
             let expected_cos = 1.0;
             assert!(
@@ -1687,7 +1742,7 @@ mod tests {
             );
         } else {
             // If cos is unavailable, trying to interp it should fail
-            let err = interp("cos(0)", Some(Rc::new(ctx.clone()))).unwrap_err();
+            let err = interp("cos(0)", Some(ctx_rc)).unwrap_err();
             assert!(matches!(err, ExprError::UnknownFunction { .. }));
         }
     }
@@ -1700,21 +1755,28 @@ mod tests {
         ctx.register_expression_function("cos", &["x"], "x * 10")
             .unwrap();
 
+        // Create Rc once and clone as needed
+        let mut ctx_rc = Rc::new(ctx.clone());
+
         // Override 'max' with an expression function that uses 'min'
         // Ensure 'min' is available first
-        #[cfg(feature = "no-builtin-math")]
+        #[cfg(not(feature = "libm"))]
         {
             ctx.register_native_function("min", 2, |args| args[0].min(args[1]));
+            // Update Rc after modifying ctx
+            ctx_rc = Rc::new(ctx.clone());
         }
-        // If min wasn't registered by create_test_context and no-builtin-math is off, this might fail
+        // If min wasn't registered by create_test_context and libm is enabled, this might fail
         if ctx.function_registry.native_functions.contains_key("min")
-            || cfg!(not(feature = "no-builtin-math"))
+            || cfg!(feature = "libm")
         {
             ctx.register_expression_function("max", &["a", "b"], "min(a, b)")
                 .unwrap();
+            // Update Rc after modifying ctx
+            ctx_rc = Rc::new(ctx.clone());
 
             // Test overridden max
-            let val_max = interp("max(10, 2)", Some(Rc::new(ctx.clone()))).unwrap();
+            let val_max = interp("max(10, 2)", Some(ctx_rc.clone())).unwrap();
             assert_eq!(val_max, 2.0, "Expression 'max' override failed");
         } else {
             // Cannot register max if min is unavailable
@@ -1722,30 +1784,34 @@ mod tests {
             // Depending on when parsing/checking happens, this might succeed or fail
             // If it succeeds, evaluation will fail later.
             if reg_err.is_ok() {
-                let eval_err = interp("max(10, 2)", Some(Rc::new(ctx.clone()))).unwrap_err();
+                // Update Rc after modifying ctx
+                ctx_rc = Rc::new(ctx.clone());
+                let eval_err = interp("max(10, 2)", Some(ctx_rc.clone())).unwrap_err();
                 assert!(matches!(eval_err, ExprError::UnknownFunction { name } if name == "min"));
             }
         }
 
         // Test overridden cos
-        let val_cos = interp("cos(5)", Some(Rc::new(ctx.clone()))).unwrap();
+        let val_cos = interp("cos(5)", Some(ctx_rc.clone())).unwrap();
         assert_eq!(val_cos, 50.0, "Expression 'cos' override failed");
 
         // Test a non-overridden function still works (sin)
-        #[cfg(feature = "no-builtin-math")]
+        #[cfg(not(feature = "libm"))]
         {
             ctx.register_native_function("sin", 1, |args| args[0].sin());
+            // Update Rc after modifying ctx
+            ctx_rc = Rc::new(ctx.clone());
         }
         if ctx.function_registry.native_functions.contains_key("sin")
-            || cfg!(not(feature = "no-builtin-math"))
+            || cfg!(feature = "libm")
         {
-            let val_sin = interp("sin(0)", Some(Rc::new(ctx.clone()))).unwrap();
+            let val_sin = interp("sin(0)", Some(ctx_rc.clone())).unwrap();
             assert!(
                 (val_sin - 0.0).abs() < 1e-9,
                 "Built-in/default 'sin' failed after override"
             );
         } else {
-            let err = interp("sin(0)", Some(Rc::new(ctx.clone()))).unwrap_err();
+            let err = interp("sin(0)", Some(ctx_rc)).unwrap_err();
             assert!(matches!(err, ExprError::UnknownFunction { .. }));
         }
     }
@@ -1760,15 +1826,20 @@ mod tests {
         // Expression functions inherit constants.
         ctx.register_expression_function("func1_const", &["x"], "x + my_const")
             .unwrap();
-        let val1 = interp("func1_const(5)", Some(Rc::new(ctx.clone()))).unwrap();
+        
+        // Create Rc and update after each ctx modification
+        let mut ctx_rc = Rc::new(ctx.clone());
+        
+        let val1 = interp("func1_const(5)", Some(ctx_rc.clone())).unwrap();
         assert_eq!(val1, 105.0, "func1_const should use constant from context");
 
         // Define func_uses_outer_var(x) = x + a
         ctx.register_expression_function("func_uses_outer_var", &["x"], "x + a")
             .unwrap();
+        ctx_rc = Rc::new(ctx.clone());
 
         // Add a test to check if 'a' is visible inside the function
-        let result = interp("func_uses_outer_var(5)", Some(Rc::new(ctx.clone())));
+        let result = interp("func_uses_outer_var(5)", Some(ctx_rc.clone()));
         match result {
             Ok(val) => {
                 assert_eq!(
@@ -1788,14 +1859,16 @@ mod tests {
         // Add a test for parameter shadowing
         ctx.register_expression_function("shadow_test", &["a"], "a + 1")
             .unwrap();
-        let val_shadow = interp("shadow_test(7)", Some(Rc::new(ctx.clone()))).unwrap();
+        ctx_rc = Rc::new(ctx.clone());
+        
+        let val_shadow = interp("shadow_test(7)", Some(ctx_rc.clone())).unwrap();
         assert_eq!(
             val_shadow, 8.0,
             "Parameter 'a' should shadow context variable 'a'"
         );
 
         // Verify original 'a' in outer context is unchanged
-        let val_a = interp("a", Some(Rc::new(ctx.clone()))).unwrap();
+        let val_a = interp("a", Some(ctx_rc)).unwrap();
         assert_eq!(val_a, 10.0, "Context 'a' should remain unchanged");
     }
 
@@ -1807,9 +1880,12 @@ mod tests {
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
 
+        // Create Rc once
+        let ctx_rc = Rc::new(ctx);
+
         // Test for x = 2
         let ast = crate::engine::parse_expression("polynomial(2)").unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
         assert!(
             (result - 26.0).abs() < 1e-10,
             "Expected 26.0, got {}",
@@ -1818,7 +1894,7 @@ mod tests {
 
         // Test for x = 3
         let ast = crate::engine::parse_expression("polynomial(3)").unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&ast, Some(ctx_rc)).unwrap();
         assert!(
             (result - 58.0).abs() < 1e-10,
             "Expected 58.0, got {}",
@@ -1831,31 +1907,45 @@ mod tests {
         let mut ctx = EvalContext::new();
         ctx.set_parameter("x", 2.0);
 
+        // Create Rc once
+        let ctx_rc = Rc::new(ctx);
+
         // x^3
         let ast = crate::engine::parse_expression("x^3").unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 8.0);
 
         // 2*x^2
         let ast = crate::engine::parse_expression("2*x^2").unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 8.0);
 
         // 3*x
         let ast = crate::engine::parse_expression("3*x").unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 6.0);
 
         // 4
         let ast = crate::engine::parse_expression("4").unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&ast, Some(ctx_rc)).unwrap();
         assert_eq!(result, 4.0);
     }
 
     #[test]
     fn test_operator_precedence() {
+        // Create a context with the necessary operators
+        let mut ctx = EvalContext::new();
+        
+        // Clear any auto-registered functions for clean test
+        ctx.function_registry = Rc::new(FunctionRegistry::default());
+        
+        // Register the operators needed for the expression
+        ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+        ctx.register_native_function("*", 2, |args| args[0] * args[1]);
+        ctx.register_native_function("^", 2, |args| args[0].powf(args[1]));
+        
         let ast = crate::engine::parse_expression("2 + 3 * 4 ^ 2").unwrap();
-        let result = crate::eval::eval_ast(&ast, None).unwrap();
+        let result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx))).unwrap();
         assert_eq!(result, 2.0 + 3.0 * 16.0); // 2 + 3*16 = 50
     }
 
@@ -1886,13 +1976,17 @@ mod tests {
         let call_ast = crate::engine::parse_expression("polynomial(2)").unwrap();
         println!("AST for polynomial(2): {:?}", call_ast);
 
+        // Create Rc for ctx
+        let ctx_rc = Rc::new(ctx.clone());
+        
         // Evaluate polynomial(2)
-        let result = crate::eval::eval_ast(&call_ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&call_ast, Some(ctx_rc)).unwrap();
         println!("polynomial(2) = {}", result);
 
         // Evaluate the body directly with x=2
         ctx.set_parameter("x", 2.0);
-        let direct_result = crate::eval::eval_ast(&body_ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let ctx_rc2 = Rc::new(ctx);
+        let direct_result = crate::eval::eval_ast(&body_ast, Some(ctx_rc2)).unwrap();
         println!("Direct eval with x=2: {}", direct_result);
     }
 
@@ -1903,30 +1997,37 @@ mod tests {
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
 
+        // Create Rc and update when ctx changes
+        let mut ctx_rc = Rc::new(ctx.clone());
+
         // Test with a literal
         let ast_lit = crate::engine::parse_expression("polynomial(10)").unwrap();
-        let result_lit = crate::eval::eval_ast(&ast_lit, Some(Rc::new(ctx.clone()))).unwrap();
+        let result_lit = crate::eval::eval_ast(&ast_lit, Some(ctx_rc.clone())).unwrap();
         println!("polynomial(10) = {}", result_lit);
         assert_eq!(result_lit, 1234.0);
 
         // Test with a variable
         ctx.set_parameter("z", 10.0);
+        ctx_rc = Rc::new(ctx.clone());
+        
         let ast_var = crate::engine::parse_expression("polynomial(z)").unwrap();
-        let result_var = crate::eval::eval_ast(&ast_var, Some(Rc::new(ctx.clone()))).unwrap();
+        let result_var = crate::eval::eval_ast(&ast_var, Some(ctx_rc.clone())).unwrap();
         println!("polynomial(z) = {}", result_var);
         assert_eq!(result_var, 1234.0);
 
         // Test with a subexpression
         ctx.set_parameter("a", 5.0);
         ctx.set_parameter("b", 10.0);
+        ctx_rc = Rc::new(ctx.clone());
+        
         let ast_sub = crate::engine::parse_expression("polynomial(a + b / 2)").unwrap();
-        let result_sub = crate::eval::eval_ast(&ast_sub, Some(Rc::new(ctx.clone()))).unwrap();
+        let result_sub = crate::eval::eval_ast(&ast_sub, Some(ctx_rc.clone())).unwrap();
         println!("polynomial(a + b / 2) = {}", result_sub);
         assert_eq!(result_sub, 1234.0);
 
         // Test with a nested polynomial call
         let ast_nested = crate::engine::parse_expression("polynomial(polynomial(2))").unwrap();
-        let result_nested = crate::eval::eval_ast(&ast_nested, Some(Rc::new(ctx.clone()))).unwrap();
+        let result_nested = crate::eval::eval_ast(&ast_nested, Some(ctx_rc)).unwrap();
         println!("polynomial(polynomial(2)) = {}", result_nested);
     }
     #[test]
@@ -1936,8 +2037,9 @@ mod tests {
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
 
+        let ctx_rc = Rc::new(ctx);
         let call_ast = crate::engine::parse_expression("polynomial(2)").unwrap();
-        let result = crate::eval::eval_ast(&call_ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&call_ast, Some(ctx_rc)).unwrap();
 
         assert!(
             (result - 26.0).abs() < 1e-10,
@@ -2085,7 +2187,6 @@ mod tests {
     #[test]
     fn test_polynomial_ast_cache_effect() {
         use std::cell::RefCell;
-        use std::collections::HashMap;
         use std::rc::Rc;
 
         let mut ctx = EvalContext::new();
@@ -2097,12 +2198,15 @@ mod tests {
 
         let expr = "polynomial(2)";
 
+        // Create an Rc for ctx
+        let ctx_rc = Rc::new(ctx);
+
         // First evaluation (should parse and cache)
-        let result1 = crate::engine::interp(expr, Some(Rc::new(ctx.clone()))).unwrap();
+        let result1 = crate::engine::interp(expr, Some(ctx_rc.clone())).unwrap();
         println!("First eval with cache: {}", result1);
 
         // Second evaluation (should use cache)
-        let result2 = crate::engine::interp(expr, Some(Rc::new(ctx.clone()))).unwrap();
+        let result2 = crate::engine::interp(expr, Some(ctx_rc)).unwrap();
         println!("Second eval with cache: {}", result2);
 
         assert_eq!(result1, result2);
@@ -2118,8 +2222,9 @@ mod tests {
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
 
+        let ctx_rc = Rc::new(ctx);
         let call_ast = crate::engine::parse_expression("polynomial(2)").unwrap();
-        let result = crate::eval::eval_ast(&call_ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&call_ast, Some(ctx_rc)).unwrap();
 
         println!("polynomial(2) after overriding = {}", result);
         assert!((result - 26.0).abs() < 1e-10);
@@ -2133,8 +2238,9 @@ mod tests {
         ctx.register_expression_function("sin", &["x"], "x + 100")
             .unwrap();
 
+        let ctx_rc = Rc::new(ctx);
         let call_ast = crate::engine::parse_expression("sin(2)").unwrap();
-        let result = crate::eval::eval_ast(&call_ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let result = crate::eval::eval_ast(&call_ast, Some(ctx_rc)).unwrap();
 
         println!("sin(2) with override = {}", result);
         assert_eq!(result, 102.0);

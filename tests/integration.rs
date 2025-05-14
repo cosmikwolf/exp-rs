@@ -609,10 +609,11 @@ fn test_expression_functions() {
     let result4 = interp("polynomial(x + y / 2)", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
     let x = 5.0;
     let y = 10.0;
-    let arg = x + y / 2.0;
+    let arg: Real = x + y / 2.0;
     // For x=5, y=10: arg = 10.0
     // polynomial(10) = 10^3 + 2*10^2 + 3*10 + 4 = 1000 + 200 + 30 + 4 = 1234
-    let expected = libm::pow(arg, 3.0) + 2.0 * libm::pow(arg, 2.0)
+    // Calculate expected value without using libm directly
+    let expected = arg.powf(3.0) + 2.0 * arg.powf(2.0)
         + 3.0 * arg
         + 4.0;
     println!("polynomial({}) = {}", arg, result4);
@@ -767,7 +768,7 @@ fn test_recursion_limits() {
             return x as Real;
         } else {
             // This is a true recursive call
-            let prev_sum_args = [x as f64 - 1.0];
+            let prev_sum_args = [x as Real - 1.0]; // Use Real instead of f64
             let prev_sum = recursion_test_fn(&prev_sum_args);
             return prev_sum + x as Real;
         }
@@ -780,7 +781,7 @@ fn test_recursion_limits() {
             return x as Real;
         } else {
             // This is a true recursive call
-            let prev_sum_args = [x as f64 - 1.0];
+            let prev_sum_args = [x as Real - 1.0]; // Use Real instead of f64
             let prev_sum = recursion_test_fn(&prev_sum_args);
             return prev_sum + x as Real;
         }

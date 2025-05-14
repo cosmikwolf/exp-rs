@@ -804,58 +804,63 @@ pub fn interp<'a>(
     ctx: Option<Rc<EvalContext<'a>>>,
 ) -> crate::error::Result<Real> {
     use alloc::rc::Rc;
+    
+    // Create a new context if none provided
+    let eval_ctx = match ctx {
+        Some(ctx_rc) => ctx_rc,
+        None => {
+            // Use the default EvalContext::new() which will auto-register functions
+            // based on the feature flags/test environment
+            let new_ctx = EvalContext::new();
+            Rc::new(new_ctx)
+        }
+    };
+    
     // If a context is provided, extract variable and constant names for parsing
-    if let Some(ctx_rc) = ctx {
-        // AST cache logic: use per-context cache if enabled
-        if let Some(cache) = ctx_rc.ast_cache.as_ref() {
-            use alloc::borrow::ToOwned;
-            let expr_key: Cow<'a, str> = Cow::Owned(expression.to_owned());
-            // Only hold the borrow for the minimum time needed
-            let ast_rc_opt = {
-                let cache_borrow = cache.borrow();
-                cache_borrow.get(expr_key.as_ref()).cloned()
-            };
-            if let Some(ast_rc) = ast_rc_opt {
-                eval_ast(&ast_rc, Some(Rc::clone(&ctx_rc)))
-            } else {
-                let mut context_vars: Vec<String> = ctx_rc
-                    .variables
-                    .keys()
-                    .map(String::clone)
-                    .collect();
-                context_vars.extend(
-                    ctx_rc.constants
-                        .keys()
-                        .map(String::clone)
-                );
-                match parse_expression_with_context(expression, None, Some(&context_vars)) {
-                    Ok(ast) => {
-                        let ast_rc = Rc::new(ast);
-                        {
-                            let mut cache_borrow = cache.borrow_mut();
-                            cache_borrow.insert(expr_key.to_string(), ast_rc.clone());
-                        }
-                        eval_ast(&ast_rc, Some(Rc::clone(&ctx_rc)))
-                    }
-                    Err(err) => Err(err),
-                }
-            }
+    // AST cache logic: use per-context cache if enabled
+    if let Some(cache) = eval_ctx.ast_cache.as_ref() {
+        use alloc::borrow::ToOwned;
+        let expr_key: Cow<'a, str> = Cow::Owned(expression.to_owned());
+        // Only hold the borrow for the minimum time needed
+        let ast_rc_opt = {
+            let cache_borrow = cache.borrow();
+            cache_borrow.get(expr_key.as_ref()).cloned()
+        };
+        if let Some(ast_rc) = ast_rc_opt {
+            eval_ast(&ast_rc, Some(Rc::clone(&eval_ctx)))
         } else {
-            // No cache: behave as before
-            let mut context_vars: Vec<String> = ctx_rc
+            let mut context_vars: Vec<String> = eval_ctx
                 .variables
                 .keys()
-                .map(|k: &String| k.as_str().to_string())
+                .map(String::clone)
                 .collect();
-            context_vars.extend(ctx_rc.constants.keys().map(|k: &String| k.as_str().to_string()));
+            context_vars.extend(
+                eval_ctx.constants
+                    .keys()
+                    .map(String::clone)
+            );
             match parse_expression_with_context(expression, None, Some(&context_vars)) {
-                Ok(ast) => eval_ast(&ast, Some(Rc::clone(&ctx_rc))),
+                Ok(ast) => {
+                    let ast_rc = Rc::new(ast);
+                    {
+                        let mut cache_borrow = cache.borrow_mut();
+                        cache_borrow.insert(expr_key.to_string(), ast_rc.clone());
+                    }
+                    eval_ast(&ast_rc, Some(Rc::clone(&eval_ctx)))
+                }
                 Err(err) => Err(err),
             }
         }
     } else {
-        match parse_expression(expression) {
-            Ok(ast) => eval_ast(&ast, None),
+        // No cache: behave as before
+        let mut context_vars: Vec<String> = eval_ctx
+            .variables
+            .keys()
+            .map(|k: &String| k.as_str().to_string())
+            .collect();
+        context_vars.extend(eval_ctx.constants.keys().map(|k: &String| k.as_str().to_string()));
+        match parse_expression_with_context(expression, None, Some(&context_vars)) {
+            Ok(ast) => eval_ast(&ast, Some(Rc::clone(&eval_ctx))),
             Err(err) => Err(err),
         }
     }
@@ -872,6 +877,8 @@ use std::vec::Vec;
 mod tests {
     use super::*;
     use crate::functions::{log, sin};
+    use crate::context::{EvalContext, FunctionRegistry};
+    use std::collections::HashMap;
     use std::vec; // Import functions from our own module
 
     // Helper function to print AST for debugging
@@ -1129,14 +1136,20 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "libm")] // This test requires libm for built-in sin/cos/abs
     fn test_function_juxtaposition() {
-        // Instead of using interp, let's directly create and test the AST
+        // Create a context with the sin function registered
+        let mut ctx = EvalContext::new();
+        ctx.register_default_math_functions();
+        let ctx_rc = Rc::new(ctx);
+        
+        // Create AST for sin function call
         let sin_ast = AstExpr::Function {
             name: "sin".to_string(),
             args: vec![AstExpr::Constant(0.5)],
         };
 
-        let result = eval_ast(&sin_ast, None).unwrap();
+        let result = eval_ast(&sin_ast, Some(ctx_rc.clone())).unwrap();
         println!("sin 0.5 = {}", result);
         assert!(
             (result - sin(0.5, 0.0)).abs() < 1e-6,
@@ -1173,6 +1186,65 @@ mod tests {
         };
 
         let result3 = eval_ast(&abs_neg_ast, None).unwrap();
+        println!("abs -42 = {}", result3);
+        assert_eq!(result3, 42.0, "abs -42 should be 42.0");
+    }
+    
+    #[test]
+    #[cfg(not(feature = "libm"))] // Alternative test for non-libm builds
+    fn test_function_juxtaposition_no_libm() {
+        // Create a context with our own implementations
+        let mut ctx = EvalContext::new();
+        ctx.register_native_function("sin", 1, |args| args[0].sin());
+        ctx.register_native_function("cos", 1, |args| args[0].cos());
+        ctx.register_native_function("abs", 1, |args| args[0].abs());
+        ctx.register_native_function("neg", 1, |args| -args[0]);
+        
+        let ctx_rc = Rc::new(ctx);
+        
+        // Create AST for sin function call
+        let sin_ast = AstExpr::Function {
+            name: "sin".to_string(),
+            args: vec![AstExpr::Constant(0.5)],
+        };
+
+        let result = eval_ast(&sin_ast, Some(ctx_rc.clone())).unwrap();
+        println!("sin 0.5 = {}", result);
+        assert!(
+            (result - (0.5 as Real).sin()).abs() < 1e-6,
+            "sin 0.5 should work with juxtaposition"
+        );
+
+        // Test chained juxtaposition with manually created AST
+        let cos_ast = AstExpr::Function {
+            name: "cos".to_string(),
+            args: vec![AstExpr::Constant(0.0)],
+        };
+
+        let sin_cos_ast = AstExpr::Function {
+            name: "sin".to_string(),
+            args: vec![cos_ast],
+        };
+
+        let result2 = eval_ast(&sin_cos_ast, Some(ctx_rc.clone())).unwrap();
+        println!("sin cos 0 = {}", result2);
+        assert!(
+            (result2 - (1.0 as Real).sin()).abs() < 1e-6,
+            "sin cos 0 should be sin(cos(0)) = sin(1)"
+        );
+
+        // Test abs with negative number using manually created AST
+        let neg_ast = AstExpr::Function {
+            name: "neg".to_string(),
+            args: vec![AstExpr::Constant(42.0)],
+        };
+
+        let abs_neg_ast = AstExpr::Function {
+            name: "abs".to_string(),
+            args: vec![neg_ast],
+        };
+
+        let result3 = eval_ast(&abs_neg_ast, Some(ctx_rc)).unwrap();
         println!("abs -42 = {}", result3);
         assert_eq!(result3, 42.0, "abs -42 should be 42.0");
     }
@@ -1235,6 +1307,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "libm")] // This test requires libm for built-in sin/asin
     fn test_function_recognition() {
         // Test function recognition with manually created AST
         let sin_ast = AstExpr::Function {
@@ -1263,6 +1336,40 @@ mod tests {
             (result2 - sin(0.5, 0.0)).abs() < 1e-6,
             "sin(0.5) should work"
         );
+    }
+    
+    #[test]
+    #[cfg(not(feature = "libm"))] // Alternative test for non-libm builds
+    fn test_function_recognition_no_libm() {
+        // Create a context with our own implementation
+        let mut ctx = EvalContext::new();
+        
+        // Register sin and asin functions
+        ctx.register_native_function("sin", 1, |args| args[0].sin());
+        ctx.register_native_function("asin", 1, |args| args[0].asin());
+        
+        // Convert to Rc
+        let ctx_rc = Rc::new(ctx);
+        
+        // Test function recognition with manually created AST
+        let sin_ast = AstExpr::Function {
+            name: "sin".to_string(),
+            args: vec![AstExpr::Constant(0.5)],
+        };
+
+        let asin_sin_ast = AstExpr::Function {
+            name: "asin".to_string(),
+            args: vec![sin_ast.clone()],
+        };
+
+        let result = eval_ast(&asin_sin_ast, Some(ctx_rc.clone())).unwrap();
+        println!("asin sin 0.5 = {}", result);
+        assert!((result - 0.5).abs() < 1e-2, "asin(sin(0.5)) should be approximately 0.5");
+
+        // Test function recognition with parentheses using manually created AST
+        let result2 = eval_ast(&sin_ast, Some(ctx_rc)).unwrap();
+        println!("sin(0.5) = {}", result2);
+        assert!((result2 - (0.5 as Real).sin()).abs() < 1e-6, "sin(0.5) should work");
     }
 
     #[test]

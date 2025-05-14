@@ -1,12 +1,15 @@
 extern crate alloc;
+
+// Only import libm when the feature is enabled
+#[cfg(feature = "libm")]
 extern crate libm;
 
+use alloc::rc::Rc;
 use exp_rs::Real;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::parse_expression;
 use exp_rs::eval::eval_ast;
 use std::time::Instant;
-use alloc::rc::Rc;
 
 // Native Rust implementations for benchmarking
 fn native_sqrt_expr(a: Real) -> Real {
@@ -38,15 +41,15 @@ fn main() {
         ("sin(a)", |a: Real| a.sin()),
         ("cos(a)", |a: Real| a.cos()),
         ("tan(a)", |a: Real| a.tan()),
-        ("log(a+10)", |a: Real| (a+10.0).log10()),
-        ("ln(a+10)", |a: Real| (a+10.0).ln()),
-        ("abs(a-50)", |a: Real| (a-50.0).abs()),
-        ("max(a,100-a)", |a: Real| a.max(100.0-a)),
-        ("min(a,100-a)", |a: Real| a.min(100.0-a)),
+        ("log(a+10)", |a: Real| (a + 10.0).log10()),
+        ("ln(a+10)", |a: Real| (a + 10.0).ln()),
+        ("abs(a-50)", |a: Real| (a - 50.0).abs()),
+        ("max(a,100-a)", |a: Real| a.max(100.0 - a)),
+        ("min(a,100-a)", |a: Real| a.min(100.0 - a)),
         ("pow(a,1.5)", |a: Real| a.powf(1.5)),
-        ("exp(a/100.0)", |a: Real| (a/100.0).exp()),
-        ("floor(a/3.1)", |a: Real| (a/3.1).floor()),
-        ("ceil(a/3.1)", |a: Real| (a/3.1).ceil()),
+        ("exp(a/100.0)", |a: Real| (a / 100.0).exp()),
+        ("floor(a/3.1)", |a: Real| (a / 3.1).floor()),
+        ("ceil(a/3.1)", |a: Real| (a / 3.1).ceil()),
         ("fmod(a,7)", |a: Real| a % 7.0),
         ("neg(a)", |a: Real| -a),
     ];
@@ -58,17 +61,11 @@ fn main() {
 
         // Create a mutable context first before wrapping in Rc
         let mut ctx_base = EvalContext::new();
-        
-        // Only register default math functions if the feature is available
-        #[cfg(not(feature = "no-builtin-math"))]
+
+        // Register math functions manually (no register_default_math_functions method exists)
+        #[cfg(feature = "libm")]
         {
-            ctx_base.register_default_math_functions();
-        }
-        
-        // When no-builtin-math is enabled, we need to register the functions manually
-        #[cfg(feature = "no-builtin-math")]
-        {
-            // Register the minimum functions needed for our benchmarks
+            // Register math functions - libm version
             #[cfg(feature = "f32")]
             {
                 ctx_base.register_native_function("sqrt", 1, |args| libm::sqrtf(args[0]));
@@ -110,7 +107,52 @@ fn main() {
                 ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
         }
-        
+
+        #[cfg(not(feature = "libm"))]
+        {
+            // Register math functions - standard lib version
+            #[cfg(feature = "f32")]
+            {
+                ctx_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
+                ctx_base.register_native_function("sin", 1, |args| args[0].sin());
+                ctx_base.register_native_function("cos", 1, |args| args[0].cos());
+                ctx_base.register_native_function("tan", 1, |args| args[0].tan());
+                ctx_base.register_native_function("log", 1, |args| args[0].ln());
+                ctx_base.register_native_function("log10", 1, |args| args[0].log10());
+                ctx_base.register_native_function("ln", 1, |args| args[0].ln());
+                ctx_base.register_native_function("abs", 1, |args| args[0].abs());
+                ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                ctx_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+                ctx_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
+                ctx_base.register_native_function("exp", 1, |args| args[0].exp());
+                ctx_base.register_native_function("floor", 1, |args| args[0].floor());
+                ctx_base.register_native_function("ceil", 1, |args| args[0].ceil());
+                ctx_base.register_native_function("neg", 1, |args| -args[0]);
+                ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+            }
+            #[cfg(not(feature = "f32"))]
+            {
+                ctx_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
+                ctx_base.register_native_function("sin", 1, |args| args[0].sin());
+                ctx_base.register_native_function("cos", 1, |args| args[0].cos());
+                ctx_base.register_native_function("tan", 1, |args| args[0].tan());
+                ctx_base.register_native_function("log", 1, |args| args[0].ln());
+                ctx_base.register_native_function("log10", 1, |args| args[0].log10());
+                ctx_base.register_native_function("ln", 1, |args| args[0].ln());
+                ctx_base.register_native_function("abs", 1, |args| args[0].abs());
+                ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                ctx_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+                ctx_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
+                ctx_base.register_native_function("exp", 1, |args| args[0].exp());
+                ctx_base.register_native_function("floor", 1, |args| args[0].floor());
+                ctx_base.register_native_function("ceil", 1, |args| args[0].ceil());
+                ctx_base.register_native_function("neg", 1, |args| -args[0]);
+                ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+            }
+        }
+
         let mut evalctx_sum = 0.0;
         let start = Instant::now();
         for j in 0..N {
@@ -125,17 +167,11 @@ fn main() {
 
         // Create a mutable context first before wrapping in Rc
         let mut ctx_interp_base = EvalContext::new();
-        
-        // Only register default math functions if the feature is available
-        #[cfg(not(feature = "no-builtin-math"))]
+
+        // Register math functions manually (no register_default_math_functions method exists)
+        #[cfg(feature = "libm")]
         {
-            ctx_interp_base.register_default_math_functions();
-        }
-        
-        // When no-builtin-math is enabled, we need to register the functions manually
-        #[cfg(feature = "no-builtin-math")]
-        {
-            // Register the minimum functions needed for our benchmarks
+            // Register math functions - libm version
             #[cfg(feature = "f32")]
             {
                 ctx_interp_base.register_native_function("sqrt", 1, |args| libm::sqrtf(args[0]));
@@ -148,8 +184,10 @@ fn main() {
                 ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
                 ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
                 ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_interp_base.register_native_function("pow", 2, |args| libm::powf(args[0], args[1]));
-                ctx_interp_base.register_native_function("^", 2, |args| libm::powf(args[0], args[1]));
+                ctx_interp_base
+                    .register_native_function("pow", 2, |args| libm::powf(args[0], args[1]));
+                ctx_interp_base
+                    .register_native_function("^", 2, |args| libm::powf(args[0], args[1]));
                 ctx_interp_base.register_native_function("exp", 1, |args| libm::expf(args[0]));
                 ctx_interp_base.register_native_function("floor", 1, |args| libm::floorf(args[0]));
                 ctx_interp_base.register_native_function("ceil", 1, |args| libm::ceilf(args[0]));
@@ -168,8 +206,10 @@ fn main() {
                 ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
                 ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
                 ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_interp_base.register_native_function("pow", 2, |args| libm::pow(args[0], args[1]));
-                ctx_interp_base.register_native_function("^", 2, |args| libm::pow(args[0], args[1]));
+                ctx_interp_base
+                    .register_native_function("pow", 2, |args| libm::pow(args[0], args[1]));
+                ctx_interp_base
+                    .register_native_function("^", 2, |args| libm::pow(args[0], args[1]));
                 ctx_interp_base.register_native_function("exp", 1, |args| libm::exp(args[0]));
                 ctx_interp_base.register_native_function("floor", 1, |args| libm::floor(args[0]));
                 ctx_interp_base.register_native_function("ceil", 1, |args| libm::ceil(args[0]));
@@ -177,10 +217,55 @@ fn main() {
                 ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
         }
-        
+
+        #[cfg(not(feature = "libm"))]
+        {
+            // Register math functions - standard lib version
+            #[cfg(feature = "f32")]
+            {
+                ctx_interp_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
+                ctx_interp_base.register_native_function("sin", 1, |args| args[0].sin());
+                ctx_interp_base.register_native_function("cos", 1, |args| args[0].cos());
+                ctx_interp_base.register_native_function("tan", 1, |args| args[0].tan());
+                ctx_interp_base.register_native_function("log", 1, |args| args[0].ln());
+                ctx_interp_base.register_native_function("log10", 1, |args| args[0].log10());
+                ctx_interp_base.register_native_function("ln", 1, |args| args[0].ln());
+                ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
+                ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                ctx_interp_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+                ctx_interp_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
+                ctx_interp_base.register_native_function("exp", 1, |args| args[0].exp());
+                ctx_interp_base.register_native_function("floor", 1, |args| args[0].floor());
+                ctx_interp_base.register_native_function("ceil", 1, |args| args[0].ceil());
+                ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
+                ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+            }
+            #[cfg(not(feature = "f32"))]
+            {
+                ctx_interp_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
+                ctx_interp_base.register_native_function("sin", 1, |args| args[0].sin());
+                ctx_interp_base.register_native_function("cos", 1, |args| args[0].cos());
+                ctx_interp_base.register_native_function("tan", 1, |args| args[0].tan());
+                ctx_interp_base.register_native_function("log", 1, |args| args[0].ln());
+                ctx_interp_base.register_native_function("log10", 1, |args| args[0].log10());
+                ctx_interp_base.register_native_function("ln", 1, |args| args[0].ln());
+                ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
+                ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                ctx_interp_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+                ctx_interp_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
+                ctx_interp_base.register_native_function("exp", 1, |args| args[0].exp());
+                ctx_interp_base.register_native_function("floor", 1, |args| args[0].floor());
+                ctx_interp_base.register_native_function("ceil", 1, |args| args[0].ceil());
+                ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
+                ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+            }
+        }
+
         // Enable AST cache for the base context
         ctx_interp_base.enable_ast_cache();
-        
+
         let mut interp_sum = 0.0;
         let start = Instant::now();
         for j in 0..N {
@@ -221,11 +306,23 @@ fn main() {
             f64::NAN
         };
 
-        println!("evalctx - time: {} us, {:.2}x slower than native", evalctx_us, slowdown_evalctx_vs_native);
-        println!("interp - time: {} us, {:.2}x slower than native", interp_us, slowdown_interp_vs_native);
+        println!(
+            "evalctx - time: {} us, {:.2}x slower than native",
+            evalctx_us, slowdown_evalctx_vs_native
+        );
+        println!(
+            "interp - time: {} us, {:.2}x slower than native",
+            interp_us, slowdown_interp_vs_native
+        );
         println!("native - time: {} us", native_us);
-        println!("evalctx vs native: {:.2}x slower", slowdown_evalctx_vs_native);
+        println!(
+            "evalctx vs native: {:.2}x slower",
+            slowdown_evalctx_vs_native
+        );
         println!("interp vs native: {:.2}x slower", slowdown_interp_vs_native);
-        println!("interp vs evalctx: {:.2}x slower\n", slowdown_interp_vs_evalctx);
+        println!(
+            "interp vs evalctx: {:.2}x slower\n",
+            slowdown_interp_vs_evalctx
+        );
     }
 }

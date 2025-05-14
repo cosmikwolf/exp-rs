@@ -11,7 +11,7 @@
 //! precision (f32 or f64, controlled by the "f32" feature), different versions of the
 //! math functions are used.
 
-#[cfg(feature = "f32")]
+#[cfg(all(feature = "libm", feature = "f32"))]
 use libm::{
     acosf as libm_acos, asinf as libm_asin, atan2f as libm_atan2, atanf as libm_atan,
     ceilf as libm_ceil, cosf as libm_cos, coshf as libm_cosh, expf as libm_exp,
@@ -19,7 +19,7 @@ use libm::{
     sinf as libm_sin, sinhf as libm_sinh, sqrtf as libm_sqrt, tanf as libm_tan, tanhf as libm_tanh,
 };
 
-#[cfg(not(feature = "f32"))]
+#[cfg(all(feature = "libm", not(feature = "f32")))]
 use libm::{
     acos as libm_acos, asin as libm_asin, atan as libm_atan, atan2 as libm_atan2,
     ceil as libm_ceil, cos as libm_cos, cosh as libm_cosh, exp as libm_exp, floor as libm_floor,
@@ -28,6 +28,87 @@ use libm::{
 };
 
 use crate::Real;
+
+// When libm feature is not enabled, provide our own implementations
+#[cfg(not(feature = "libm"))]
+mod internal_math {
+    use crate::Real;
+    
+    // Simplified math implementations or compiler intrinsics
+    #[cfg(feature = "f32")]
+    pub fn libm_sin(x: Real) -> Real { x.sin() }
+    #[cfg(feature = "f32")]
+    pub fn libm_cos(x: Real) -> Real { x.cos() }
+    #[cfg(feature = "f32")]
+    pub fn libm_tan(x: Real) -> Real { x.tan() }
+    #[cfg(feature = "f32")]
+    pub fn libm_asin(x: Real) -> Real { x.asin() }
+    #[cfg(feature = "f32")]
+    pub fn libm_acos(x: Real) -> Real { x.acos() }
+    #[cfg(feature = "f32")]
+    pub fn libm_atan(x: Real) -> Real { x.atan() }
+    #[cfg(feature = "f32")]
+    pub fn libm_atan2(y: Real, x: Real) -> Real { y.atan2(x) }
+    #[cfg(feature = "f32")]
+    pub fn libm_sinh(x: Real) -> Real { x.sinh() }
+    #[cfg(feature = "f32")]
+    pub fn libm_cosh(x: Real) -> Real { x.cosh() }
+    #[cfg(feature = "f32")]
+    pub fn libm_tanh(x: Real) -> Real { x.tanh() }
+    #[cfg(feature = "f32")]
+    pub fn libm_exp(x: Real) -> Real { x.exp() }
+    #[cfg(feature = "f32")]
+    pub fn libm_ln(x: Real) -> Real { x.ln() }
+    #[cfg(feature = "f32")]
+    pub fn libm_log10(x: Real) -> Real { x.log10() }
+    #[cfg(feature = "f32")]
+    pub fn libm_pow(x: Real, y: Real) -> Real { x.powf(y) }
+    #[cfg(feature = "f32")]
+    pub fn libm_sqrt(x: Real) -> Real { x.sqrt() }
+    #[cfg(feature = "f32")]
+    pub fn libm_ceil(x: Real) -> Real { x.ceil() }
+    #[cfg(feature = "f32")]
+    pub fn libm_floor(x: Real) -> Real { x.floor() }
+    
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_sin(x: Real) -> Real { x.sin() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_cos(x: Real) -> Real { x.cos() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_tan(x: Real) -> Real { x.tan() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_asin(x: Real) -> Real { x.asin() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_acos(x: Real) -> Real { x.acos() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_atan(x: Real) -> Real { x.atan() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_atan2(y: Real, x: Real) -> Real { y.atan2(x) }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_sinh(x: Real) -> Real { x.sinh() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_cosh(x: Real) -> Real { x.cosh() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_tanh(x: Real) -> Real { x.tanh() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_exp(x: Real) -> Real { x.exp() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_ln(x: Real) -> Real { x.ln() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_log10(x: Real) -> Real { x.log10() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_pow(x: Real, y: Real) -> Real { x.powf(y) }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_sqrt(x: Real) -> Real { x.sqrt() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_ceil(x: Real) -> Real { x.ceil() }
+    #[cfg(not(feature = "f32"))]
+    pub fn libm_floor(x: Real) -> Real { x.floor() }
+}
+
+// Import our math functions when libm is disabled
+#[cfg(not(feature = "libm"))]
+use internal_math::*;
 
 /// Dummy function that panics when called.
 ///

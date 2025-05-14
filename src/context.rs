@@ -18,7 +18,7 @@ use std::string::{String, ToString};
 use std::vec::Vec;
 
 /// Registry for different types of functions available in an evaluation context.
-/// 
+///
 /// This struct holds three types of functions:
 /// 1. Native functions: Rust functions that can be called from expressions
 /// 2. Expression functions: Functions defined using expression strings
@@ -30,7 +30,7 @@ use std::vec::Vec;
 pub struct FunctionRegistry<'a> {
     /// Native functions implemented in Rust code
     pub native_functions: HashMap<String, crate::types::NativeFunction<'a>>,
-    /// Functions defined using expression strings 
+    /// Functions defined using expression strings
     pub expression_functions: HashMap<String, crate::types::ExpressionFunction>,
     /// User-defined functions with custom behavior
     pub user_functions: HashMap<String, UserFunction>,
@@ -50,19 +50,19 @@ use core::cell::RefCell;
 /// use exp_rs::context::EvalContext;
 /// use exp_rs::engine::interp;
 /// use std::rc::Rc;
-/// 
+///
 /// let mut ctx = EvalContext::new();
-/// 
+///
 /// // Add variables
 /// ctx.set_parameter("x", 5.0);
 /// ctx.set_parameter("y", 10.0);
-/// 
+///
 /// // Add a constant
 /// ctx.constants.insert("PI_SQUARED".to_string(), 9.8696);
-/// 
+///
 /// // Register a custom function
 /// ctx.register_native_function("multiply", 2, |args| args[0] * args[1]);
-/// 
+///
 /// // Evaluate expressions using this context
 /// let result = interp("x + y * PI_SQUARED", Some(Rc::new(ctx.clone()))).unwrap();
 /// let result2 = interp("multiply(x, y)", Some(Rc::new(ctx))).unwrap();
@@ -73,14 +73,14 @@ use core::cell::RefCell;
 /// ```
 /// use exp_rs::context::EvalContext;
 /// use std::rc::Rc;
-/// 
+///
 /// let mut parent = EvalContext::new();
 /// parent.set_parameter("x", 1.0);
-/// 
+///
 /// let mut child = EvalContext::new();
-/// child.set_parameter("y", 2.0); 
+/// child.set_parameter("y", 2.0);
 /// child.parent = Some(Rc::new(parent));
-/// 
+///
 /// // The child context can access both its own variables and the parent's
 /// ```
 #[derive(Default)]
@@ -118,7 +118,7 @@ impl<'a> EvalContext<'a> {
     /// // Now add variables, constants, functions, etc.
     /// ```
     pub fn new() -> Self {
-        Self {
+        let mut ctx = Self {
             variables: HashMap::new(),
             constants: HashMap::new(),
             arrays: HashMap::new(),
@@ -127,7 +127,33 @@ impl<'a> EvalContext<'a> {
             function_registry: Rc::new(FunctionRegistry::default()),
             parent: None,
             ast_cache: None,
-        }
+        };
+        
+        // When using libm, always register the functions automatically
+        #[cfg(feature = "libm")]
+        ctx.register_default_math_functions();
+        
+        // When running tests without libm, register std functions automatically
+        #[cfg(all(test, not(feature = "libm")))]
+        ctx.register_default_math_functions();
+        
+        // In production code without libm (embedded), don't register anything automatically
+        
+        ctx
+    }
+    
+    /// Creates a new context with default math functions registered.
+    ///
+    /// This is a convenience method for creating a context with all standard
+    /// math functions already registered, even when not using the libm feature.
+    pub fn with_default_functions() -> Self {
+        let mut ctx = Self::new();
+        
+        // If the features/test config didn't auto-register functions, do it now
+        #[cfg(not(any(feature = "libm", all(test, not(feature = "libm")))))]
+        ctx.register_default_math_functions();
+        
+        ctx
     }
 
     /// Sets a parameter (variable) in the context.
@@ -193,7 +219,7 @@ impl<'a> EvalContext<'a> {
     /// Functions with variable argument counts:
     ///
     /// ```
-    /// use exp_rs::context::EvalContext; 
+    /// use exp_rs::context::EvalContext;
     /// use exp_rs::engine::interp;
     /// use std::rc::Rc;
     ///
@@ -380,8 +406,6 @@ impl<'a> EvalContext<'a> {
 
     /// Registers all built-in math functions as native functions in the context.
     ///
-    /// This is only available if the `no-builtin-math` feature is **not** enabled.
-    ///
     /// # Usage
     ///
     /// ```
@@ -393,44 +417,119 @@ impl<'a> EvalContext<'a> {
     /// After calling this, you can override any built-in by registering your own native function
     /// with the same name using [`register_native_function`](Self::register_native_function).
     ///
-    /// # Feature: `no-builtin-math`
+    /// # Feature: `libm`
     ///
-    /// If the `no-builtin-math` feature is enabled, this method is not available and you must
-    /// register all required math functions yourself.
-    #[cfg(not(feature = "no-builtin-math"))]
+    /// If the `libm` feature is enabled, this will use the libm implementations.
+    /// Otherwise, it will use the standard library implementation which is not available
+    /// in `no_std` environments.
+    
+    /// Enables default math functions for this context.
+    ///
+    /// Alias for `register_default_math_functions()`.
+    pub fn enable_default_functions(&mut self) {
+        self.register_default_math_functions();
+    }
+    
+    /// Registers all built-in math functions as native functions in the context.
     pub fn register_default_math_functions(&mut self) {
-        self.register_native_function("abs", 1, |args| crate::functions::abs(args[0], 0.0));
-        self.register_native_function("acos", 1, |args| crate::functions::acos(args[0], 0.0));
-        self.register_native_function("asin", 1, |args| crate::functions::asin(args[0], 0.0));
-        self.register_native_function("atan", 1, |args| crate::functions::atan(args[0], 0.0));
-        self.register_native_function("atan2", 2, |args| crate::functions::atan2(args[0], args[1]));
-        self.register_native_function("ceil", 1, |args| crate::functions::ceil(args[0], 0.0));
-        self.register_native_function("cos", 1, |args| crate::functions::cos(args[0], 0.0));
-        self.register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
-        self.register_native_function("e", 0, |_args| crate::functions::e(0.0, 0.0));
-        self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
-        self.register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
-        self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
-        self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
-        self.register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
-        self.register_native_function("max", 2, |args| crate::functions::max(args[0], args[1]));
-        self.register_native_function("min", 2, |args| crate::functions::min(args[0], args[1]));
-        self.register_native_function("pi", 0, |_args| crate::functions::pi(0.0, 0.0));
-        self.register_native_function("pow", 2, |args| crate::functions::pow(args[0], args[1]));
-        self.register_native_function("^", 2, |args| crate::functions::pow(args[0], args[1]));
-        self.register_native_function("sin", 1, |args| crate::functions::sin(args[0], 0.0));
-        self.register_native_function("sinh", 1, |args| crate::functions::sinh(args[0], 0.0));
-        self.register_native_function("sqrt", 1, |args| crate::functions::sqrt(args[0], 0.0));
-        self.register_native_function("tan", 1, |args| crate::functions::tan(args[0], 0.0));
-        self.register_native_function("tanh", 1, |args| crate::functions::tanh(args[0], 0.0));
-        self.register_native_function("sign", 1, |args| crate::functions::sign(args[0], 0.0));
-        self.register_native_function("add", 2, |args| crate::functions::add(args[0], args[1]));
-        self.register_native_function("sub", 2, |args| crate::functions::sub(args[0], args[1]));
-        self.register_native_function("mul", 2, |args| crate::functions::mul(args[0], args[1]));
-        self.register_native_function("div", 2, |args| crate::functions::div(args[0], args[1]));
-        self.register_native_function("fmod", 2, |args| crate::functions::fmod(args[0], args[1]));
-        self.register_native_function("neg", 1, |args| crate::functions::neg(args[0], 0.0));
-        self.register_native_function("comma", 2, |args| crate::functions::comma(args[0], args[1]));
+        #[cfg(feature = "libm")]
+        {
+            self.register_native_function("abs", 1, |args| crate::functions::abs(args[0], 0.0));
+            self.register_native_function("acos", 1, |args| crate::functions::acos(args[0], 0.0));
+            self.register_native_function("asin", 1, |args| crate::functions::asin(args[0], 0.0));
+            self.register_native_function("atan", 1, |args| crate::functions::atan(args[0], 0.0));
+            self.register_native_function("atan2", 2, |args| crate::functions::atan2(args[0], args[1]));
+            self.register_native_function("ceil", 1, |args| crate::functions::ceil(args[0], 0.0));
+            self.register_native_function("cos", 1, |args| crate::functions::cos(args[0], 0.0));
+            self.register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
+            self.register_native_function("e", 0, |_args| crate::functions::e(0.0, 0.0));
+            self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
+            self.register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
+            self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
+            self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
+            self.register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
+            self.register_native_function("max", 2, |args| crate::functions::max(args[0], args[1]));
+            self.register_native_function("min", 2, |args| crate::functions::min(args[0], args[1]));
+            self.register_native_function("pi", 0, |_args| crate::functions::pi(0.0, 0.0));
+            self.register_native_function("pow", 2, |args| crate::functions::pow(args[0], args[1]));
+            self.register_native_function("^", 2, |args| crate::functions::pow(args[0], args[1]));
+            self.register_native_function("sin", 1, |args| crate::functions::sin(args[0], 0.0));
+            self.register_native_function("sinh", 1, |args| crate::functions::sinh(args[0], 0.0));
+            self.register_native_function("sqrt", 1, |args| crate::functions::sqrt(args[0], 0.0));
+            self.register_native_function("tan", 1, |args| crate::functions::tan(args[0], 0.0));
+            self.register_native_function("tanh", 1, |args| crate::functions::tanh(args[0], 0.0));
+            self.register_native_function("sign", 1, |args| crate::functions::sign(args[0], 0.0));
+            
+            // Basic operators as functions
+            self.register_native_function("+", 2, |args| crate::functions::add(args[0], args[1]));
+            self.register_native_function("-", 2, |args| crate::functions::sub(args[0], args[1]));
+            self.register_native_function("*", 2, |args| crate::functions::mul(args[0], args[1]));
+            self.register_native_function("/", 2, |args| crate::functions::div(args[0], args[1]));
+            self.register_native_function("%", 2, |args| crate::functions::fmod(args[0], args[1]));
+            
+            // Function aliases for the operators
+            self.register_native_function("add", 2, |args| crate::functions::add(args[0], args[1]));
+            self.register_native_function("sub", 2, |args| crate::functions::sub(args[0], args[1]));
+            self.register_native_function("mul", 2, |args| crate::functions::mul(args[0], args[1]));
+            self.register_native_function("div", 2, |args| crate::functions::div(args[0], args[1]));
+            self.register_native_function("fmod", 2, |args| crate::functions::fmod(args[0], args[1]));
+            self.register_native_function("neg", 1, |args| crate::functions::neg(args[0], 0.0));
+            self.register_native_function("comma", 2, |args| crate::functions::comma(args[0], args[1]));
+        }
+        
+        #[cfg(not(feature = "libm"))]
+        {
+            // Use standard library implementations when libm is not available
+            self.register_native_function("abs", 1, |args| args[0].abs());
+            self.register_native_function("acos", 1, |args| args[0].acos());
+            self.register_native_function("asin", 1, |args| args[0].asin());
+            self.register_native_function("atan", 1, |args| args[0].atan());
+            self.register_native_function("atan2", 2, |args| args[0].atan2(args[1]));
+            self.register_native_function("ceil", 1, |args| args[0].ceil());
+            self.register_native_function("cos", 1, |args| args[0].cos());
+            self.register_native_function("cosh", 1, |args| args[0].cosh());
+            #[cfg(feature = "f32")]
+            self.register_native_function("e", 0, |_| core::f32::consts::E);
+            #[cfg(not(feature = "f32"))]
+            self.register_native_function("e", 0, |_| core::f64::consts::E);
+            self.register_native_function("exp", 1, |args| args[0].exp());
+            self.register_native_function("floor", 1, |args| args[0].floor());
+            self.register_native_function("ln", 1, |args| args[0].ln());
+            self.register_native_function("log", 1, |args| args[0].log10());
+            self.register_native_function("log10", 1, |args| args[0].log10());
+            self.register_native_function("max", 2, |args| args[0].max(args[1]));
+            self.register_native_function("min", 2, |args| args[0].min(args[1]));
+            #[cfg(feature = "f32")]
+            self.register_native_function("pi", 0, |_| core::f32::consts::PI);
+            #[cfg(not(feature = "f32"))]
+            self.register_native_function("pi", 0, |_| core::f64::consts::PI);
+            self.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+            self.register_native_function("^", 2, |args| args[0].powf(args[1]));
+            self.register_native_function("sin", 1, |args| args[0].sin());
+            self.register_native_function("sinh", 1, |args| args[0].sinh());
+            self.register_native_function("sqrt", 1, |args| args[0].sqrt());
+            self.register_native_function("tan", 1, |args| args[0].tan());
+            self.register_native_function("tanh", 1, |args| args[0].tanh());
+            self.register_native_function("sign", 1, |args| {
+                if args[0] > 0.0 { 1.0 } else if args[0] < 0.0 { -1.0 } else { 0.0 }
+            });
+            
+            // Basic operators as functions
+            self.register_native_function("+", 2, |args| args[0] + args[1]);
+            self.register_native_function("-", 2, |args| args[0] - args[1]);
+            self.register_native_function("*", 2, |args| args[0] * args[1]);
+            self.register_native_function("/", 2, |args| args[0] / args[1]);
+            self.register_native_function("%", 2, |args| args[0] % args[1]);
+            
+            // These are function aliases for the operators
+            self.register_native_function("add", 2, |args| args[0] + args[1]);
+            self.register_native_function("sub", 2, |args| args[0] - args[1]);
+            self.register_native_function("mul", 2, |args| args[0] * args[1]);
+            self.register_native_function("div", 2, |args| args[0] / args[1]);
+            self.register_native_function("fmod", 2, |args| args[0] % args[1]);
+            self.register_native_function("neg", 1, |args| -args[0]);
+            self.register_native_function("comma", 2, |args| args[1]);
+        }
         // Add more as needed
     }
 
@@ -444,7 +543,7 @@ impl<'a> EvalContext<'a> {
     ///
     /// # Disabling Built-ins
     ///
-    /// If the `no-builtin-math` feature is enabled, built-in math functions are not available,
+    /// If the `libm` feature is not enabled, built-in math functions are not available,
     /// and users must register their own implementations for all required functions.
     ///
     /// # Example
@@ -594,7 +693,7 @@ mod tests {
         let mut parent_ctx = EvalContext::new();
         parent_ctx.set_parameter("parent_only", 1.0);
         parent_ctx.set_parameter("shadowed", 2.0);
-        
+
         // Create child context with its own variables
         let mut child_ctx = EvalContext::new();
         child_ctx.set_parameter("child_only", 3.0);
@@ -637,7 +736,7 @@ mod tests {
         assert_eq!(child_ctx.get_variable("child_var"), Some(5.0));
         assert_eq!(child_ctx.get_variable("parent_var"), Some(3.0));
         assert_eq!(child_ctx.get_variable("grandparent_var"), Some(1.0));
-        
+
         // Test shadowing - should get closest value
         assert_eq!(child_ctx.get_variable("shadowed"), Some(6.0));
     }
@@ -657,7 +756,7 @@ mod tests {
         // Create two contexts that will reference each other
         let mut ctx1 = EvalContext::new();
         let mut ctx2 = EvalContext::new();
-        
+
         ctx1.set_parameter("var1", 1.0);
         ctx2.set_parameter("var2", 2.0);
 
@@ -665,7 +764,7 @@ mod tests {
         // We'll test that variable lookup still works without infinite recursion
         let ctx1_rc = Rc::new(ctx1);
         ctx2.parent = Some(Rc::clone(&ctx1_rc));
-        
+
         // Test lookup still works in potential cycle
         assert_eq!(ctx2.get_variable("var2"), Some(2.0));
         assert_eq!(ctx2.get_variable("var1"), Some(1.0));
@@ -674,25 +773,30 @@ mod tests {
     #[test]
     fn test_get_variable_in_function_scope() {
         let mut ctx = EvalContext::new();
-        
+
         // Set up parent context with a variable
         ctx.set_parameter("x", 100.0);
-        
+
         // Create a function context that uses 'x' as parameter
         let mut func_ctx = EvalContext::new();
         func_ctx.set_parameter("x", 5.0); // Parameter value
         func_ctx.parent = Some(Rc::new(ctx.clone()));
-        
+
         // Test variable lookup in function scope
-        assert_eq!(func_ctx.get_variable("x"), Some(5.0), 
-            "Function parameter should shadow parent variable");
-            
+        assert_eq!(
+            func_ctx.get_variable("x"),
+            Some(5.0),
+            "Function parameter should shadow parent variable"
+        );
+
         // Print debug info
         println!("Parent context x = {:?}", ctx.get_variable("x"));
         println!("Function context x = {:?}", func_ctx.get_variable("x"));
         println!("Function context variables: {:?}", func_ctx.variables);
-        println!("Function context parent variables: {:?}", 
-            func_ctx.parent.as_ref().map(|p| &p.variables));
+        println!(
+            "Function context parent variables: {:?}",
+            func_ctx.parent.as_ref().map(|p| &p.variables)
+        );
     }
 
     #[test]
@@ -700,81 +804,109 @@ mod tests {
         let mut root_ctx = EvalContext::new();
         root_ctx.set_parameter("x", 1.0);
         root_ctx.set_parameter("y", 1.0);
-        
+
         let mut mid_ctx = EvalContext::new();
         mid_ctx.set_parameter("x", 2.0);
         mid_ctx.parent = Some(Rc::new(root_ctx));
-        
+
         let mut leaf_ctx = EvalContext::new();
         leaf_ctx.set_parameter("x", 3.0);
         leaf_ctx.parent = Some(Rc::new(mid_ctx));
-        
+
         // Test variable lookup at each level
-        assert_eq!(leaf_ctx.get_variable("x"), Some(3.0),
-            "Should get leaf context value");
-        assert_eq!(leaf_ctx.get_variable("y"), Some(1.0),
-            "Should get root context value when not shadowed");
-            
+        assert_eq!(
+            leaf_ctx.get_variable("x"),
+            Some(3.0),
+            "Should get leaf context value"
+        );
+        assert_eq!(
+            leaf_ctx.get_variable("y"),
+            Some(1.0),
+            "Should get root context value when not shadowed"
+        );
+
         println!("Variable lookup in nested scopes:");
         println!("leaf x = {:?}", leaf_ctx.get_variable("x"));
         println!("leaf y = {:?}", leaf_ctx.get_variable("y"));
         println!("leaf variables: {:?}", leaf_ctx.variables);
-        println!("mid variables: {:?}", 
-            leaf_ctx.parent.as_ref().map(|p| &p.variables));
-        println!("root variables: {:?}", 
-            leaf_ctx.parent.as_ref().and_then(|p| p.parent.as_ref()).map(|p| &p.variables));
+        println!(
+            "mid variables: {:?}",
+            leaf_ctx.parent.as_ref().map(|p| &p.variables)
+        );
+        println!(
+            "root variables: {:?}",
+            leaf_ctx
+                .parent
+                .as_ref()
+                .and_then(|p| p.parent.as_ref())
+                .map(|p| &p.variables)
+        );
     }
 
     #[test]
     fn test_get_variable_function_parameter_precedence() {
         let mut ctx = EvalContext::new();
-        
+
         // Register a function that uses parameter 'x'
-        ctx.register_expression_function("f", &["x"], "x * 2").unwrap();
-        
+        ctx.register_expression_function("f", &["x"], "x * 2")
+            .unwrap();
+
         // Set a global 'x'
         ctx.set_parameter("x", 100.0);
-        
+
         // Create evaluation context for function
         let mut func_ctx = EvalContext::new();
         func_ctx.set_parameter("x", 5.0); // Parameter value
         func_ctx.parent = Some(Rc::new(ctx));
-        
+
         println!("Function parameter context:");
         println!("func_ctx x = {:?}", func_ctx.get_variable("x"));
         println!("func_ctx variables: {:?}", func_ctx.variables);
-        println!("parent variables: {:?}", 
-            func_ctx.parent.as_ref().map(|p| &p.variables));
-        
-        assert_eq!(func_ctx.get_variable("x"), Some(5.0),
-            "Function parameter should take precedence over global x");
+        println!(
+            "parent variables: {:?}",
+            func_ctx.parent.as_ref().map(|p| &p.variables)
+        );
+
+        assert_eq!(
+            func_ctx.get_variable("x"),
+            Some(5.0),
+            "Function parameter should take precedence over global x"
+        );
     }
 
     #[test]
     fn test_get_variable_temporary_scope() {
         let mut ctx = EvalContext::new();
         ctx.set_parameter("x", 1.0);
-        
+
         // Create temporary scope
         let mut temp_ctx = EvalContext::new();
         temp_ctx.parent = Some(Rc::new(ctx));
-        
+
         // Variable lookup should find parent value
-        assert_eq!(temp_ctx.get_variable("x"), Some(1.0),
-            "Should find variable in parent scope");
-        
+        assert_eq!(
+            temp_ctx.get_variable("x"),
+            Some(1.0),
+            "Should find variable in parent scope"
+        );
+
         // Add variable to temporary scope
         temp_ctx.set_parameter("x", 2.0);
-        
+
         // Should now find local value
-        assert_eq!(temp_ctx.get_variable("x"), Some(2.0),
-            "Should find shadowed variable in local scope");
-            
+        assert_eq!(
+            temp_ctx.get_variable("x"),
+            Some(2.0),
+            "Should find shadowed variable in local scope"
+        );
+
         println!("Temporary scope variable lookup:");
-        println!("temp x = {:?}", temp_ctx.get_variable("x")); 
+        println!("temp x = {:?}", temp_ctx.get_variable("x"));
         println!("temp variables: {:?}", temp_ctx.variables);
-        println!("parent variables: {:?}",
-            temp_ctx.parent.as_ref().map(|p| &p.variables));
+        println!(
+            "parent variables: {:?}",
+            temp_ctx.parent.as_ref().map(|p| &p.variables)
+        );
     }
 
     #[test]
