@@ -71,6 +71,30 @@ if enable_f64
   )
 endif
 
+# C test program for native function registration - F32 version
+test_native_function_f32_exe = executable(
+  'test_native_function_f32',
+  ['test_native_function.c', 'qemu_harness/vector_table_m7.c'],
+  include_directories: include_directories('.', '../include'),
+  dependencies: [qemu_harness_dep, exp_rs_dep],
+  link_args: common_link_args,
+  c_args: ['-DDEF_USE_F32'],
+  install: false,
+)
+
+# C test program for native function registration - F64 version (built when F64 is enabled)
+if enable_f64
+  test_native_function_f64_exe = executable(
+    'test_native_function_f64',
+    ['test_native_function.c', 'qemu_harness/vector_table_m7.c'],
+    include_directories: include_directories('.', '../include'),
+    dependencies: [qemu_harness_dep, exp_rs_dep],
+    link_args: common_link_args,
+    c_args: ['-DDEF_USE_F64', '-DARM_MATH_DOUBLE'],
+    install: false,
+  )
+endif
+
 # C test for benchmark - F32 version
 test_benchmark_f32_exe = executable(
   'test_benchmark_f32',
@@ -154,6 +178,26 @@ if enable_f64
     'test_eval_context_f64',
     find_program('qemu-system-arm'),
     args: common_test_args + ['-kernel', test_eval_context_f64_exe.full_path()],
+    is_parallel: false,
+    timeout: 5,
+  )
+endif
+
+# Add a test target for the native function registration test - F32 version
+test(
+  'test_native_function_f32',
+  find_program('qemu-system-arm'),
+  args: common_test_args + ['-kernel', test_native_function_f32_exe.full_path()],
+  is_parallel: false,
+  timeout: 5,
+)
+
+# Add a test target for the native function registration test - F64 version (when enabled)
+if enable_f64
+  test(
+    'test_native_function_f64',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_native_function_f64_exe.full_path()],
     is_parallel: false,
     timeout: 5,
   )

@@ -498,6 +498,76 @@ pub extern "C" fn exp_rs_context_register_expression_function(
     }
 }
 
+/// Register a native function with the given context.
+///
+/// This function registers a Rust function to be invoked from C expressions.
+/// The native function will be available for use in expressions evaluated with this context.
+///
+/// # Parameters
+///
+/// * `ctx` - Pointer to the context, as returned by exp_rs_context_new
+/// * `name` - The name of the function to register
+/// * `arity` - Number of parameters the function accepts
+/// * `func_ptr` - Function pointer to the implementation (C callback)
+///
+/// # Returns
+///
+/// An EvalResult structure with:
+/// - status=0 on success
+/// - non-zero status with an error message on failure
+///
+/// When status is non-zero, the error message must be freed with exp_rs_free_error.
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_context_register_native_function(
+    ctx: *mut EvalContextOpaque,
+    name: *const c_char,
+    arity: usize,
+    func_ptr: unsafe extern "C" fn(*const Real, usize) -> Real,
+) -> EvalResult {
+    if ctx.is_null() || name.is_null() {
+        let msg = CString::new("Null pointer provided for required parameter").unwrap();
+        let ptr = msg.into_raw();
+        return EvalResult {
+            status: 1,
+            value: Real::NAN,
+            error: ptr,
+        };
+    }
+    
+    let ctx = unsafe { &mut *(ctx as *mut EvalContext) };
+
+    let name_cstr = unsafe { CStr::from_ptr(name) };
+    let name_str = match name_cstr.to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = CString::new(format!("Invalid UTF-8 in function name: {}", e)).unwrap();
+            let ptr = msg.into_raw();
+            return EvalResult {
+                status: 2,
+                value: Real::NAN,
+                error: ptr,
+            };
+        }
+    };
+
+    // Create a Rust closure that calls the C function
+    let implementation = move |args: &[Real]| -> Real {
+        unsafe {
+            // Call the C function with a pointer to the arguments
+            func_ptr(args.as_ptr(), args.len())
+        }
+    };
+
+    // Register the native function with the given name and arity
+    ctx.register_native_function(name_str, arity, implementation);
+
+    EvalResult {
+        status: 0,
+        value: 0.0,
+        error: ptr::null(),
+    }
+}
+
 /// Set a parameter value in the context.
 ///
 /// This function adds or updates a variable in the evaluation context that can be

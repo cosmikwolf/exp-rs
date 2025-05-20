@@ -477,9 +477,10 @@ impl<'a> EvalContext<'a> {
             self.register_native_function("comma", 2, |args| crate::functions::comma(args[0], args[1]));
         }
         
-        #[cfg(not(feature = "libm"))]
+        #[cfg(all(not(feature = "libm"), test))]
         {
-            // Use standard library implementations when libm is not available
+            // Use standard library implementations only when in test mode and not using libm
+            // This ensures these methods are only used when std is available
             self.register_native_function("abs", 1, |args| args[0].abs());
             self.register_native_function("acos", 1, |args| args[0].acos());
             self.register_native_function("asin", 1, |args| args[0].asin());
@@ -510,9 +511,6 @@ impl<'a> EvalContext<'a> {
             self.register_native_function("sqrt", 1, |args| args[0].sqrt());
             self.register_native_function("tan", 1, |args| args[0].tan());
             self.register_native_function("tanh", 1, |args| args[0].tanh());
-            self.register_native_function("sign", 1, |args| {
-                if args[0] > 0.0 { 1.0 } else if args[0] < 0.0 { -1.0 } else { 0.0 }
-            });
             
             // Basic operators as functions
             self.register_native_function("+", 2, |args| args[0] + args[1]);
@@ -520,16 +518,43 @@ impl<'a> EvalContext<'a> {
             self.register_native_function("*", 2, |args| args[0] * args[1]);
             self.register_native_function("/", 2, |args| args[0] / args[1]);
             self.register_native_function("%", 2, |args| args[0] % args[1]);
-            
-            // These are function aliases for the operators
-            self.register_native_function("add", 2, |args| args[0] + args[1]);
-            self.register_native_function("sub", 2, |args| args[0] - args[1]);
-            self.register_native_function("mul", 2, |args| args[0] * args[1]);
-            self.register_native_function("div", 2, |args| args[0] / args[1]);
-            self.register_native_function("fmod", 2, |args| args[0] % args[1]);
-            self.register_native_function("neg", 1, |args| -args[0]);
-            self.register_native_function("comma", 2, |args| args[1]);
         }
+        
+        #[cfg(all(not(feature = "libm"), not(test)))]
+        {
+            // In non-test no_std mode without libm, don't register any default functions
+            // The user must register their own implementations
+            // Only register constants that don't require external function calls
+            #[cfg(feature = "f32")]
+            self.register_native_function("e", 0, |_| core::f32::consts::E);
+            #[cfg(not(feature = "f32"))]
+            self.register_native_function("e", 0, |_| core::f64::consts::E);
+            
+            #[cfg(feature = "f32")]
+            self.register_native_function("pi", 0, |_| core::f32::consts::PI);
+            #[cfg(not(feature = "f32"))]
+            self.register_native_function("pi", 0, |_| core::f64::consts::PI);
+            
+            // We can also register abs since it's available in core
+            self.register_native_function("abs", 1, |args| args[0].abs());
+            
+            // Basic operators as functions
+            self.register_native_function("+", 2, |args| args[0] + args[1]);
+            self.register_native_function("-", 2, |args| args[0] - args[1]);
+            self.register_native_function("*", 2, |args| args[0] * args[1]);
+            self.register_native_function("/", 2, |args| args[0] / args[1]);
+            self.register_native_function("%", 2, |args| args[0] % args[1]);
+        }
+        
+        // Register the sign function for all configurations
+        self.register_native_function("sign", 1, |args| {
+            if args[0] > 0.0 { 1.0 } else if args[0] < 0.0 { -1.0 } else { 0.0 }
+        });
+        
+        // Register functions common to both std and no_std configurations
+        self.register_native_function("fmod", 2, |args| args[0] % args[1]);
+        self.register_native_function("neg", 1, |args| -args[0]);
+        self.register_native_function("comma", 2, |args| args[1]);
         // Add more as needed
     }
 

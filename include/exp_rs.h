@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define USE_F32
+#define USE_F64
 
 #if defined(USE_F32)
 /**
@@ -179,6 +179,32 @@ struct EvalResult exp_rs_context_register_expression_function(struct EvalContext
                                                               const char *const *params,
                                                               uintptr_t param_count,
                                                               const char *expression);
+
+/**
+ * Register a native function with the given context.
+ *
+ * This function registers a Rust function to be invoked from C expressions.
+ * The native function will be available for use in expressions evaluated with this context.
+ *
+ * # Parameters
+ *
+ * * `ctx` - Pointer to the context, as returned by exp_rs_context_new
+ * * `name` - The name of the function to register
+ * * `arity` - Number of parameters the function accepts
+ * * `func_ptr` - Function pointer to the implementation (C callback)
+ *
+ * # Returns
+ *
+ * An EvalResult structure with:
+ * - status=0 on success
+ * - non-zero status with an error message on failure
+ *
+ * When status is non-zero, the error message must be freed with exp_rs_free_error.
+ */
+struct EvalResult exp_rs_context_register_native_function(struct EvalContextOpaque *ctx,
+                                                          const char *name,
+                                                          uintptr_t arity,
+                                                          Real (*func_ptr)(const Real*, uintptr_t));
 
 /**
  * Set a parameter value in the context.
