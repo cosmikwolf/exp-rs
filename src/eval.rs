@@ -487,6 +487,7 @@ fn eval_function<'a>(
                 arg_vals[0] = eval_ast_inner(&args[0], ctx.clone(), func_cache, var_cache)?;
                 arg_vals[1] = eval_ast_inner(&args[1], ctx.clone(), func_cache, var_cache)?;
                 match name {
+                    // Basic arithmetic operators
                     "+" => return Ok(arg_vals[0] + arg_vals[1]),
                     "-" => return Ok(arg_vals[0] - arg_vals[1]),
                     "*" => return Ok(arg_vals[0] * arg_vals[1]),
@@ -505,6 +506,15 @@ fn eval_function<'a>(
                     "min" => return Ok(arg_vals[0].min(arg_vals[1])),
                     "%" => return Ok(arg_vals[0] % arg_vals[1]),
                     "," | "comma" => return Ok(arg_vals[1]),
+                    
+                    // Comparison operators - return 1.0 for true and 0.0 for false
+                    "<" => return Ok(if arg_vals[0] < arg_vals[1] { 1.0 } else { 0.0 }),
+                    ">" => return Ok(if arg_vals[0] > arg_vals[1] { 1.0 } else { 0.0 }),
+                    "<=" => return Ok(if arg_vals[0] <= arg_vals[1] { 1.0 } else { 0.0 }),
+                    ">=" => return Ok(if arg_vals[0] >= arg_vals[1] { 1.0 } else { 0.0 }),
+                    "==" => return Ok(if arg_vals[0] == arg_vals[1] { 1.0 } else { 0.0 }),
+                    "!=" | "<>" => return Ok(if arg_vals[0] != arg_vals[1] { 1.0 } else { 0.0 }),
+                    
                     "atan2" => {
                         #[cfg(feature = "f32")]
                         {

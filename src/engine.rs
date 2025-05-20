@@ -718,20 +718,15 @@ pub fn parse_expression_with_context(
     reserved_vars: Option<&[String]>,
     context_vars: Option<&[String]>,
 ) -> Result<AstExpr, ExprError> {
-    // Check for unsupported operators like comparisons and ternary
-    if input.contains("<=")
-        || input.contains(">=")
-        || input.contains("==")
-        || input.contains("!=")
-        || input.contains("<")
-        || input.contains(">")
-        || input.contains("?")
+    // Check for unsupported ternary operators
+    if input.contains("?")
         || input.contains(":")
     {
         return Err(ExprError::Syntax(
-            "Comparison operators (<, >, <=, >=, ==, !=) and ternary expressions (? :) are not supported".to_string()
+            "Ternary expressions (? :) are not supported".to_string()
         ));
     }
+    // Comparison operators (<, >, <=, >=, ==, !=) are now supported
 
     // The lexer now properly handles decimal numbers starting with a dot
     let mut parser =

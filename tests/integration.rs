@@ -223,13 +223,16 @@ fn test_attribute_expressions() {
         crate::constants::TEST_PRECISION
     );
 
-    // Check if point is inside circle
+    // Check if point is inside circle - now we support comparison operators!
     let inside_expr =
         "sqrt((point.x - circle.center_x)^2 + (point.y - circle.center_y)^2) < circle.radius";
-    // We can't directly evaluate boolean expressions, so we'll use a numeric comparison
-    let err = interp(inside_expr, Some(std::rc::Rc::new(ctx.clone()))).unwrap_err();
-    println!("Error for inside_expr: {}", err);
-    assert!(err.to_string().contains("Unknown") || err.to_string().contains("<"));
+    // Comparison operators now work and return 0.0 for false, 1.0 for true
+    let result = interp(inside_expr, Some(std::rc::Rc::new(ctx.clone()))).unwrap();
+    println!("Result of inside_expr: {}", result);
+    // The point (3,4) with circle center (5,5) and radius 10
+    // Distance = √((3-5)² + (4-5)²) = √5 ≈ 2.24
+    // 2.24 < 10 should be true, so we expect 1.0
+    assert_eq!(result, 1.0, "Point should be inside circle");
 }
 
 /// Level 5: Custom functions

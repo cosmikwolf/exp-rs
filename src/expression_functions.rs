@@ -202,7 +202,7 @@ mod tests {
         );
         assert!(
             result1.is_err(),
-            "Should reject expressions with comparison operators and ternary syntax"
+            "Should reject expressions with ternary syntax"
         );
 
         // Register a non-recursive version instead
@@ -213,7 +213,7 @@ mod tests {
         );
         assert!(
             result2.is_err(),
-            "Should reject expressions with comparison operators and ternary syntax"
+            "Should reject expressions with ternary syntax"
         );
 
         // Use a simpler approach with a limited factorial implementation
@@ -224,18 +224,18 @@ mod tests {
         );
         assert!(
             result3.is_err(),
-            "Should reject expressions with comparison operators and ternary syntax"
+            "Should reject expressions with ternary syntax"
         );
 
-        // Finally, use a non-recursive approach that works with our parser
+        // Now let's use a comparison operator without ternary (this should work)
         let result4 = ctx.register_expression_function(
-            "factorial",
+            "is_big",
             &["n"],
-            "n * (n - 1) * (n - 2) * (n - 3) * (n - 4) * (n <= 5 ? 1 : 120)",
+            "n > 100",
         );
         assert!(
-            result4.is_err(),
-            "Should reject expressions with comparison operators"
+            result4.is_ok(),
+            "Should accept expressions with comparison operators"
         );
 
         // Register a simple non-recursive factorial implementation that works with our parser
@@ -313,18 +313,18 @@ mod tests {
             ctx.register_expression_function("better_divide", &["x", "y"], "y == 0 ? 0 : x / y");
         assert!(
             result3.is_err(),
-            "Should reject expressions with comparison operators and ternary syntax"
+            "Should reject expressions with ternary syntax"
         );
 
-        // Use a workaround with a very small denominator instead
+        // Use comparison operators (which are now supported)
         let result4 = ctx.register_expression_function(
             "better_divide",
             &["x", "y"],
             "x / (y + (y == 0) * 1e-10)",
         );
         assert!(
-            result4.is_err(),
-            "Should reject expressions with comparison operators"
+            result4.is_ok(),
+            "Should accept expressions with comparison operators"
         );
 
         // Register the max function as a native function since it's not available as an expression function
