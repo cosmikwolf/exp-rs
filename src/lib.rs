@@ -399,7 +399,7 @@ pub use ffi::*;
 
 // Re-export recursion depth tracking functions for testing
 #[cfg(test)]
-pub use eval::{get_recursion_depth, reset_recursion_depth, set_max_recursion_depth};
+pub use eval::recursion::{get_recursion_depth, reset_recursion_depth, set_max_recursion_depth};
 
 // Compile-time check: only one of f32 or f64 can be enabled
 #[cfg(all(feature = "f32", feature = "f64"))]

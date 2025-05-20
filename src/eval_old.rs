@@ -1,3 +1,9 @@
+// NOTE: This file is being refactored into a module with multiple files:
+// - recursion.rs: Recursion depth tracking
+// - evaluator.rs: Core evaluation logic
+// - ast.rs: AST-related functionality
+// This file will soon be deprecated and replaced by the new module structure.
+
 extern crate alloc;
 use crate::Real;
 #[cfg(not(test))]
