@@ -102,10 +102,33 @@ From lowest to highest precedence:
 
 - Arithmetic: `+`, `-`, `*`, `/`, `%`, `^`, `**`
 - Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`, `<>` (native functions only)
-- Logical: `&&`, `||`
+- Logical: `&&`, `||` (with short-circuit evaluation)
 - Bitwise: `&`, `|`, `~`, `<<`, `>>`, `<<<`, `>>>`
 - Comma/semicolon: `,`, `;` (list separator, returns last value)
 - Unary: `-`, `+`, `~` (bitwise not)
+
+### Logical Operators and Short-Circuit Evaluation
+
+The logical operators `&&` (AND) and `||` (OR) feature short-circuit evaluation, meaning they only evaluate the right operand when necessary:
+
+- For `&&` (AND): If the left operand evaluates to false (0.0), the right operand is skipped and the result is false (0.0).
+- For `||` (OR): If the left operand evaluates to true (non-zero), the right operand is skipped and the result is true (1.0).
+
+This behavior provides several benefits:
+1. **Performance**: Avoids unnecessary calculations
+2. **Safety**: Can prevent potential errors in the right operand (e.g., division by zero)
+3. **Control flow**: Allows conditional execution patterns
+
+Example:
+```rust
+// If x is zero, the division is never evaluated (avoiding division by zero)
+interp("x == 0 || 10 / x > 5", ctx);
+
+// factorial(x) is only called if x > 0
+interp("x > 0 && factorial(x) > 100", ctx);
+```
+
+Short-circuit logical operators are fully integrated with the recursion detection system to prevent stack overflows in complex expressions with recursive functions.
 
 ### Limitations
 

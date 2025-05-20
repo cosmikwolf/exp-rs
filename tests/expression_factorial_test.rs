@@ -53,12 +53,12 @@ fn test_expression_factorial_depth() {
         if n == 0 || n == 1 { 1.0 } else { 0.0 }
     });
 
-    // Register the factorial function with a stricter base case check
-    // Now that comparison operators work, we need to be careful to avoid infinite recursion
+    // Register the factorial function with logical operators to control recursion
+    // Using the logical AND and OR for conditional behavior
     ctx.register_expression_function(
         "factorial",
         &["n"],
-        "log_depth(n) * (strict_base_case(n) * 1 + (1 - strict_base_case(n)) * (n * (n > 0) * factorial(n-1)))",
+        "log_depth(n) * ((strict_base_case(n) == 1) * 1.0 + (strict_base_case(n) != 1) * ((n > 0) * n * factorial(n-1)))",
     )
     .unwrap();
 
@@ -88,7 +88,7 @@ fn test_expression_factorial_depth() {
     ctx.register_expression_function(
         "tracked_factorial",
         &["n"],
-        "track_depth(n) * (strict_base_case(n) * 1 + (1 - strict_base_case(n)) * (n * (n > 0) * tracked_factorial(n-1)))",
+        "track_depth(n) * ((strict_base_case(n) == 1) * 1.0 + (strict_base_case(n) != 1) * ((n > 0) * n * tracked_factorial(n-1)))",
     )
     .unwrap();
 

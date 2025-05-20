@@ -627,11 +627,16 @@ where
         func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
         var_cache: &mut BTreeMap<String, Real>,
     ) -> Result<Real, ExprError> {
-        // Only track recursion depth for function calls, particularly those that
-        // might call themselves recursively
-        let should_track = matches!(ast, AstExpr::Function { .. });
+        // Track recursion depth for function calls and logical operations
+        // Track recursion depth for function calls and logical operations.
+        // We include LogicalOp in recursion tracking for two main reasons:
+        // 1. Logical operations can contain recursive function calls in either operand
+        // 2. Short-circuit evaluation might involve complex logic that could lead to stack overflows
+        let should_track = matches!(ast, AstExpr::Function { .. } | AstExpr::LogicalOp { .. });
 
-        // Check and increment recursion depth only if needed
+        // Check and increment recursion depth only if needed.
+        // This protects against infinite recursion in expression functions and
+        // complex logical operations that might cause stack overflows.
         if should_track {
             check_and_increment_recursion_depth()?;
         }
@@ -779,6 +784,45 @@ where
                         base: base.to_string(),
                         attr: attr.to_string(),
                     })
+                }
+            }
+            AstExpr::LogicalOp { op, left, right } => {
+                // Implement short-circuit evaluation for logical operators in custom function context
+                // This is particularly important when logical operators are used inside user-defined functions,
+                // as they may involve recursive calls that need to be properly tracked
+                match op {
+                    crate::types::LogicalOperator::And => {
+                        // Evaluate left side first
+                        let left_val = eval_custom_function_ast(left, func_ctx, global_ctx, func_cache, var_cache)?;
+                        
+                        // Short-circuit if left is false (0.0)
+                        // This helps prevent unnecessary recursion and potential stack overflow
+                        if left_val == 0.0 {
+                            Ok(0.0)
+                        } else {
+                            // Only evaluate right side if left is true (non-zero)
+                            let right_val = eval_custom_function_ast(right, func_ctx, global_ctx, func_cache, var_cache)?;
+                            // Result is true (1.0) only if both are true (non-zero)
+                            // We normalize the result to 1.0 for consistency
+                            Ok(if right_val != 0.0 { 1.0 } else { 0.0 })
+                        }
+                    },
+                    crate::types::LogicalOperator::Or => {
+                        // Evaluate left side first
+                        let left_val = eval_custom_function_ast(left, func_ctx, global_ctx, func_cache, var_cache)?;
+                        
+                        // Short-circuit if left is true (non-zero)
+                        // This helps prevent unnecessary recursion and potential stack overflow
+                        if left_val != 0.0 {
+                            Ok(1.0)
+                        } else {
+                            // Only evaluate right side if left is false (zero)
+                            let right_val = eval_custom_function_ast(right, func_ctx, global_ctx, func_cache, var_cache)?;
+                            // Result is true (1.0) if either is true (non-zero)
+                            // We normalize the result to 1.0 for consistency
+                            Ok(if right_val != 0.0 { 1.0 } else { 0.0 })
+                        }
+                    }
                 }
             }
         };
@@ -1025,10 +1069,17 @@ fn eval_ast_inner<'a>(
     var_cache: &mut BTreeMap<String, Real>,
 ) -> Result<Real, ExprError> {
     // We'll be more selective about when to increment the recursion counter
-    // Only increment for function calls, as these are the ones that can cause stack overflow
-    let should_track = matches!(ast, AstExpr::Function { .. });
+    // Only increment for function calls and logical operations, as these are the ones that can cause stack overflow.
+    // 
+    // LogicalOp nodes are tracked because:
+    // 1. They may contain recursive function calls in their operands
+    // 2. Short-circuit evaluation can bypass potential infinite recursion in the right operand
+    // 3. Complex logical expressions might cause stack overflows even with short-circuit behavior
+    let should_track = matches!(ast, AstExpr::Function { .. } | AstExpr::LogicalOp { .. });
 
-    // Check and increment recursion depth only for function calls
+    // Check and increment recursion depth only for function calls and logical operations.
+    // This prevents stack overflows from infinite recursion while still allowing
+    // legitimate use of recursive functions and complex logical expressions.
     if should_track {
         check_and_increment_recursion_depth()?;
     }
@@ -1044,6 +1095,52 @@ fn eval_ast_inner<'a>(
             eval_array(name, index, ctx.clone(), func_cache, var_cache)
         }
         AstExpr::Attribute { base, attr } => eval_attribute(base, attr, ctx),
+        AstExpr::LogicalOp { op, left, right } => {
+            // Implement short-circuit evaluation for logical operators
+            // Short-circuit evaluation provides two key benefits:
+            // 1. Performance - avoid unnecessary computation
+            // 2. Error prevention - potentially skip evaluating expressions that would cause errors
+            match op {
+                crate::types::LogicalOperator::And => {
+                    // Evaluate left side first
+                    let left_val = eval_ast_inner(left, ctx.clone(), func_cache, var_cache)?;
+                    
+                    // Short-circuit if left is false (0.0)
+                    // This is important for both performance and error prevention:
+                    // - If left is false, the overall result must be false regardless of right
+                    // - Any potential errors in the right operand are completely avoided
+                    if left_val == 0.0 {
+                        Ok(0.0)
+                    } else {
+                        // Only evaluate right side if left is true (non-zero)
+                        // Note: Errors in the right side are still propagated upward
+                        let right_val = eval_ast_inner(right, ctx, func_cache, var_cache)?;
+                        // Result is true (1.0) only if both are true (non-zero)
+                        // We normalize the result to 1.0 for consistency
+                        Ok(if right_val != 0.0 { 1.0 } else { 0.0 })
+                    }
+                },
+                crate::types::LogicalOperator::Or => {
+                    // Evaluate left side first
+                    let left_val = eval_ast_inner(left, ctx.clone(), func_cache, var_cache)?;
+                    
+                    // Short-circuit if left is true (non-zero)
+                    // This is important for both performance and error prevention:
+                    // - If left is true, the overall result must be true regardless of right
+                    // - Any potential errors in the right operand are completely avoided
+                    if left_val != 0.0 {
+                        Ok(1.0)
+                    } else {
+                        // Only evaluate right side if left is false (zero)
+                        // Note: Errors in the right side are still propagated upward
+                        let right_val = eval_ast_inner(right, ctx, func_cache, var_cache)?;
+                        // Result is true (1.0) if either is true (non-zero)
+                        // We normalize the result to 1.0 for consistency
+                        Ok(if right_val != 0.0 { 1.0 } else { 0.0 })
+                    }
+                }
+            }
+        },
     };
 
     // Only decrement if we incremented

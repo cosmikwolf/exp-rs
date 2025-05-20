@@ -141,8 +141,8 @@ impl<'a> PrattParser<'a> {
     fn get_binding_power(op: &str) -> Option<BindingPower> {
         match op {
             "," | ";" => Some(BindingPower::left_assoc(1)), // List separator (comma or semicolon)
-            "||" => Some(BindingPower::left_assoc(2)),      // Logical OR
-            "&&" => Some(BindingPower::left_assoc(3)),      // Logical AND
+            "||" => Some(BindingPower::left_assoc(2)),      // Logical OR (lowest precedence)
+            "&&" => Some(BindingPower::left_assoc(3)),      // Logical AND (higher than OR)
             "|" => Some(BindingPower::left_assoc(4)),       // Bitwise OR
             "&" => Some(BindingPower::left_assoc(6)),       // Bitwise AND
             "==" | "!=" | "<" | ">" | "<=" | ">=" | "<>" => Some(BindingPower::left_assoc(7)), // Comparison
@@ -513,7 +513,34 @@ impl<'a> PrattParser<'a> {
             // Make a copy of the operator for later use
             let op = String::from(op_text);
 
-            // Get binding power for the operator
+            // Special case for logical operators
+            if op == "&&" || op == "||" {
+                // Get binding power - these should already be defined in get_binding_power
+                let Some(bp) = Self::get_binding_power(&op) else {
+                    break;
+                };
+
+                // Check minimum binding power
+                if bp.left < min_bp {
+                    break;
+                }
+
+                // Consume the operator
+                self.next();
+
+                // Parse the right side with appropriate binding power
+                let rhs = self.parse_expr_unified(bp.right, allow_comma)?;
+
+                // Create a LogicalOp node instead of a Function node
+                lhs = AstExpr::LogicalOp { 
+                    op: if op == "&&" { crate::types::LogicalOperator::And } else { crate::types::LogicalOperator::Or },
+                    left: Box::new(lhs),
+                    right: Box::new(rhs)
+                };
+                continue;
+            }
+
+            // Get binding power for regular (non-logical) operator
             let Some(bp) = Self::get_binding_power(&op) else {
                 break;
             };
@@ -900,6 +927,19 @@ mod tests {
             }
             AstExpr::Attribute { base, attr } => {
                 format!("{}Attribute({}, {})", spaces, base, attr)
+            }
+            AstExpr::LogicalOp { op, left, right } => {
+                let op_str = match op {
+                    crate::types::LogicalOperator::And => "&&",
+                    crate::types::LogicalOperator::Or => "||",
+                };
+                format!(
+                    "{}LogicalOp({}, \n{},\n{})",
+                    spaces,
+                    op_str,
+                    debug_ast(left, indent + 2),
+                    debug_ast(right, indent + 2)
+                )
             }
         }
     }

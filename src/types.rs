@@ -67,6 +67,39 @@ pub enum AstExpr {
         /// The attribute name
         attr: String 
     },
+    
+    /// A logical operation with short-circuit evaluation.
+    ///
+    /// Represents logical AND (`&&`) and OR (`||`) operations with short-circuit behavior.
+    /// Unlike function-based operators, these operators have special evaluation semantics
+    /// where the right operand may not be evaluated based on the value of the left operand.
+    ///
+    /// # Examples
+    ///
+    /// - `a && b`: Evaluates `a`, then evaluates `b` only if `a` is non-zero (true)
+    /// - `c || d`: Evaluates `c`, then evaluates `d` only if `c` is zero (false)
+    /// - `x > 0 && y < 10`: Checks if both conditions are true, with short-circuit
+    /// - `flag || calculate_value()`: Skips calculation if flag is true
+    ///
+    /// # Boolean Logic
+    ///
+    /// The engine represents boolean values as floating-point numbers:
+    /// - `0.0` is considered `false`
+    /// - Any non-zero value is considered `true`, typically `1.0` is used
+    ///
+    /// # Operator Precedence
+    ///
+    /// `&&` has higher precedence than `||`, consistent with most programming languages:
+    /// - `a || b && c` is interpreted as `a || (b && c)`
+    /// - Use parentheses to override default precedence: `(a || b) && c`
+    LogicalOp {
+        /// The logical operator (AND or OR)
+        op: LogicalOperator,
+        /// The left operand (always evaluated)
+        left: Box<AstExpr>,
+        /// The right operand (conditionally evaluated based on left value)
+        right: Box<AstExpr>
+    },
 }
 
 impl AstExpr {
@@ -218,6 +251,9 @@ pub enum ExprKind {
     
     /// An object attribute access.
     Attribute,
+    
+    /// A logical operation (AND/OR).
+    LogicalOp,
 }
 
 /// Classifies the kind of token produced during lexical analysis.
@@ -261,6 +297,65 @@ pub enum TokenKind {
     Next: Update and simplify the test suite to use the new AST parser and evaluator.
 */
 
+
+/// Defines the type of logical operation.
+///
+/// Used by the `LogicalOp` variant of `AstExpr` to specify which logical operation
+/// should be performed with short-circuit evaluation semantics.
+///
+/// # Short-Circuit Evaluation
+///
+/// Short-circuit evaluation is an optimization technique where the second operand
+/// of a logical operation is evaluated only when necessary:
+///
+/// - For `&&` (AND): If the left operand is false, the result is false regardless
+///   of the right operand, so the right operand is not evaluated.
+///
+/// - For `||` (OR): If the left operand is true, the result is true regardless
+///   of the right operand, so the right operand is not evaluated.
+///
+/// This behavior is particularly useful for:
+///
+/// 1. Performance optimization - avoid unnecessary calculation
+/// 2. Conditional execution - control evaluation of expressions
+/// 3. Safe guards - prevent errors (e.g., division by zero)
+///
+/// # Boolean Representation
+///
+/// In this expression engine, boolean values are represented as floating-point numbers:
+///
+/// - `0.0` represents `false`
+/// - Any non-zero value (typically `1.0`) represents `true`
+#[derive(Clone, Debug, PartialEq)]
+pub enum LogicalOperator {
+    /// Logical AND (&&) - evaluates to true only if both operands are true.
+    /// Short-circuits if the left operand is false.
+    ///
+    /// Examples:
+    /// - `1 && 1` evaluates to `1.0` (true)
+    /// - `1 && 0` evaluates to `0.0` (false)
+    /// - `0 && expr` evaluates to `0.0` without evaluating `expr`
+    And,
+
+    /// Logical OR (||) - evaluates to true if either operand is true.
+    /// Short-circuits if the left operand is true.
+    ///
+    /// Examples:
+    /// - `1 || 0` evaluates to `1.0` (true)
+    /// - `0 || 0` evaluates to `0.0` (false)
+    /// - `1 || expr` evaluates to `1.0` without evaluating `expr`
+    Or,
+}
+
+/// Implements Display for LogicalOperator to use in error messages.
+impl core::fmt::Display for LogicalOperator {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            LogicalOperator::And => write!(f, "&&"),
+            LogicalOperator::Or => write!(f, "||"),
+        }
+    }
+}
 
 /// Represents a native Rust function that can be registered with the evaluation context.
 /// 

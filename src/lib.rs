@@ -41,6 +41,7 @@
 //! exp-rs supports a superset of the original TinyExpr grammar, closely matching the tinyexpr++ grammar, including:
 //!
 //! - Multi-character operators: `&&`, `||`, `==`, `!=`, `<=`, `>=`, `<<`, `>>`, `<<<`, `>>>`, `**`, `<>`
+//! - Logical operators (`&&`, `||`) with short-circuit evaluation
 //! - Logical, comparison, bitwise, and exponentiation operators with correct precedence and associativity
 //! - List expressions and both comma and semicolon as separators
 //! - Function call syntax supporting both parentheses and juxtaposition
