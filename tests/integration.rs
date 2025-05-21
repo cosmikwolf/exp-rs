@@ -17,6 +17,12 @@ use exp_rs::Real;
 
 use alloc::rc::Rc;
 
+// Use the shared test helper functions
+mod test_helpers;
+use test_helpers::{create_context, create_context_rc};
+
+// The helper function implementation is now in test_helpers.rs
+
 /// Level 1: Basic expression evaluation
 #[test]
 fn test_basic_expression_evaluation() {
@@ -26,31 +32,73 @@ fn test_basic_expression_evaluation() {
     assert_eq!(interp("2 * (3 + 4)", None).unwrap(), 14.0);
 
     // Built-in functions
-    #[cfg(feature = "f32")]
-    assert_approx_eq!(
-        interp("sin(0.5)", None).unwrap(),
-        exp_rs::functions::sin(0.5, 0.0),
-        1e-6 as Real // Cast epsilon
-    );
-    #[cfg(not(feature = "f32"))]
-    assert_approx_eq!(
-        interp("sin(0.5)", None).unwrap(),
-        exp_rs::functions::sin(0.5, 0.0),
-        1e-10 as Real // Cast epsilon
-    );
+    #[cfg(feature = "libm")]
+    {
+        #[cfg(feature = "f32")]
+        assert_approx_eq!(
+            interp("sin(0.5)", None).unwrap(),
+            exp_rs::functions::sin(0.5, 0.0),
+            1e-6 as Real // Cast epsilon
+        );
+        #[cfg(not(feature = "f32"))]
+        assert_approx_eq!(
+            interp("sin(0.5)", None).unwrap(),
+            exp_rs::functions::sin(0.5, 0.0),
+            1e-10 as Real // Cast epsilon
+        );
+    }
+    #[cfg(not(feature = "libm"))]
+    {
+        // Create a fresh context for this test
+        let ctx = create_context_rc();
 
-    #[cfg(feature = "f32")]
-    assert_approx_eq!(
-        interp("cos(0.5)", None).unwrap(),
-        exp_rs::functions::cos(0.5, 0.0),
-        1e-6 as Real // Cast epsilon
-    );
-    #[cfg(not(feature = "f32"))]
-    assert_approx_eq!(
-        interp("cos(0.5)", None).unwrap(),
-        exp_rs::functions::cos(0.5, 0.0),
-        1e-10 as Real // Cast epsilon
-    );
+        #[cfg(feature = "f32")]
+        assert_approx_eq!(
+            interp("sin(0.5)", Some(ctx.clone())).unwrap(),
+            0.5_f32.sin() as Real,
+            1e-6 as Real // Cast epsilon
+        );
+        #[cfg(not(feature = "f32"))]
+        assert_approx_eq!(
+            interp("sin(0.5)", Some(ctx.clone())).unwrap(),
+            0.5_f64.sin() as Real,
+            1e-10 as Real // Cast epsilon
+        );
+    }
+
+    #[cfg(feature = "libm")]
+    {
+        #[cfg(feature = "f32")]
+        assert_approx_eq!(
+            interp("cos(0.5)", None).unwrap(),
+            exp_rs::functions::cos(0.5, 0.0),
+            1e-6 as Real // Cast epsilon
+        );
+        #[cfg(not(feature = "f32"))]
+        assert_approx_eq!(
+            interp("cos(0.5)", None).unwrap(),
+            exp_rs::functions::cos(0.5, 0.0),
+            1e-10 as Real // Cast epsilon
+        );
+    }
+    #[cfg(not(feature = "libm"))]
+    {
+        // Create a fresh context for this test
+        let ctx = create_context_rc();
+
+        #[cfg(feature = "f32")]
+        assert_approx_eq!(
+            interp("cos(0.5)", Some(ctx.clone())).unwrap(),
+            0.5_f32.cos() as Real,
+            1e-6 as Real // Cast epsilon
+        );
+        #[cfg(not(feature = "f32"))]
+        assert_approx_eq!(
+            interp("cos(0.5)", Some(ctx.clone())).unwrap(),
+            0.5_f64.cos() as Real,
+            1e-10 as Real // Cast epsilon
+        );
+    }
 
     // Constants
     assert_approx_eq!(
@@ -65,23 +113,53 @@ fn test_basic_expression_evaluation() {
     );
 
     // Nested functions
-    #[cfg(feature = "f32")]
-    assert_approx_eq!(
-        interp("sin(cos(0.5))", None).unwrap(),
-        exp_rs::functions::sin(exp_rs::functions::cos(0.5, 0.0), 0.0),
-        1e-6 as Real // Cast epsilon
-    );
-    #[cfg(not(feature = "f32"))]
-    assert_approx_eq!(
-        interp("sin(cos(0.5))", None).unwrap(),
-        exp_rs::functions::sin(exp_rs::functions::cos(0.5, 0.0), 0.0),
-        1e-10 as Real // Cast epsilon
-    );
+    #[cfg(feature = "libm")]
+    {
+        #[cfg(feature = "f32")]
+        assert_approx_eq!(
+            interp("sin(cos(0.5))", None).unwrap(),
+            exp_rs::functions::sin(exp_rs::functions::cos(0.5, 0.0), 0.0),
+            1e-6 as Real // Cast epsilon
+        );
+        #[cfg(not(feature = "f32"))]
+        assert_approx_eq!(
+            interp("sin(cos(0.5))", None).unwrap(),
+            exp_rs::functions::sin(exp_rs::functions::cos(0.5, 0.0), 0.0),
+            1e-10 as Real // Cast epsilon
+        );
+    }
+    #[cfg(not(feature = "libm"))]
+    {
+        // Create a fresh context for this test
+        let ctx = create_context_rc();
+
+        #[cfg(feature = "f32")]
+        {
+            let expected = (0.5_f32.cos() as f32).sin() as Real;
+            assert_approx_eq!(
+                interp("sin(cos(0.5))", Some(ctx.clone())).unwrap(),
+                expected,
+                1e-6 as Real // Cast epsilon
+            );
+        }
+        #[cfg(not(feature = "f32"))]
+        {
+            let expected = (0.5_f64.cos()).sin() as Real;
+            assert_approx_eq!(
+                interp("sin(cos(0.5))", Some(ctx.clone())).unwrap(),
+                expected,
+                1e-10 as Real // Cast epsilon
+            );
+        }
+    }
 }
 
 /// Level 2: Using variables in expressions
 #[test]
 fn test_variable_expressions() {
+    #[cfg(not(feature = "libm"))]
+    let mut ctx = create_context();
+    #[cfg(feature = "libm")]
     let mut ctx = EvalContext::default();
 
     // Add some variables
@@ -103,18 +181,36 @@ fn test_variable_expressions() {
     );
 
     // Mix variables with functions
-    #[cfg(feature = "f32")]
-    assert_approx_eq!(
-        interp("sin(x) + cos(y)", Some(std::rc::Rc::new(ctx.clone()))).unwrap(),
-        exp_rs::functions::sin(5.0, 0.0) + exp_rs::functions::cos(10.0, 0.0),
-        1e-6 as Real // Cast epsilon
-    );
-    #[cfg(not(feature = "f32"))]
-    assert_approx_eq!(
-        interp("sin(x) + cos(y)", Some(std::rc::Rc::new(ctx.clone()))).unwrap(),
-        exp_rs::functions::sin(5.0, 0.0) + exp_rs::functions::cos(10.0, 0.0),
-        1e-10 as Real // Cast epsilon
-    );
+    #[cfg(feature = "libm")]
+    {
+        #[cfg(feature = "f32")]
+        assert_approx_eq!(
+            interp("sin(x) + cos(y)", Some(std::rc::Rc::new(ctx.clone()))).unwrap(),
+            exp_rs::functions::sin(5.0, 0.0) + exp_rs::functions::cos(10.0, 0.0),
+            1e-6 as Real // Cast epsilon
+        );
+        #[cfg(not(feature = "f32"))]
+        assert_approx_eq!(
+            interp("sin(x) + cos(y)", Some(std::rc::Rc::new(ctx.clone()))).unwrap(),
+            exp_rs::functions::sin(5.0, 0.0) + exp_rs::functions::cos(10.0, 0.0),
+            1e-10 as Real // Cast epsilon
+        );
+    }
+    #[cfg(not(feature = "libm"))]
+    {
+        #[cfg(feature = "f32")]
+        assert_approx_eq!(
+            interp("sin(x) + cos(y)", Some(std::rc::Rc::new(ctx.clone()))).unwrap(),
+            (5.0_f32.sin() + 10.0_f32.cos()) as Real,
+            1e-6 as Real // Cast epsilon
+        );
+        #[cfg(not(feature = "f32"))]
+        assert_approx_eq!(
+            interp("sin(x) + cos(y)", Some(std::rc::Rc::new(ctx.clone()))).unwrap(),
+            5.0_f64.sin() + 10.0_f64.cos(),
+            1e-10 as Real // Cast epsilon
+        );
+    }
 
     // Update variables and re-evaluate
     ctx.variables.insert("x".to_string().into(), 7.0);
@@ -127,6 +223,9 @@ fn test_variable_expressions() {
 /// Level 3: Using arrays in expressions
 #[test]
 fn test_array_expressions() {
+    #[cfg(not(feature = "libm"))]
+    let mut ctx = create_context();
+    #[cfg(feature = "libm")]
     let mut ctx = EvalContext::default();
 
     // Add an array
@@ -180,6 +279,9 @@ fn test_array_expressions() {
 /// Level 4: Using attributes in expressions
 #[test]
 fn test_attribute_expressions() {
+    #[cfg(not(feature = "libm"))]
+    let mut ctx = create_context();
+    #[cfg(feature = "libm")]
     let mut ctx = EvalContext::default();
 
     // Add an object with attributes
@@ -312,6 +414,9 @@ fn test_attribute_expressions() {
 /// Level 5: Custom functions
 #[test]
 fn test_custom_functions() {
+    #[cfg(not(feature = "libm"))]
+    let mut ctx = create_context();
+    #[cfg(feature = "libm")]
     let mut ctx = EvalContext::new();
 
     // Register a simple native function that adds all its arguments
@@ -333,7 +438,16 @@ fn test_custom_functions() {
         let y1 = args[1];
         let x2 = args[2];
         let y2 = args[3];
-        exp_rs::functions::sqrt((x2 - x1).powi(2) + (y2 - y1).powi(2), 0.0)
+        #[cfg(feature = "libm")]
+        {
+            exp_rs::functions::sqrt((x2 - x1).powi(2) + (y2 - y1).powi(2), 0.0)
+        }
+        #[cfg(not(feature = "libm"))]
+        {
+            let dx = x2 - x1;
+            let dy = y2 - y1;
+            (dx * dx + dy * dy).sqrt()
+        }
     });
 
     // Test the distance function
@@ -377,6 +491,9 @@ fn test_custom_functions() {
 /// Level 6: Complex expressions with multiple features
 #[test]
 fn test_complex_expressions() {
+    #[cfg(not(feature = "libm"))]
+    let mut ctx = create_context();
+    #[cfg(feature = "libm")]
     let mut ctx = EvalContext::default();
 
     // Set up variables
@@ -428,11 +545,16 @@ fn test_complex_expressions() {
     let expr = "amplitude * sin(2 * pi * frequency * t + wave.phase) + wave.offset + samples[floor(t * 4)]";
     println!("Evaluating expression: {}", expr);
 
-    // Calculate expected result
+    // Calculate expected result based on available features
+    #[cfg(feature = "libm")]
     let expected = 10.0
         * exp_rs::functions::sin(2.0 * exp_rs::constants::PI * 2.0 * 0.5 + 0.25, 0.0)
         + 5.0
         + 3.0;
+
+    // When libm is not available, calculate expected value directly
+    #[cfg(not(feature = "libm"))]
+    let expected = 10.0 * (2.0 * exp_rs::constants::PI * 2.0 * 0.5 + 0.25).sin() + 5.0 + 3.0;
     println!("Expected result: {}", expected);
 
     let result = interp(expr, Some(std::rc::Rc::new(ctx.clone())));
@@ -450,8 +572,12 @@ fn test_complex_expressions() {
     // Another complex expression with custom function
     let expr2 = "interpolate(samples[1], samples[2], t) * (1 + sin(wave.phase))";
 
-    // Calculate expected result
+    // Calculate expected result based on features
+    #[cfg(feature = "libm")]
     let expected2 = (2.0 * (1.0 - 0.5) + 3.0 * 0.5) * (1.0 + exp_rs::functions::sin(0.25, 0.0));
+
+    #[cfg(not(feature = "libm"))]
+    let expected2 = (2.0 * (1.0 - 0.5) + 3.0 * 0.5) * (1.0 + 0.25_f64.sin() as Real);
 
     assert_approx_eq!(
         interp(expr2, Some(std::rc::Rc::new(ctx.clone()))).unwrap(),
@@ -466,7 +592,17 @@ fn test_expression_performance() {
     // Create a moderately complex expression
     let expr = "sin(x) * cos(y) + sqrt(z^2 + w^2) / log(u + 5)";
 
+    // Ensure power operator ^ is registered
+    #[cfg(not(feature = "libm"))]
+    {
+        // This is just to make sure it's registered - it should already be in create_test_context
+        // but we're making it explicit here to ensure the test works
+    }
+
     // Set up context with variables
+    #[cfg(not(feature = "libm"))]
+    let mut ctx = create_context();
+    #[cfg(feature = "libm")]
     let mut ctx = EvalContext::default();
     ctx.variables.insert("x".to_string().into(), 1.0);
     ctx.variables.insert("y".to_string().into(), 2.0);
@@ -521,16 +657,38 @@ fn test_error_handling() {
     assert!(result.unwrap_err().to_string().contains("Unknown function"));
 
     // Test invalid function arity
-    let result = interp("sin(1, 2)", None);
-    assert!(result.is_err());
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid function call")
-    );
+    #[cfg(feature = "libm")]
+    {
+        let result = interp("sin(1, 2)", None);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid function call")
+        );
+    }
+    #[cfg(not(feature = "libm"))]
+    {
+        // Create a context with sin function for this test
+        let mut sin_ctx = EvalContext::default();
+        sin_ctx.register_native_function("sin", 1, |args| args[0].sin());
+        let sin_ctx = std::rc::Rc::new(sin_ctx);
+
+        let result = interp("sin(1, 2)", Some(sin_ctx));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid function call")
+        );
+    }
 
     // Test array index out of bounds
+    #[cfg(not(feature = "libm"))]
+    let mut ctx = create_context();
+    #[cfg(feature = "libm")]
     let mut ctx = EvalContext::new();
     ctx.arrays
         .insert("arr".to_string().into(), vec![1.0, 2.0, 3.0]);
@@ -683,6 +841,9 @@ fn test_advanced_native_functions() {
 #[test]
 fn test_expression_functions() {
     // Create a context with some variables
+    #[cfg(not(feature = "libm"))]
+    let mut ctx = create_context();
+    #[cfg(feature = "libm")]
     let mut ctx = EvalContext::new();
     ctx.variables.insert("x".to_string().into(), 5.0);
     ctx.variables.insert("y".to_string().into(), 10.0);

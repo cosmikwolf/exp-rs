@@ -85,7 +85,6 @@ use core::cell::RefCell;
 ///
 /// // The child context can access both its own variables and the parent's
 /// ```
-#[derive(Default)]
 pub struct EvalContext<'a> {
     /// Variables that can be modified during evaluation
     pub variables: HashMap<String, Real>,
@@ -130,32 +129,25 @@ impl<'a> EvalContext<'a> {
             parent: None,
             ast_cache: None,
         };
-        
-        // When using libm, always register the functions automatically
-        #[cfg(feature = "libm")]
+
+        // Always register default math functions
+        // This now includes basic operators and core functions regardless of features,
+        // while advanced math functions are guarded by feature flags within the function
         ctx.register_default_math_functions();
-        
-        // When running tests without libm, register std functions automatically
-        #[cfg(all(test, not(feature = "libm")))]
-        ctx.register_default_math_functions();
-        
-        // In production code without libm (embedded), don't register anything automatically
-        
+
         ctx
     }
-    
+
     /// Creates a new context with default math functions registered.
     ///
     /// This is a convenience method for creating a context with all standard
-    /// math functions already registered, even when not using the libm feature.
+    /// math functions already registered. It's equivalent to calling `new()`
+    /// since default functions are now always registered.
+    ///
+    /// Kept for backward compatibility.
     pub fn with_default_functions() -> Self {
-        let mut ctx = Self::new();
-        
-        // If the features/test config didn't auto-register functions, do it now
-        #[cfg(not(any(feature = "libm", all(test, not(feature = "libm")))))]
-        ctx.register_default_math_functions();
-        
-        ctx
+        // Simply call new() as it now always registers default functions
+        Self::new()
     }
 
     /// Sets a parameter (variable) in the context.
@@ -427,66 +419,92 @@ impl<'a> EvalContext<'a> {
     /// If the `libm` feature is enabled, this will use the libm implementations.
     /// Otherwise, it will use the standard library implementation which is not available
     /// in `no_std` environments.
-    
+
     /// Enables default math functions for this context.
     ///
     /// Alias for `register_default_math_functions()`.
     pub fn enable_default_functions(&mut self) {
         self.register_default_math_functions();
     }
-    
+
     /// Registers all built-in math functions as native functions in the context.
     pub fn register_default_math_functions(&mut self) {
+        // Register basic arithmetic operators and fundamental functions
+        // These are always available regardless of feature flags
+
+        // Basic operators as functions
+        self.register_native_function("+", 2, |args| args[0] + args[1]);
+        self.register_native_function("-", 2, |args| args[0] - args[1]);
+        self.register_native_function("*", 2, |args| args[0] * args[1]);
+        self.register_native_function("/", 2, |args| args[0] / args[1]);
+        self.register_native_function("%", 2, |args| args[0] % args[1]);
+        self.register_native_function("^", 2, |args| args[0].powf(args[1]));
+
+        // Function aliases for the operators
+        self.register_native_function("add", 2, |args| args[0] + args[1]);
+        self.register_native_function("sub", 2, |args| args[0] - args[1]);
+        self.register_native_function("mul", 2, |args| args[0] * args[1]);
+        self.register_native_function("div", 2, |args| args[0] / args[1]);
+        self.register_native_function("fmod", 2, |args| args[0] % args[1]);
+        self.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+        self.register_native_function("neg", 1, |args| -args[0]);
+
+        // Sequence operators
+        self.register_native_function(",", 2, |args| args[1]); // The actual comma operator
+        self.register_native_function("comma", 2, |args| args[1]); // Function alias for the comma operator
+
+        // Simple functions available in core
+        self.register_native_function("abs", 1, |args| args[0].abs());
+        self.register_native_function("max", 2, |args| args[0].max(args[1]));
+        self.register_native_function("min", 2, |args| args[0].min(args[1]));
+        self.register_native_function("sign", 1, |args| {
+            if args[0] > 0.0 {
+                1.0
+            } else if args[0] < 0.0 {
+                -1.0
+            } else {
+                0.0
+            }
+        });
+
+        // Constants
+        #[cfg(feature = "f32")]
+        self.register_native_function("e", 0, |_| core::f32::consts::E);
+        #[cfg(not(feature = "f32"))]
+        self.register_native_function("e", 0, |_| core::f64::consts::E);
+
+        #[cfg(feature = "f32")]
+        self.register_native_function("pi", 0, |_| core::f32::consts::PI);
+        #[cfg(not(feature = "f32"))]
+        self.register_native_function("pi", 0, |_| core::f64::consts::PI);
+
+        // Register advanced math functions that require libm
         #[cfg(feature = "libm")]
         {
-            self.register_native_function("abs", 1, |args| crate::functions::abs(args[0], 0.0));
             self.register_native_function("acos", 1, |args| crate::functions::acos(args[0], 0.0));
             self.register_native_function("asin", 1, |args| crate::functions::asin(args[0], 0.0));
             self.register_native_function("atan", 1, |args| crate::functions::atan(args[0], 0.0));
-            self.register_native_function("atan2", 2, |args| crate::functions::atan2(args[0], args[1]));
+            self.register_native_function("atan2", 2, |args| {
+                crate::functions::atan2(args[0], args[1])
+            });
             self.register_native_function("ceil", 1, |args| crate::functions::ceil(args[0], 0.0));
             self.register_native_function("cos", 1, |args| crate::functions::cos(args[0], 0.0));
             self.register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
-            self.register_native_function("e", 0, |_args| crate::functions::e(0.0, 0.0));
             self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
             self.register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
             self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
             self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
             self.register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
-            self.register_native_function("max", 2, |args| crate::functions::max(args[0], args[1]));
-            self.register_native_function("min", 2, |args| crate::functions::min(args[0], args[1]));
-            self.register_native_function("pi", 0, |_args| crate::functions::pi(0.0, 0.0));
-            self.register_native_function("pow", 2, |args| crate::functions::pow(args[0], args[1]));
-            self.register_native_function("^", 2, |args| crate::functions::pow(args[0], args[1]));
             self.register_native_function("sin", 1, |args| crate::functions::sin(args[0], 0.0));
             self.register_native_function("sinh", 1, |args| crate::functions::sinh(args[0], 0.0));
             self.register_native_function("sqrt", 1, |args| crate::functions::sqrt(args[0], 0.0));
             self.register_native_function("tan", 1, |args| crate::functions::tan(args[0], 0.0));
             self.register_native_function("tanh", 1, |args| crate::functions::tanh(args[0], 0.0));
-            self.register_native_function("sign", 1, |args| crate::functions::sign(args[0], 0.0));
-            
-            // Basic operators as functions
-            self.register_native_function("+", 2, |args| crate::functions::add(args[0], args[1]));
-            self.register_native_function("-", 2, |args| crate::functions::sub(args[0], args[1]));
-            self.register_native_function("*", 2, |args| crate::functions::mul(args[0], args[1]));
-            self.register_native_function("/", 2, |args| crate::functions::div(args[0], args[1]));
-            self.register_native_function("%", 2, |args| crate::functions::fmod(args[0], args[1]));
-            
-            // Function aliases for the operators
-            self.register_native_function("add", 2, |args| crate::functions::add(args[0], args[1]));
-            self.register_native_function("sub", 2, |args| crate::functions::sub(args[0], args[1]));
-            self.register_native_function("mul", 2, |args| crate::functions::mul(args[0], args[1]));
-            self.register_native_function("div", 2, |args| crate::functions::div(args[0], args[1]));
-            self.register_native_function("fmod", 2, |args| crate::functions::fmod(args[0], args[1]));
-            self.register_native_function("neg", 1, |args| crate::functions::neg(args[0], 0.0));
-            self.register_native_function("comma", 2, |args| crate::functions::comma(args[0], args[1]));
         }
-        
+
+        // In test mode without libm, provide std library implementations for the advanced math functions
         #[cfg(all(not(feature = "libm"), test))]
         {
-            // Use standard library implementations only when in test mode and not using libm
-            // This ensures these methods are only used when std is available
-            self.register_native_function("abs", 1, |args| args[0].abs());
             self.register_native_function("acos", 1, |args| args[0].acos());
             self.register_native_function("asin", 1, |args| args[0].asin());
             self.register_native_function("atan", 1, |args| args[0].atan());
@@ -494,73 +512,20 @@ impl<'a> EvalContext<'a> {
             self.register_native_function("ceil", 1, |args| args[0].ceil());
             self.register_native_function("cos", 1, |args| args[0].cos());
             self.register_native_function("cosh", 1, |args| args[0].cosh());
-            #[cfg(feature = "f32")]
-            self.register_native_function("e", 0, |_| core::f32::consts::E);
-            #[cfg(not(feature = "f32"))]
-            self.register_native_function("e", 0, |_| core::f64::consts::E);
             self.register_native_function("exp", 1, |args| args[0].exp());
             self.register_native_function("floor", 1, |args| args[0].floor());
             self.register_native_function("ln", 1, |args| args[0].ln());
             self.register_native_function("log", 1, |args| args[0].log10());
             self.register_native_function("log10", 1, |args| args[0].log10());
-            self.register_native_function("max", 2, |args| args[0].max(args[1]));
-            self.register_native_function("min", 2, |args| args[0].min(args[1]));
-            #[cfg(feature = "f32")]
-            self.register_native_function("pi", 0, |_| core::f32::consts::PI);
-            #[cfg(not(feature = "f32"))]
-            self.register_native_function("pi", 0, |_| core::f64::consts::PI);
-            self.register_native_function("pow", 2, |args| args[0].powf(args[1]));
-            self.register_native_function("^", 2, |args| args[0].powf(args[1]));
             self.register_native_function("sin", 1, |args| args[0].sin());
             self.register_native_function("sinh", 1, |args| args[0].sinh());
             self.register_native_function("sqrt", 1, |args| args[0].sqrt());
             self.register_native_function("tan", 1, |args| args[0].tan());
             self.register_native_function("tanh", 1, |args| args[0].tanh());
-            
-            // Basic operators as functions
-            self.register_native_function("+", 2, |args| args[0] + args[1]);
-            self.register_native_function("-", 2, |args| args[0] - args[1]);
-            self.register_native_function("*", 2, |args| args[0] * args[1]);
-            self.register_native_function("/", 2, |args| args[0] / args[1]);
-            self.register_native_function("%", 2, |args| args[0] % args[1]);
         }
-        
-        #[cfg(all(not(feature = "libm"), not(test)))]
-        {
-            // In non-test no_std mode without libm, don't register any default functions
-            // The user must register their own implementations
-            // Only register constants that don't require external function calls
-            #[cfg(feature = "f32")]
-            self.register_native_function("e", 0, |_| core::f32::consts::E);
-            #[cfg(not(feature = "f32"))]
-            self.register_native_function("e", 0, |_| core::f64::consts::E);
-            
-            #[cfg(feature = "f32")]
-            self.register_native_function("pi", 0, |_| core::f32::consts::PI);
-            #[cfg(not(feature = "f32"))]
-            self.register_native_function("pi", 0, |_| core::f64::consts::PI);
-            
-            // We can also register abs since it's available in core
-            self.register_native_function("abs", 1, |args| args[0].abs());
-            
-            // Basic operators as functions
-            self.register_native_function("+", 2, |args| args[0] + args[1]);
-            self.register_native_function("-", 2, |args| args[0] - args[1]);
-            self.register_native_function("*", 2, |args| args[0] * args[1]);
-            self.register_native_function("/", 2, |args| args[0] / args[1]);
-            self.register_native_function("%", 2, |args| args[0] % args[1]);
-        }
-        
-        // Register the sign function for all configurations
-        self.register_native_function("sign", 1, |args| {
-            if args[0] > 0.0 { 1.0 } else if args[0] < 0.0 { -1.0 } else { 0.0 }
-        });
-        
-        // Register functions common to both std and no_std configurations
-        self.register_native_function("fmod", 2, |args| args[0] % args[1]);
-        self.register_native_function("neg", 1, |args| -args[0]);
-        self.register_native_function("comma", 2, |args| args[1]);
-        // Add more as needed
+
+        // In non-test no_std mode without libm, we don't register advanced math functions
+        // Users must register their own implementations if needed
     }
 
     /// Register a native function with the context.
@@ -668,6 +633,29 @@ impl<'a> Clone for EvalContext<'a> {
             parent: self.parent.clone(),
             ast_cache: self.ast_cache.clone(),
         }
+    }
+}
+
+impl<'a> Default for EvalContext<'a> {
+    /// Creates a new EvalContext with default values and math functions registered.
+    /// This ensures that EvalContext::default() behaves the same as
+    fn default() -> Self {
+        EvalContext::new()
+        // let mut ctx = Self {
+        //     variables: HashMap::new(),
+        //     constants: HashMap::new(),
+        //     arrays: HashMap::new(),
+        //     attributes: HashMap::new(),
+        //     nested_arrays: HashMap::new(),
+        //     function_registry: Rc::new(FunctionRegistry::default()),
+        //     parent: None,
+        //     ast_cache: None,
+        // };
+        //
+        // // Register default math functions, same as in new()
+        // ctx.register_default_math_functions();
+        //
+        // ctx
     }
 }
 
@@ -1046,3 +1034,4 @@ mod tests {
         assert_eq!(val, 40.0);
     }
 }
+

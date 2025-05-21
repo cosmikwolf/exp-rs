@@ -1043,28 +1043,59 @@ mod tests {
 
     #[test]
     fn test_ternary_operator_evaluation() {
-        // Test with true condition
+        // Create a context with the necessary operators for the test
         let mut ctx = EvalContext::new();
+        
+        // Make sure the context has the ">" operator registered
+        #[cfg(not(feature = "libm"))]
+        {
+            ctx.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+            ctx.register_native_function("*", 2, |args| args[0] * args[1]);
+            ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+        }
+        
         ctx.set_parameter("x", 5.0);
         let result = interp("x > 0 ? 10 : 20", Some(Rc::new(ctx))).unwrap();
         assert_eq!(result, 10.0);
 
         // Test with false condition
         let mut ctx = EvalContext::new();
+        
+        // Make sure the context has the ">" operator registered
+        #[cfg(not(feature = "libm"))]
+        {
+            ctx.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+            ctx.register_native_function("*", 2, |args| args[0] * args[1]);
+            ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+        }
+        
         ctx.set_parameter("x", -5.0);
         let result = interp("x > 0 ? 10 : 20", Some(Rc::new(ctx))).unwrap();
         assert_eq!(result, 20.0);
 
+        // Create a context for the rest of the tests
+        let mut ctx = EvalContext::new();
+        
+        // Make sure the context has all the necessary operators registered
+        #[cfg(not(feature = "libm"))]
+        {
+            ctx.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+            ctx.register_native_function("*", 2, |args| args[0] * args[1]);
+            ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+        }
+        
+        let ctx_rc = Rc::new(ctx);
+        
         // Test with nested ternary
-        let result = interp("1 ? 2 ? 3 : 4 : 5", None).unwrap();
+        let result = interp("1 ? 2 ? 3 : 4 : 5", Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 3.0);
 
         // Test with complex expressions in branches
-        let result = interp("0 ? 10 : 2 * 3 + 4", None).unwrap();
+        let result = interp("0 ? 10 : 2 * 3 + 4", Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 10.0);
 
         // Test with complex expressions in condition
-        let result = interp("2 * 3 > 5 ? 1 : 0", None).unwrap();
+        let result = interp("2 * 3 > 5 ? 1 : 0", Some(ctx_rc)).unwrap();
         assert_eq!(result, 1.0);
     }
 
@@ -1072,6 +1103,13 @@ mod tests {
     fn test_ternary_operator_short_circuit() {
         // Context with a variable that will cause division by zero in the false branch
         let mut ctx = EvalContext::new();
+        
+        // Make sure the context has all the necessary operators registered
+        #[cfg(not(feature = "libm"))]
+        {
+            ctx.register_native_function("/", 2, |args| args[0] / args[1]);
+        }
+        
         ctx.set_parameter("x", 0.0);
 
         // This should not cause a division by zero error because the condition is true,
@@ -1091,20 +1129,33 @@ mod tests {
 
     #[test]
     fn test_ternary_operator_precedence() {
+        // Create a context with the necessary operators for the test
+        let mut ctx = EvalContext::new();
+        
+        // Make sure the context has all the necessary operators registered
+        #[cfg(not(feature = "libm"))]
+        {
+            ctx.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+            ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+            ctx.register_native_function("&&", 2, |args| if args[0] != 0.0 && args[1] != 0.0 { 1.0 } else { 0.0 });
+        }
+        
+        let ctx_rc = Rc::new(ctx);
+        
         // Test that ternary has lower precedence than comparison
-        let result = interp("2 > 1 ? 3 : 4", None).unwrap();
+        let result = interp("2 > 1 ? 3 : 4", Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 3.0);
 
         // Test that ternary has lower precedence than addition/subtraction
-        let result = interp("1 + 2 ? 3 : 4", None).unwrap();
+        let result = interp("1 + 2 ? 3 : 4", Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 3.0);
 
         // Test that ternary has lower precedence than logical operators
-        let result = interp("1 && 0 ? 3 : 4", None).unwrap();
+        let result = interp("1 && 0 ? 3 : 4", Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 4.0);
 
         // Test right associativity with nested ternary
-        let result = interp("1 ? 2 : 3 ? 4 : 5", None).unwrap();
+        let result = interp("1 ? 2 : 3 ? 4 : 5", Some(ctx_rc)).unwrap();
         assert_eq!(result, 2.0);
     }
 

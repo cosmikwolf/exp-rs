@@ -16,6 +16,29 @@ fn test_expression_factorial_depth() {
     // Create a new evaluation context
     let mut ctx = EvalContext::default();
 
+    // Register basic operators when running without libm feature
+    #[cfg(not(feature = "libm"))]
+    {
+        // Comparison operators
+        ctx.register_native_function("==", 2, |args| if args[0] == args[1] { 1.0 } else { 0.0 });
+        ctx.register_native_function("!=", 2, |args| if args[0] != args[1] { 1.0 } else { 0.0 });
+        ctx.register_native_function("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
+        ctx.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+        ctx.register_native_function("<=", 2, |args| if args[0] <= args[1] { 1.0 } else { 0.0 });
+        ctx.register_native_function(">=", 2, |args| if args[0] >= args[1] { 1.0 } else { 0.0 });
+
+        // Arithmetic operators
+        ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+        ctx.register_native_function("-", 2, |args| args[0] - args[1]);
+        ctx.register_native_function("*", 2, |args| args[0] * args[1]);
+        ctx.register_native_function("/", 2, |args| args[0] / args[1]);
+        ctx.register_native_function("^", 2, |args| args[0].powf(args[1]));
+        ctx.register_native_function("neg", 1, |args| -args[0]);
+        
+        // Register comma operator for sequence expressions
+        ctx.register_native_function(",", 2, |args| args[1]);
+    }
+
     // Reset recursion counter to ensure we start fresh
     reset_recursion_depth();
 
@@ -61,14 +84,10 @@ fn test_expression_factorial_depth() {
         "n <= 1 ? 1 : n * factorial_base(n-1)",
     )
     .unwrap();
-    
+
     // Now register the logging version that calls the base version, using a comma operator
-    ctx.register_expression_function(
-        "factorial",
-        &["n"],
-        "log_depth(n), factorial_base(n)",
-    )
-    .unwrap();
+    ctx.register_expression_function("factorial", &["n"], "log_depth(n), factorial_base(n)")
+        .unwrap();
 
     // Create a thread-local Vec to store depth records
     thread_local! {
@@ -101,15 +120,11 @@ fn test_expression_factorial_depth() {
         "n <= 1 ? 1 : n * tracked_factorial_base(n-1)",
     )
     .unwrap();
-    
+
     // Let's use a simpler approach with factorial
-    ctx.register_expression_function(
-        "factorial_fn",
-        &["n"],
-        "n <= 1 ? 1 : n * factorial_fn(n-1)",
-    )
-    .unwrap();
-    
+    ctx.register_expression_function("factorial_fn", &["n"], "n <= 1 ? 1 : n * factorial_fn(n-1)")
+        .unwrap();
+
     // Register a tracked factorial function that increments recursion depth
     ctx.register_expression_function(
         "tracked_factorial",
@@ -118,29 +133,52 @@ fn test_expression_factorial_depth() {
         track_depth(n),
         n <= 1 ? 1 : n * tracked_factorial(n-1)
         "#,
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     // Register the track_depth function to record recursion depths
     ctx.register_native_function("track_depth", 1, |args| {
         let n = args[0].round() as i32;
         let depth = get_recursion_depth();
-        
+
         println!("track_depth called with n={}, depth={}", n, depth);
-        
+
         // Record this depth in thread-local storage
         DEPTH_RECORDS.with(|records| {
             records.borrow_mut().push((n, depth));
         });
-        
+
         // Return the input unchanged
         args[0]
     });
-    
+
     // We won't need the ensure_0 function anymore - we'll call factorial(0) directly later
 
     // First, evaluate factorial(4) and verify the result
     println!("\nEvaluating factorial(4):");
     let result = interp("factorial(4)", Some(Rc::new(ctx.clone())));
+
+    // Debug output for troubleshooting
+    match &result {
+        Ok(val) => println!("  factorial(4) = {}", val),
+        Err(e) => println!("  Error evaluating factorial(4): {:?}", e),
+    }
+    
+    // Simplify by trying the base factorial function first (without the comma operator)
+    println!("\nEvaluating factorial_base(4) directly:");
+    let base_result = interp("factorial_base(4)", Some(Rc::new(ctx.clone())));
+    match &base_result {
+        Ok(val) => println!("  factorial_base(4) = {}", val),
+        Err(e) => println!("  Error evaluating factorial_base(4): {:?}", e),
+    }
+    
+    // Check if we can evaluate a simple ternary
+    println!("\nEvaluating simple ternary:");
+    let ternary_result = interp("1 ? 42 : 0", Some(Rc::new(ctx.clone())));
+    match &ternary_result {
+        Ok(val) => println!("  (1 ? 42 : 0) = {}", val),
+        Err(e) => println!("  Error evaluating ternary: {:?}", e),
+    }
 
     assert!(result.is_ok(), "factorial(4) should evaluate successfully");
     assert_eq!(result.unwrap(), 24.0, "factorial(4) should equal 24");
@@ -162,7 +200,7 @@ fn test_expression_factorial_depth() {
 
     // We don't need to track factorial(0) manually anymore
     // Our recursive implementation will automatically evaluate all steps from 4 to 1
-    
+
     // Retrieve the recorded depths from thread_local storage
     let depth_records = DEPTH_RECORDS.with(|records| records.borrow().clone());
 
@@ -226,4 +264,3 @@ fn test_expression_factorial_depth() {
 
     println!("Test passed: factorial(4) used the expected recursion depth!");
 }
-
