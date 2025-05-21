@@ -29,6 +29,19 @@ pub fn eval_ast<'a>(ast: &AstExpr, ctx: Option<Rc<EvalContext<'a>>>) -> Result<R
     // This ensures each top-level evaluation starts with a fresh recursion budget
     RECURSION_DEPTH.store(0, Ordering::Relaxed);
 
+    // Create a guard that will reset the recursion depth when dropped
+    // This ensures it happens even if a panic occurs during evaluation
+    struct RecursionGuard;
+    impl Drop for RecursionGuard {
+        fn drop(&mut self) {
+            // Reset counter on drop, ensuring it's always reset
+            RECURSION_DEPTH.store(0, Ordering::Relaxed);
+        }
+    }
+    
+    // Create guard that will be dropped at the end of this function
+    let _guard = RecursionGuard;
+
     // Don't use a shared cache - we'll operate directly on the function cache
     let mut func_cache: BTreeMap<String, Option<FunctionCacheEntry>> = BTreeMap::new();
     // Also maintain a variable cache specific to this evaluation
@@ -38,6 +51,7 @@ pub fn eval_ast<'a>(ast: &AstExpr, ctx: Option<Rc<EvalContext<'a>>>) -> Result<R
     let result = eval_ast_inner(ast, ctx, &mut func_cache, &mut var_cache);
 
     // Always reset the counter after evaluation to prevent leaks between calls
+    // This is redundant with the guard, but we keep it for explicitness
     RECURSION_DEPTH.store(0, Ordering::Relaxed);
 
     result

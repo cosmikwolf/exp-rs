@@ -140,40 +140,49 @@ fn test_factorial_recursion_depth() {
         1.0
     });
     
-    // Let's register a much simpler version using direct function calls instead
+    // We need to properly simulate recursion where factorial(4) calls
+    // factorial(3) calls factorial(2) calls factorial(1)
     ctx.register_native_function("tracking_factorial", 1, {
         let tracker_ref = tracker.clone();
         move |args| {
             let n = args[0].round() as i32;
             
-            // Get the tracker
-            let mut tracker = tracker_ref.borrow_mut();
-            
-            // Increment depth and log entry
-            tracker.exact_depth += 1;
-            if tracker.exact_depth > tracker.max_recorded_depth {
-                tracker.max_recorded_depth = tracker.exact_depth;
-            }
-            println!("{}{} -> factorial({})", " ".repeat(tracker.exact_depth - 1), tracker.exact_depth, n);
-            
-            // Calculate factorial
-            let result = if n <= 1 {
-                1.0
-            } else {
-                // We don't need to recurse here, we can calculate directly
-                let mut product = 1.0;
-                for i in 2..=n {
-                    product *= i as f64; // Use f64 to avoid overflow
+            // Create a helper function to handle the recursive computation and tracking
+            fn factorial_recursive(n: i32, tracker_ref: &std::rc::Rc<std::cell::RefCell<DepthTracker>>) -> f64 {
+                // Get the tracker to record entry
+                {
+                    let mut tracker = tracker_ref.borrow_mut();
+                    tracker.exact_depth += 1;
+                    if tracker.exact_depth > tracker.max_recorded_depth {
+                        tracker.max_recorded_depth = tracker.exact_depth;
+                    }
+                    println!("{}{} -> factorial({})", " ".repeat(tracker.exact_depth - 1), tracker.exact_depth, n);
+                } // End borrow scope
+                
+                // Base case
+                let result = if n <= 1 {
+                    1.0
+                } else {
+                    // Recursive case: n * factorial(n-1)
+                    // First get factorial(n-1) by actually making a recursive call
+                    let smaller_factorial = factorial_recursive(n-1, tracker_ref);
+                    
+                    // Multiply by n
+                    n as f64 * smaller_factorial
+                };
+                
+                // Get the tracker to record exit
+                {
+                    let mut tracker = tracker_ref.borrow_mut();
+                    println!("{}{} <- factorial({}) = {}", " ".repeat(tracker.exact_depth - 1), tracker.exact_depth, n, result as i32);
+                    tracker.exact_depth -= 1;
                 }
-                product
-            };
+                
+                result
+            }
             
-            // Log exit
-            println!("{}{} <- factorial({}) = {}", " ".repeat(tracker.exact_depth - 1), tracker.exact_depth, n, result as i32);
-            tracker.exact_depth -= 1;
-            
-            // Return the result
-            result
+            // Call our helper function to do the actual work
+            factorial_recursive(n, &tracker_ref)
         }
     });
     
