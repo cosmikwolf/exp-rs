@@ -1,5 +1,8 @@
 extern crate alloc;
 use crate::error::ExprError;
+#[cfg(not(test))]
+use alloc::format;
+use alloc::string::{String, ToString};
 
 // Add recursion depth tracking for evaluating expression functions
 #[cfg(not(test))]
@@ -19,20 +22,23 @@ const MAX_RECURSION_DEPTH: usize = 250;
 // Add a helper function to check and increment recursion depth
 pub fn check_and_increment_recursion_depth() -> Result<(), ExprError> {
     let current = RECURSION_DEPTH.load(Ordering::Relaxed);
-    
+
     // Safety check: If the counter is abnormally high but not at the limit,
     // it might indicate a leak from a previous test or evaluation
     if current > MAX_RECURSION_DEPTH / 2 && current < MAX_RECURSION_DEPTH {
         // Log a warning in debug builds
         #[cfg(debug_assertions)]
-        eprintln!("WARNING: Unusually high recursion depth detected: {}", current);
+        eprintln!(
+            "WARNING: Unusually high recursion depth detected: {}",
+            current
+        );
     }
-    
+
     if current >= MAX_RECURSION_DEPTH {
         // Immediately reset the counter to prevent potential state inconsistency
         // This ensures future evaluations don't start with a maxed-out counter
         RECURSION_DEPTH.store(0, Ordering::Relaxed);
-        
+
         Err(ExprError::RecursionLimit(format!(
             "Maximum recursion depth of {} exceeded during expression evaluation",
             MAX_RECURSION_DEPTH
@@ -67,4 +73,3 @@ pub fn set_max_recursion_depth(depth: usize) -> usize {
     // of test expectations
     depth
 }
-
