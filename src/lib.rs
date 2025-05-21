@@ -89,9 +89,8 @@
 //!
 //! - `libm`: Enables built-in math functions using the libm library. Without this feature, you must register your own math functions.
 //! - `f32`: Use 32-bit floating point (single precision) for calculations
-//! - `f64`: Use 64-bit floating point (double precision) for calculations (default)
 //!
-//! Only one of `f32` or `f64` can be enabled at a time.
+//! When `f32` is not specified, 64-bit floating point (double precision) is used by default.
 //!
 //! # Embedded Systems Support
 //!
@@ -254,16 +253,18 @@
 //! extern crate alloc;
 //! use exp_rs::interp;
 //! use exp_rs::EvalContext;
+//! use exp_rs::Real;
 //! use alloc::rc::Rc;
 //!
 //! // This defines an FFI function that can be called from C code
 //! pub extern "C" fn evaluate_expression(x: f32, y: f32) -> f32 {
+//!     // Note: Real is either f32 or f64 depending on feature flags
 //!     // Create an evaluation context
 //!     let mut ctx = EvalContext::new();
 //!
 //!     // Set parameters
-//!     ctx.set_parameter("x", x );
-//!     ctx.set_parameter("y", y );
+//!     ctx.set_parameter("x", x as Real);
+//!     ctx.set_parameter("y", y as Real);
 //!
 //!     // Evaluate the expression
 //!     let result = interp("sqrt(x^2 + y^2)", Some(Rc::new(ctx))).unwrap();
@@ -402,14 +403,11 @@ pub use ffi::*;
 pub use eval::recursion::{get_recursion_depth, reset_recursion_depth, set_max_recursion_depth};
 
 // Compile-time check: only one of f32 or f64 can be enabled
-#[cfg(all(feature = "f32", feature = "f64"))]
-compile_error!("You must enable only one of the features: 'f32' or 'f64', not both.");
-
 /// Define the floating-point type based on feature flags
 #[cfg(feature = "f32")]
 pub type Real = f32;
 
-#[cfg(feature = "f64")]
+#[cfg(not(feature = "f32"))]
 pub type Real = f64;
 
 pub mod constants {
@@ -422,11 +420,11 @@ pub mod constants {
     #[cfg(feature = "f32")]
     pub const TEST_PRECISION: Real = 1e-6;
 
-    #[cfg(feature = "f64")]
+    #[cfg(not(feature = "f32"))]
     pub const PI: Real = core::f64::consts::PI;
-    #[cfg(feature = "f64")]
+    #[cfg(not(feature = "f32"))]
     pub const E: Real = core::f64::consts::E;
-    #[cfg(feature = "f64")]
+    #[cfg(not(feature = "f32"))]
     pub const TEST_PRECISION: Real = 1e-10;
 }
 

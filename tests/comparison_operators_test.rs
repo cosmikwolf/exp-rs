@@ -13,7 +13,17 @@ fn test_equal_operator() {
     assert_eq!(interp("1 == 1", None).unwrap(), 1.0); // Equal values
     assert_eq!(interp("1 == 2", None).unwrap(), 0.0); // Unequal values
     assert_eq!(interp("1 == 1.0", None).unwrap(), 1.0); // Equal with different representations
-    assert_eq!(interp("0.1 + 0.2 == 0.3", None).unwrap(), 0.0); // Floating point precision
+    
+    // Test floating point precision - different behavior in f32 vs f64
+    // In f32 mode: 0.1 + 0.2 == 0.3 evaluates to true due to lower precision
+    // In f64 mode: 0.1 + 0.2 == 0.3 evaluates to false due to higher precision
+    #[cfg(feature = "f32")]
+    assert_eq!(interp("0.1 + 0.2 == 0.3", None).unwrap(), 1.0, 
+        "f32 mode should evaluate 0.1 + 0.2 == 0.3 as true due to lower precision");
+    
+    #[cfg(not(feature = "f32"))]
+    assert_eq!(interp("0.1 + 0.2 == 0.3", None).unwrap(), 0.0,
+        "f64 mode should evaluate 0.1 + 0.2 == 0.3 as false due to higher precision");
 }
 
 #[test]
@@ -25,6 +35,17 @@ fn test_not_equal_operator() {
     // Test alternative not-equal syntax with <>
     assert_eq!(interp("1 <> 1", None).unwrap(), 0.0); // Equal values
     assert_eq!(interp("1 <> 2", None).unwrap(), 1.0); // Unequal values
+    
+    // Test floating point precision - different behavior in f32 vs f64
+    // In f32 mode: 0.1 + 0.2 != 0.3 evaluates to false due to lower precision
+    // In f64 mode: 0.1 + 0.2 != 0.3 evaluates to true due to higher precision
+    #[cfg(feature = "f32")]
+    assert_eq!(interp("0.1 + 0.2 != 0.3", None).unwrap(), 0.0, 
+        "f32 mode should evaluate 0.1 + 0.2 != 0.3 as false due to lower precision");
+    
+    #[cfg(not(feature = "f32"))]
+    assert_eq!(interp("0.1 + 0.2 != 0.3", None).unwrap(), 1.0,
+        "f64 mode should evaluate 0.1 + 0.2 != 0.3 as true due to higher precision");
 }
 
 #[test]

@@ -49,16 +49,17 @@ use core::cell::RefCell;
 /// ```
 /// use exp_rs::context::EvalContext;
 /// use exp_rs::engine::interp;
+/// use exp_rs::Real;
 /// use std::rc::Rc;
 ///
 /// let mut ctx = EvalContext::new();
 ///
 /// // Add variables
-/// ctx.set_parameter("x", 5.0);
-/// ctx.set_parameter("y", 10.0);
+/// ctx.set_parameter("x", 5.0 as Real);
+/// ctx.set_parameter("y", 10.0 as Real);
 ///
 /// // Add a constant
-/// ctx.constants.insert("PI_SQUARED".to_string(), 9.8696);
+/// ctx.constants.insert("PI_SQUARED".to_string(), 9.8696 as Real);
 ///
 /// // Register a custom function
 /// ctx.register_native_function("multiply", 2, |args| args[0] * args[1]);
@@ -72,13 +73,14 @@ use core::cell::RefCell;
 ///
 /// ```
 /// use exp_rs::context::EvalContext;
+/// use exp_rs::Real;
 /// use std::rc::Rc;
 ///
 /// let mut parent = EvalContext::new();
-/// parent.set_parameter("x", 1.0);
+/// parent.set_parameter("x", 1.0 as Real);
 ///
 /// let mut child = EvalContext::new();
-/// child.set_parameter("y", 2.0);
+/// child.set_parameter("y", 2.0 as Real);
 /// child.parent = Some(Rc::new(parent));
 ///
 /// // The child context can access both its own variables and the parent's
@@ -175,10 +177,11 @@ impl<'a> EvalContext<'a> {
     /// ```
     /// use exp_rs::context::EvalContext;
     /// use exp_rs::engine::interp;
+    /// use exp_rs::Real;
     /// use std::rc::Rc;
     ///
     /// let mut ctx = EvalContext::new();
-    /// ctx.set_parameter("x", 42.0);
+    /// ctx.set_parameter("x", 42.0 as Real);
     ///
     /// let result = interp("x * 2", Some(Rc::new(ctx))).unwrap();
     /// assert_eq!(result, 84.0);
@@ -203,13 +206,14 @@ impl<'a> EvalContext<'a> {
     /// ```
     /// use exp_rs::context::EvalContext;
     /// use exp_rs::engine::interp;
+    /// use exp_rs::Real;
     /// use std::rc::Rc;
     ///
     /// let mut ctx = EvalContext::new();
     ///
     /// // Register a function that adds all its arguments
     /// ctx.register_native_function("sum", 3, |args| {
-    ///     args.iter().sum()
+    ///     args.iter().sum::<Real>()
     /// });
     ///
     /// let result = interp("sum(10, 20, 30)", Some(Rc::new(ctx))).unwrap();
@@ -221,13 +225,14 @@ impl<'a> EvalContext<'a> {
     /// ```
     /// use exp_rs::context::EvalContext;
     /// use exp_rs::engine::interp;
+    /// use exp_rs::Real;
     /// use std::rc::Rc;
     ///
     /// let mut ctx = EvalContext::new();
     ///
     /// // Register a function that calculates the mean of its arguments
     /// ctx.register_native_function("mean", 5, |args| {
-    ///     args.iter().sum::<f64>() / args.len() as f64
+    ///     args.iter().sum::<Real>() / args.len() as Real
     /// });
     ///
     /// let result = interp("mean(1, 2, 3, 4, 5)", Some(Rc::new(ctx))).unwrap();

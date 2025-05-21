@@ -25,7 +25,7 @@ pub fn check_and_increment_recursion_depth() -> Result<(), ExprError> {
 
     // Safety check: If the counter is abnormally high but not at the limit,
     // it might indicate a leak from a previous test or evaluation
-    if current > MAX_RECURSION_DEPTH / 2 && current < MAX_RECURSION_DEPTH {
+    if current > MAX_RECURSION_DEPTH - 10 && current < MAX_RECURSION_DEPTH {
         // Log a warning in debug builds
         #[cfg(debug_assertions)]
         eprintln!(

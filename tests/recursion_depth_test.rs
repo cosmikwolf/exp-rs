@@ -34,12 +34,12 @@ fn test_factorial_recursion_depth() {
         if condition != 0.0 { if_true } else { if_false }
     });
     
-    // Basic implementation of factorial with a conditional
+    // Basic implementation of factorial with a conditional expression that uses short-circuit evaluation
     // factorial(n) = if n <= 1 then 1 else n * factorial(n-1)
     ctx.register_expression_function(
         "factorial",
         &["n"],
-        "choose(is_base_case(n), 1, n * factorial(n-1))"
+        "is_base_case(n) ? 1 : n * factorial(n-1)"
     ).unwrap();
     
     // Create a version that only logs the max depth
@@ -59,11 +59,11 @@ fn test_factorial_recursion_depth() {
         max_depth as exp_rs::Real
     });
     
-    // Create a special version of factorial that tracks max depth
+    // Create a special version of factorial that tracks max depth using conditional operator
     ctx.register_expression_function(
         "depth_tracking_factorial",
         &["n", "max_depth"],
-        "choose(is_base_case(n), log_max_recursion(n, max_depth), n * depth_tracking_factorial(n-1, log_max_recursion(n, max_depth)))"
+        "is_base_case(n) ? log_max_recursion(n, max_depth) : n * depth_tracking_factorial(n-1, log_max_recursion(n, max_depth))"
     ).unwrap();
     
     // Reset recursion counter
@@ -82,11 +82,11 @@ fn test_factorial_recursion_depth() {
         current as exp_rs::Real
     });
     
-    // Create a version of factorial that manually tracks recursion depth
+    // Create a version of factorial that manually tracks recursion depth using conditional operator
     ctx.register_expression_function(
         "depth_factorial",
         &["n"],
-        "choose(is_base_case(n), 1, n * (depth_factorial(n-1) * (1.0 + update_max_depth() * 0.0)))"
+        "is_base_case(n) ? 1 : n * (depth_factorial(n-1) * (1.0 + update_max_depth() * 0.0))"
     ).unwrap();
     
     // Create a different way to track exact recursion depth
@@ -148,7 +148,7 @@ fn test_factorial_recursion_depth() {
             let n = args[0].round() as i32;
             
             // Create a helper function to handle the recursive computation and tracking
-            fn factorial_recursive(n: i32, tracker_ref: &std::rc::Rc<std::cell::RefCell<DepthTracker>>) -> f64 {
+            fn factorial_recursive(n: i32, tracker_ref: &std::rc::Rc<std::cell::RefCell<DepthTracker>>) -> exp_rs::Real {
                 // Get the tracker to record entry
                 {
                     let mut tracker = tracker_ref.borrow_mut();
@@ -168,7 +168,7 @@ fn test_factorial_recursion_depth() {
                     let smaller_factorial = factorial_recursive(n-1, tracker_ref);
                     
                     // Multiply by n
-                    n as f64 * smaller_factorial
+                    n as exp_rs::Real * smaller_factorial
                 };
                 
                 // Get the tracker to record exit

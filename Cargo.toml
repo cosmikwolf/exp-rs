@@ -20,18 +20,14 @@ serde = { version = "1.0", features = ["derive"], default-features = false }
 hashbrown = "0.15.2"
 
 [features]
-default = ["f64", "libm"]
+default = ["libm"]
 f32 = []
-f64 = []
 libm = ["dep:libm"]
 custom_cbindgen_alloc = [
 ] # Use exp_rs_malloc and exp_rs_free instead of malloc/free
 
-# Ensure only one of f32 or f64 can be enabled at a time
-# This is enforced by mutually exclusive features
-# If both are enabled, emit a compile_error!
-[package.metadata]
-exclusive-features = ["f32", "f64"]
+# Note: 64-bit floating point is now the default when f32 is not enabled
+# When f32 feature is enabled, 32-bit floating point is used instead
 
 
 [profile.release]

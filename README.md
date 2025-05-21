@@ -5,7 +5,7 @@
 For reducing binary size when using this library in embedded systems, you can exclude the libm dependency by building without the default features:
 
 ```bash
-cargo build --release --no-default-features --features="f64"
+cargo build --release --no-default-features
 ```
 
 This reduces the flash memory usage by removing the libm mathematical library dependency. When using this configuration in your application, you have two options:
@@ -153,14 +153,11 @@ By default, `exp-rs` uses 64-bit floating point (double precision) for calculati
 # Use default 64-bit precision (double)
 exp-rs = "0.1"
 
-# Or explicitly enable 64-bit precision
-exp-rs = { version = "0.1", features = ["f64"] }
-
 # Use 32-bit precision (float)
-exp-rs = { version = "0.1", default-features = false, features = ["f32"] }
+exp-rs = { version = "0.1", features = ["f32"] }
 ```
 
-Note that only one precision mode (`f32` or `f64`) can be enabled at a time.
+The f64 mode is the default when f32 is not specified.
 
 ### Custom Math Implementations
 
@@ -168,7 +165,7 @@ For embedded systems, you can disable the libm dependency to reduce binary size 
 
 ```toml
 # Disable libm dependency
-exp-rs = { version = "0.1", default-features = false, features = ["f64"] }
+exp-rs = { version = "0.1", default-features = false }
 ```
 
 When using exp-rs without libm, you have three options:
@@ -329,7 +326,7 @@ You can disable the built-in math functions by not including the `libm` feature 
 
 ```toml
 [dependencies]
-exp-rs = { version = "0.1", default-features = false, features = ["f64"] }
+exp-rs = { version = "0.1", default-features = false }
 ```
 
 Benefits of disabling libm:

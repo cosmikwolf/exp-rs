@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define USE_F64
+
 
 #if defined(USE_F32)
 /**
@@ -18,7 +18,7 @@
 typedef float Real;
 #endif
 
-#if defined(USE_F64)
+#if !defined(USE_F32)
 typedef double Real;
 #endif
 
@@ -59,7 +59,7 @@ typedef struct EvalContextOpaque {
 #define TEST_PRECISION 1e-6
 #endif
 
-#if defined(USE_F64)
+#if !defined(USE_F32)
 #define TEST_PRECISION 1e-10
 #endif
 
