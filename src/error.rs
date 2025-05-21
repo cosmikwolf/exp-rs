@@ -103,6 +103,11 @@ pub enum ExprError {
         attr: String 
     },
     
+    /// Error when division by zero is attempted.
+    ///
+    /// This occurs when a division operation has a zero divisor.
+    DivideByZero,
+    
     /// General-purpose error for any other error conditions.
     ///
     /// This is used for errors that don't fit into other specific categories.
@@ -161,6 +166,7 @@ impl fmt::Display for ExprError {
             ExprError::AttributeNotFound { base, attr } => {
                 write!(f, "Attribute not found: '{}' in '{}'", attr, base)
             }
+            ExprError::DivideByZero => write!(f, "Division by zero"),
             ExprError::Other(err) => write!(f, "{}", err),
             ExprError::RecursionLimit(err) => write!(f, "Recursion limit exceeded: {}", err),
         }

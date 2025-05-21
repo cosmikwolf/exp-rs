@@ -369,7 +369,12 @@ pub fn eval_function<'a>(
                     "+" => return Ok(arg_vals[0] + arg_vals[1]),
                     "-" => return Ok(arg_vals[0] - arg_vals[1]),
                     "*" => return Ok(arg_vals[0] * arg_vals[1]),
-                    "/" => return Ok(arg_vals[0] / arg_vals[1]),
+                    "/" => {
+                        if arg_vals[1] == 0.0 {
+                            return Err(ExprError::DivideByZero);
+                        }
+                        return Ok(arg_vals[0] / arg_vals[1]);
+                    },
                     "^" | "pow" => {
                         #[cfg(feature = "f32")]
                         {
@@ -382,7 +387,12 @@ pub fn eval_function<'a>(
                     }
                     "max" => return Ok(arg_vals[0].max(arg_vals[1])),
                     "min" => return Ok(arg_vals[0].min(arg_vals[1])),
-                    "%" => return Ok(arg_vals[0] % arg_vals[1]),
+                    "%" => {
+                        if arg_vals[1] == 0.0 {
+                            return Err(ExprError::DivideByZero);
+                        }
+                        return Ok(arg_vals[0] % arg_vals[1]);
+                    },
                     "," | "comma" => return Ok(arg_vals[1]),
 
                     // Comparison operators - return 1.0 for true and 0.0 for false

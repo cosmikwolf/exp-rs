@@ -50,13 +50,13 @@ pub fn eval_ast_inner<'a>(
     var_cache: &mut BTreeMap<String, Real>,
 ) -> Result<Real, ExprError> {
     // We'll be more selective about when to increment the recursion counter
-    // Only increment for function calls and logical operations, as these are the ones that can cause stack overflow.
+    // Only increment for function calls, logical operations, and conditionals, as these are the ones that can cause stack overflow.
     //
-    // LogicalOp nodes are tracked because:
-    // 1. They may contain recursive function calls in their operands
-    // 2. Short-circuit evaluation can bypass potential infinite recursion in the right operand
-    // 3. Complex logical expressions might cause stack overflows even with short-circuit behavior
-    let should_track = matches!(ast, AstExpr::Function { .. } | AstExpr::LogicalOp { .. });
+    // LogicalOp and Conditional nodes are tracked because:
+    // 1. They may contain recursive function calls in their operands/branches
+    // 2. Short-circuit evaluation can bypass potential infinite recursion in the non-executed branches
+    // 3. Complex logical or conditional expressions might cause stack overflows even with short-circuit behavior
+    let should_track = matches!(ast, AstExpr::Function { .. } | AstExpr::LogicalOp { .. } | AstExpr::Conditional { .. });
 
     // Check and increment recursion depth only for function calls and logical operations.
     // This prevents stack overflows from infinite recursion while still allowing
@@ -120,6 +120,22 @@ pub fn eval_ast_inner<'a>(
                         Ok(if right_val != 0.0 { 1.0 } else { 0.0 })
                     }
                 }
+            }
+        },
+        AstExpr::Conditional { condition, true_branch, false_branch } => {
+            // Evaluate the condition first
+            let condition_val = eval_ast_inner(condition, ctx.clone(), func_cache, var_cache)?;
+            
+            // Short-circuit to the appropriate branch based on the condition
+            // This provides both performance optimization and error prevention:
+            // - Only one branch is evaluated, avoiding unnecessary computation
+            // - Potential errors in the non-executed branch are completely avoided
+            if condition_val != 0.0 {
+                // Condition is true (non-zero), evaluate the true branch
+                eval_ast_inner(true_branch, ctx, func_cache, var_cache)
+            } else {
+                // Condition is false (zero), evaluate the false branch
+                eval_ast_inner(false_branch, ctx, func_cache, var_cache)
             }
         }
     };

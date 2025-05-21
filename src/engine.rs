@@ -1,9 +1,9 @@
 extern crate alloc;
 
-#[cfg(test)]
-use std::rc::Rc;
 #[cfg(not(test))]
 use alloc::rc::Rc;
+#[cfg(test)]
+use std::rc::Rc;
 
 use crate::Real;
 use crate::context::EvalContext;
@@ -15,9 +15,9 @@ use crate::types::{AstExpr, TokenKind};
 use crate::{Box, Vec};
 
 use alloc::borrow::Cow;
-use alloc::string::{String, ToString};
 #[cfg(not(test))]
 use alloc::format;
+use alloc::string::{String, ToString};
 #[cfg(not(test))]
 use alloc::vec;
 
@@ -141,16 +141,18 @@ impl<'a> PrattParser<'a> {
     fn get_binding_power(op: &str) -> Option<BindingPower> {
         match op {
             "," | ";" => Some(BindingPower::left_assoc(1)), // List separator (comma or semicolon)
-            "||" => Some(BindingPower::left_assoc(2)),      // Logical OR (lowest precedence)
-            "&&" => Some(BindingPower::left_assoc(3)),      // Logical AND (higher than OR)
-            "|" => Some(BindingPower::left_assoc(4)),       // Bitwise OR
-            "&" => Some(BindingPower::left_assoc(6)),       // Bitwise AND
+            "?" => Some(BindingPower::right_assoc(1)), // Ternary conditional operator (lowest precedence)
+            "||" => Some(BindingPower::left_assoc(2)), // Logical OR (lowest precedence)
+            "&&" => Some(BindingPower::left_assoc(3)), // Logical AND (higher than OR)
+            "|" => Some(BindingPower::left_assoc(4)),  // Bitwise OR
+            "&" => Some(BindingPower::left_assoc(6)),  // Bitwise AND
             "==" | "!=" | "<" | ">" | "<=" | ">=" | "<>" => Some(BindingPower::left_assoc(7)), // Comparison
             "<<" | ">>" | "<<<" | ">>>" => Some(BindingPower::left_assoc(8)), // Bit shifts
             "+" | "-" => Some(BindingPower::left_assoc(9)), // Addition, subtraction
             "*" | "/" | "%" => Some(BindingPower::left_assoc(10)), // Multiplication, division, modulo
             "^" => Some(BindingPower::right_assoc(15)), // Exponentiation (right-associative, higher than unary)
             "**" => Some(BindingPower::right_assoc(16)), // Exponentiation (right-associative, higher than ^)
+            ":" => None, // Colon is handled as part of the ternary operator, not independently
             _ => None,
         }
     }
@@ -483,6 +485,43 @@ impl<'a> PrattParser<'a> {
         }
     }
 
+    // Helper method for parsing ternary expressions (condition ? true_expr : false_expr)
+    fn parse_ternary_op(
+        &mut self,
+        condition: AstExpr,
+        allow_comma: bool,
+    ) -> Result<AstExpr, ExprError> {
+        // We've already consumed the '?' at this point
+
+        // Parse the true branch (what to evaluate if condition is true)
+        let true_branch = self.parse_expr_unified(0, allow_comma)?;
+
+        // Expect a colon separating the true and false branches
+        if let Some(tok) = self.peek() {
+            if tok.kind == TokenKind::Operator && tok.text.as_deref() == Some(":") {
+                self.next(); // Consume the ':'
+            } else {
+                return Err(ExprError::Syntax(format!(
+                    "Expected ':' in ternary expression, found '{}'",
+                    tok.text.clone().unwrap_or_else(|| "unknown".to_string())
+                )));
+            }
+        } else {
+            return Err(ExprError::Syntax(
+                "Expected ':' in ternary expression, found end of input".to_string(),
+            ));
+        }
+
+        // Parse the false branch (what to evaluate if condition is false)
+        let false_branch = self.parse_expr_unified(0, allow_comma)?;
+
+        Ok(AstExpr::Conditional {
+            condition: Box::new(condition),
+            true_branch: Box::new(true_branch),
+            false_branch: Box::new(false_branch),
+        })
+    }
+
     fn parse_infix_operators(
         &mut self,
         mut lhs: AstExpr,
@@ -513,6 +552,26 @@ impl<'a> PrattParser<'a> {
             // Make a copy of the operator for later use
             let op = String::from(op_text);
 
+            // Special case for ternary operator
+            if op == "?" {
+                // Get binding power
+                let Some(bp) = Self::get_binding_power(&op) else {
+                    break;
+                };
+
+                // Check minimum binding power
+                if bp.left < min_bp {
+                    break;
+                }
+
+                // Consume the ? operator
+                self.next();
+
+                // Parse the rest of the ternary expression
+                lhs = self.parse_ternary_op(lhs, allow_comma)?;
+                continue;
+            }
+
             // Special case for logical operators
             if op == "&&" || op == "||" {
                 // Get binding power - these should already be defined in get_binding_power
@@ -532,10 +591,14 @@ impl<'a> PrattParser<'a> {
                 let rhs = self.parse_expr_unified(bp.right, allow_comma)?;
 
                 // Create a LogicalOp node instead of a Function node
-                lhs = AstExpr::LogicalOp { 
-                    op: if op == "&&" { crate::types::LogicalOperator::And } else { crate::types::LogicalOperator::Or },
+                lhs = AstExpr::LogicalOp {
+                    op: if op == "&&" {
+                        crate::types::LogicalOperator::And
+                    } else {
+                        crate::types::LogicalOperator::Or
+                    },
                     left: Box::new(lhs),
-                    right: Box::new(rhs)
+                    right: Box::new(rhs),
                 };
                 continue;
             }
@@ -569,7 +632,11 @@ impl<'a> PrattParser<'a> {
         Ok(lhs)
     }
 
-    fn parse_juxtaposition(&mut self, lhs: AstExpr, allow_comma: bool) -> Result<AstExpr, ExprError> {
+    fn parse_juxtaposition(
+        &mut self,
+        lhs: AstExpr,
+        allow_comma: bool,
+    ) -> Result<AstExpr, ExprError> {
         let mut lhs = lhs;
         if let Some(tok) = self.peek() {
             let is_valid_lhs = matches!(&lhs, AstExpr::Variable(_));
@@ -727,11 +794,40 @@ impl<'a> PrattParser<'a> {
 
 /// Parse an expression string into an AST using the Pratt parser.
 /// Returns a Result with either the parsed AST or an error explaining what went wrong.
+///
+/// Supports:
+/// - Arithmetic operators: +, -, *, /, %, ^, **
+/// - Comparison operators: ==, !=, <, >, <=, >=, <>
+/// - Logical operators: &&, ||
+/// - Ternary conditional: condition ? true_expr : false_expr
+/// - Function calls: func(arg1, arg2)
+/// - Variables and constants
+///
+/// # Examples
+///
+/// ```
+/// use exp_rs::engine::parse_expression;
+///
+/// // Basic arithmetic
+/// let expr = parse_expression("2 + 3 * 4").unwrap();
+///
+/// // Ternary conditional
+/// let expr = parse_expression("x > 0 ? 1 : -1").unwrap();
+///
+/// // Nested ternary expressions
+/// let expr = parse_expression("condition1 ? value1 : condition2 ? value2 : value3").unwrap();
+/// ```
 pub fn parse_expression(input: &str) -> Result<AstExpr, ExprError> {
     parse_expression_with_context(input, None, None)
 }
 
-// New: allow passing reserved variable names (for expression function parameters)
+/// Parse an expression with a list of reserved variable names (typically function parameters).
+///
+/// This is useful when parsing the body of an expression function. Reserved variables
+/// are not treated as functions in expressions like "x(y)" where x would normally be
+/// treated as a function call.
+///
+/// Supports the same features as parse_expression, including ternary operators.
 pub fn parse_expression_with_reserved(
     input: &str,
     reserved_vars: Option<&[String]>,
@@ -739,21 +835,26 @@ pub fn parse_expression_with_reserved(
     parse_expression_with_context(input, reserved_vars, None)
 }
 
-// New: allow passing reserved variable names and context variable names
+/// Parse an expression with reserved variables and context variable names.
+///
+/// This is the most configurable parsing function that allows specifying both:
+/// - reserved_vars: Variables that should not be treated as functions in implicit calls
+/// - context_vars: Variables from the evaluation context that should be recognized
+///
+/// Supports all expression features, including ternary operators.
+///
+/// # Parameters
+///
+/// * `input` - The expression string to parse
+/// * `reserved_vars` - Optional list of variable names that should not be treated as functions
+/// * `context_vars` - Optional list of variable names from the evaluation context
 pub fn parse_expression_with_context(
     input: &str,
     reserved_vars: Option<&[String]>,
     context_vars: Option<&[String]>,
 ) -> Result<AstExpr, ExprError> {
-    // Check for unsupported ternary operators
-    if input.contains("?")
-        || input.contains(":")
-    {
-        return Err(ExprError::Syntax(
-            "Ternary expressions (? :) are not supported".to_string()
-        ));
-    }
-    // Comparison operators (<, >, <=, >=, ==, !=) are now supported
+    // Ternary operators (? :) are now supported
+    // Comparison operators (<, >, <=, >=, ==, !=) are also supported
 
     // The lexer now properly handles decimal numbers starting with a dot
     let mut parser =
@@ -826,7 +927,7 @@ pub fn interp<'a>(
     ctx: Option<Rc<EvalContext<'a>>>,
 ) -> crate::error::Result<Real> {
     use alloc::rc::Rc;
-    
+
     // Create a new context if none provided
     let eval_ctx = match ctx {
         Some(ctx_rc) => ctx_rc,
@@ -837,7 +938,7 @@ pub fn interp<'a>(
             Rc::new(new_ctx)
         }
     };
-    
+
     // If a context is provided, extract variable and constant names for parsing
     // AST cache logic: use per-context cache if enabled
     if let Some(cache) = eval_ctx.ast_cache.as_ref() {
@@ -851,16 +952,9 @@ pub fn interp<'a>(
         if let Some(ast_rc) = ast_rc_opt {
             eval_ast(&ast_rc, Some(Rc::clone(&eval_ctx)))
         } else {
-            let mut context_vars: Vec<String> = eval_ctx
-                .variables
-                .keys()
-                .map(String::clone)
-                .collect();
-            context_vars.extend(
-                eval_ctx.constants
-                    .keys()
-                    .map(String::clone)
-            );
+            let mut context_vars: Vec<String> =
+                eval_ctx.variables.keys().map(String::clone).collect();
+            context_vars.extend(eval_ctx.constants.keys().map(String::clone));
             match parse_expression_with_context(expression, None, Some(&context_vars)) {
                 Ok(ast) => {
                     let ast_rc = Rc::new(ast);
@@ -880,7 +974,12 @@ pub fn interp<'a>(
             .keys()
             .map(|k: &String| k.as_str().to_string())
             .collect();
-        context_vars.extend(eval_ctx.constants.keys().map(|k: &String| k.as_str().to_string()));
+        context_vars.extend(
+            eval_ctx
+                .constants
+                .keys()
+                .map(|k: &String| k.as_str().to_string()),
+        );
         match parse_expression_with_context(expression, None, Some(&context_vars)) {
             Ok(ast) => eval_ast(&ast, Some(Rc::clone(&eval_ctx))),
             Err(err) => Err(err),
@@ -898,10 +997,116 @@ use std::vec::Vec;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::functions::{log, sin};
     use crate::context::{EvalContext, FunctionRegistry};
+    use crate::functions::{log, sin};
     use std::collections::HashMap;
     use std::vec; // Import functions from our own module
+
+    // Tests for the ternary operator
+    #[test]
+    fn test_ternary_operator_parsing() {
+        // Basic ternary expression
+        let ast = parse_expression("x > 0 ? 1 : -1").unwrap();
+        match ast {
+            AstExpr::Conditional {
+                condition,
+                true_branch,
+                false_branch,
+            } => {
+                // Verify condition is "x > 0"
+                match *condition {
+                    AstExpr::Function { name, args } => {
+                        assert_eq!(name, ">");
+                        assert_eq!(args.len(), 2);
+                    }
+                    _ => panic!("Expected function node for condition"),
+                }
+
+                // Verify true branch is "1"
+                match *true_branch {
+                    AstExpr::Constant(val) => assert_eq!(val, 1.0),
+                    _ => panic!("Expected constant for true branch"),
+                }
+
+                // Verify false branch is "-1"
+                match *false_branch {
+                    AstExpr::Function { name, args } => {
+                        assert_eq!(name, "neg");
+                        assert_eq!(args.len(), 1);
+                    }
+                    _ => panic!("Expected function node for false branch"),
+                }
+            }
+            _ => panic!("Expected conditional node"),
+        }
+    }
+
+    #[test]
+    fn test_ternary_operator_evaluation() {
+        // Test with true condition
+        let mut ctx = EvalContext::new();
+        ctx.set_parameter("x", 5.0);
+        let result = interp("x > 0 ? 10 : 20", Some(Rc::new(ctx))).unwrap();
+        assert_eq!(result, 10.0);
+
+        // Test with false condition
+        let mut ctx = EvalContext::new();
+        ctx.set_parameter("x", -5.0);
+        let result = interp("x > 0 ? 10 : 20", Some(Rc::new(ctx))).unwrap();
+        assert_eq!(result, 20.0);
+
+        // Test with nested ternary
+        let result = interp("1 ? 2 ? 3 : 4 : 5", None).unwrap();
+        assert_eq!(result, 3.0);
+
+        // Test with complex expressions in branches
+        let result = interp("0 ? 10 : 2 * 3 + 4", None).unwrap();
+        assert_eq!(result, 10.0);
+
+        // Test with complex expressions in condition
+        let result = interp("2 * 3 > 5 ? 1 : 0", None).unwrap();
+        assert_eq!(result, 1.0);
+    }
+
+    #[test]
+    fn test_ternary_operator_short_circuit() {
+        // Context with a variable that will cause division by zero in the false branch
+        let mut ctx = EvalContext::new();
+        ctx.set_parameter("x", 0.0);
+
+        // This should not cause a division by zero error because the condition is true,
+        // so the false branch (x's value / 0) is never evaluated due to short-circuit
+        let result = interp("1 ? 42 : 1/x", Some(Rc::new(ctx.clone()))).unwrap();
+        assert_eq!(result, 42.0);
+
+        // This should return infinity because the condition is false,
+        // so the false branch (1/0) is evaluated
+        let result = interp("0 ? 42 : 1/x", Some(Rc::new(ctx))).unwrap();
+        
+        #[cfg(feature = "f32")]
+        assert!(result.is_infinite() && result.is_sign_positive(), "1/0 should be positive infinity");
+        #[cfg(not(feature = "f32"))]
+        assert!(result.is_infinite() && result.is_sign_positive(), "1/0 should be positive infinity");
+    }
+
+    #[test]
+    fn test_ternary_operator_precedence() {
+        // Test that ternary has lower precedence than comparison
+        let result = interp("2 > 1 ? 3 : 4", None).unwrap();
+        assert_eq!(result, 3.0);
+
+        // Test that ternary has lower precedence than addition/subtraction
+        let result = interp("1 + 2 ? 3 : 4", None).unwrap();
+        assert_eq!(result, 3.0);
+
+        // Test that ternary has lower precedence than logical operators
+        let result = interp("1 && 0 ? 3 : 4", None).unwrap();
+        assert_eq!(result, 4.0);
+
+        // Test right associativity with nested ternary
+        let result = interp("1 ? 2 : 3 ? 4 : 5", None).unwrap();
+        assert_eq!(result, 2.0);
+    }
 
     // Helper function to print AST for debugging
     fn debug_ast(expr: &AstExpr, indent: usize) -> String {
@@ -940,6 +1145,30 @@ mod tests {
                     debug_ast(left, indent + 2),
                     debug_ast(right, indent + 2)
                 )
+            }
+            AstExpr::Conditional {
+                condition,
+                true_branch,
+                false_branch,
+            } => {
+                let mut result = format!("{}Conditional(\n", spaces);
+                result.push_str(&format!(
+                    "{}condition: {},\n",
+                    spaces.clone() + "  ",
+                    debug_ast(condition, indent + 4)
+                ));
+                result.push_str(&format!(
+                    "{}true_branch: {},\n",
+                    spaces.clone() + "  ",
+                    debug_ast(true_branch, indent + 4)
+                ));
+                result.push_str(&format!(
+                    "{}false_branch: {}\n",
+                    spaces.clone() + "  ",
+                    debug_ast(false_branch, indent + 4)
+                ));
+                result.push_str(&format!("{})", spaces));
+                result
             }
         }
     }
@@ -1177,7 +1406,7 @@ mod tests {
         let mut ctx = EvalContext::new();
         ctx.register_default_math_functions();
         let ctx_rc = Rc::new(ctx);
-        
+
         // Create AST for sin function call
         let sin_ast = AstExpr::Function {
             name: "sin".to_string(),
@@ -1224,7 +1453,7 @@ mod tests {
         println!("abs -42 = {}", result3);
         assert_eq!(result3, 42.0, "abs -42 should be 42.0");
     }
-    
+
     #[test]
     #[cfg(not(feature = "libm"))] // Alternative test for non-libm builds
     fn test_function_juxtaposition_no_libm() {
@@ -1234,9 +1463,9 @@ mod tests {
         ctx.register_native_function("cos", 1, |args| args[0].cos());
         ctx.register_native_function("abs", 1, |args| args[0].abs());
         ctx.register_native_function("neg", 1, |args| -args[0]);
-        
+
         let ctx_rc = Rc::new(ctx);
-        
+
         // Create AST for sin function call
         let sin_ast = AstExpr::Function {
             name: "sin".to_string(),
@@ -1372,20 +1601,20 @@ mod tests {
             "sin(0.5) should work"
         );
     }
-    
+
     #[test]
     #[cfg(not(feature = "libm"))] // Alternative test for non-libm builds
     fn test_function_recognition_no_libm() {
         // Create a context with our own implementation
         let mut ctx = EvalContext::new();
-        
+
         // Register sin and asin functions
         ctx.register_native_function("sin", 1, |args| args[0].sin());
         ctx.register_native_function("asin", 1, |args| args[0].asin());
-        
+
         // Convert to Rc
         let ctx_rc = Rc::new(ctx);
-        
+
         // Test function recognition with manually created AST
         let sin_ast = AstExpr::Function {
             name: "sin".to_string(),
@@ -1399,12 +1628,18 @@ mod tests {
 
         let result = eval_ast(&asin_sin_ast, Some(ctx_rc.clone())).unwrap();
         println!("asin sin 0.5 = {}", result);
-        assert!((result - 0.5).abs() < 1e-2, "asin(sin(0.5)) should be approximately 0.5");
+        assert!(
+            (result - 0.5).abs() < 1e-2,
+            "asin(sin(0.5)) should be approximately 0.5"
+        );
 
         // Test function recognition with parentheses using manually created AST
         let result2 = eval_ast(&sin_ast, Some(ctx_rc)).unwrap();
         println!("sin(0.5) = {}", result2);
-        assert!((result2 - (0.5 as Real).sin()).abs() < 1e-6, "sin(0.5) should work");
+        assert!(
+            (result2 - (0.5 as Real).sin()).abs() < 1e-6,
+            "sin(0.5) should work"
+        );
     }
 
     #[test]

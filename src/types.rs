@@ -100,6 +100,45 @@ pub enum AstExpr {
         /// The right operand (conditionally evaluated based on left value)
         right: Box<AstExpr>
     },
+    
+    /// A ternary conditional operation (condition ? true_expr : false_expr).
+    ///
+    /// Represents a conditional expression with three parts: a condition to evaluate,
+    /// an expression to return if the condition is true, and an expression to return
+    /// if the condition is false. This uses short-circuit evaluation, meaning only 
+    /// the relevant branch is evaluated.
+    ///
+    /// # Examples
+    ///
+    /// - `x > 0 ? 1 : -1`: Returns 1 if x is positive, -1 otherwise
+    /// - `flag ? value1 : value2`: Chooses between two values based on flag
+    /// - `a > b ? a : b`: Returns the maximum of a and b
+    ///
+    /// # Boolean Logic
+    ///
+    /// Like logical operations, the ternary operator uses floating-point values for boolean logic:
+    /// - `0.0` is considered `false`
+    /// - Any non-zero value is considered `true`
+    ///
+    /// # Short-Circuit Evaluation
+    ///
+    /// Only one branch is evaluated based on the condition result:
+    /// - If condition is non-zero (true), only the true_branch is evaluated
+    /// - If condition is zero (false), only the false_branch is evaluated
+    ///
+    /// # Operator Precedence
+    ///
+    /// The ternary operator has low precedence:
+    /// - `a + b ? c : d * e` is interpreted as `(a + b) ? c : (d * e)`
+    /// - Use parentheses for clarity when nesting operations
+    Conditional {
+        /// The condition expression to evaluate
+        condition: Box<AstExpr>,
+        /// Expression to evaluate if condition is true (non-zero)
+        true_branch: Box<AstExpr>,
+        /// Expression to evaluate if condition is false (zero)
+        false_branch: Box<AstExpr>
+    },
 }
 
 impl AstExpr {
@@ -254,6 +293,9 @@ pub enum ExprKind {
     
     /// A logical operation (AND/OR).
     LogicalOp,
+    
+    /// A conditional (ternary) operation.
+    Conditional,
 }
 
 /// Classifies the kind of token produced during lexical analysis.

@@ -110,11 +110,11 @@ where
         var_cache: &mut BTreeMap<String, Real>,
     ) -> Result<Real, ExprError> {
         // Track recursion depth for function calls and logical operations
-        // Track recursion depth for function calls and logical operations.
-        // We include LogicalOp in recursion tracking for two main reasons:
-        // 1. Logical operations can contain recursive function calls in either operand
+        // Track recursion depth for function calls, logical operations, and conditionals.
+        // We include LogicalOp and Conditional in recursion tracking for two main reasons:
+        // 1. They can contain recursive function calls in operands/branches
         // 2. Short-circuit evaluation might involve complex logic that could lead to stack overflows
-        let should_track = matches!(ast, AstExpr::Function { .. } | AstExpr::LogicalOp { .. });
+        let should_track = matches!(ast, AstExpr::Function { .. } | AstExpr::LogicalOp { .. } | AstExpr::Conditional { .. });
 
         // Check and increment recursion depth only if needed.
         // This protects against infinite recursion in expression functions and
@@ -126,6 +126,19 @@ where
         // Store result to ensure we always decrement the counter if needed
         let result = match ast {
             AstExpr::Constant(val) => Ok(*val),
+            AstExpr::Conditional { condition, true_branch, false_branch } => {
+                // Evaluate the condition first
+                let condition_val = eval_custom_function_ast(condition, func_ctx, global_ctx, func_cache, var_cache)?;
+                
+                // Short-circuit to the appropriate branch based on the condition
+                if condition_val != 0.0 {
+                    // Condition is true (non-zero), evaluate the true branch
+                    eval_custom_function_ast(true_branch, func_ctx, global_ctx, func_cache, var_cache)
+                } else {
+                    // Condition is false (zero), evaluate the false branch
+                    eval_custom_function_ast(false_branch, func_ctx, global_ctx, func_cache, var_cache)
+                }
+            },
             AstExpr::Variable(name) => {
                 // First check if the variable is a parameter in the function context
                 if let Some(val) = func_ctx.variables.get(name) {

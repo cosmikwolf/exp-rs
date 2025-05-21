@@ -234,7 +234,7 @@ impl<'a> Lexer<'a> {
 
         // Operators and punctuation
         // Support multi-character operators for tinyexpr++ grammar
-        let op_start = "+-*/^%.<>=!&|~";
+        let op_start = "+-*/^%.<>=!&|~?:";  // Added ? and : for ternary operators
         if op_start.contains(c) {
             let kind = TokenKind::Operator;
             let mut text = String::from(c);
@@ -468,5 +468,28 @@ mod tests {
         assert!(ops.contains(&"**"));
         assert!(ops.contains(&"<>"));
         assert!(ops.contains(&";"));
+    }
+    
+    #[test]
+    fn test_lexer_tokenization_ternary_operators() {
+        let mut lexer = Lexer::new("x > 0 ? y : z");
+        let mut tokens = Vec::new();
+        while let Some(tok) = lexer.next_token() {
+            tokens.push(tok);
+        }
+        
+        // Check that we have the right number of tokens
+        assert_eq!(tokens.len(), 7);
+        
+        // Verify the ternary operator tokens
+        assert_eq!(tokens[0].kind, TokenKind::Variable); // x
+        assert_eq!(tokens[1].kind, TokenKind::Operator); // >
+        assert_eq!(tokens[2].kind, TokenKind::Number);   // 0
+        assert_eq!(tokens[3].kind, TokenKind::Operator); // ?
+        assert_eq!(tokens[3].text.as_deref(), Some("?"));
+        assert_eq!(tokens[4].kind, TokenKind::Variable); // y
+        assert_eq!(tokens[5].kind, TokenKind::Operator); // :
+        assert_eq!(tokens[5].text.as_deref(), Some(":"));
+        assert_eq!(tokens[6].kind, TokenKind::Variable); // z
     }
 }

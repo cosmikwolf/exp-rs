@@ -194,37 +194,37 @@ mod tests {
     fn test_recursive_expression_function() {
         let mut ctx = EvalContext::new();
 
-        // Register a recursive function that calculates factorial
+        // Now that we support ternary operators, this should work for recursive functions
         let result1 = ctx.register_expression_function(
             "factorial",
             &["n"],
             "n <= 1 ? 1 : n * factorial(n - 1)",
         );
         assert!(
-            result1.is_err(),
-            "Should reject expressions with ternary syntax"
+            result1.is_ok(),
+            "Should accept recursive functions with ternary operators"
         );
 
-        // Register a non-recursive version instead
+        // Another version with recursion and ternary operators
         let result2 = ctx.register_expression_function(
-            "factorial",
+            "factorial_alt",
             &["n"],
-            "n * (n - 1) * (n - 2) * (n - 3) * (n - 4) + (n <= 4 ? 0 : factorial(n - 5))",
+            "n * (n - 1) * (n - 2) * (n - 3) * (n - 4) + (n <= 4 ? 0 : factorial_alt(n - 5))",
         );
         assert!(
-            result2.is_err(),
-            "Should reject expressions with ternary syntax"
+            result2.is_ok(),
+            "Should accept expressions with ternary syntax now that it's supported"
         );
 
-        // Use a simpler approach with a limited factorial implementation
+        // Now that we support ternary operators, update the test to verify it works correctly
         let result3 = ctx.register_expression_function(
             "factorial5",
             &["n"],
             "n <= 1 ? 1 : n * (n - 1) * (n - 2) * (n - 3) * (n - 4) / 24 * 120",
         );
         assert!(
-            result3.is_err(),
-            "Should reject expressions with ternary syntax"
+            result3.is_ok(),
+            "Should accept expressions with ternary operator now that it's supported"
         );
 
         // Now let's use a comparison operator without ternary (this should work)
@@ -308,12 +308,12 @@ mod tests {
             "Division by zero should return infinity"
         );
 
-        // Register a function that handles the error case explicitly
+        // Register a function that handles the error case explicitly using a ternary operator
         let result3 =
             ctx.register_expression_function("better_divide", &["x", "y"], "y == 0 ? 0 : x / y");
         assert!(
-            result3.is_err(),
-            "Should reject expressions with ternary syntax"
+            result3.is_ok(),
+            "Should accept expressions with ternary syntax now that it's supported"
         );
 
         // Use comparison operators (which are now supported)
