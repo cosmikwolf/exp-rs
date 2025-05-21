@@ -266,6 +266,8 @@ impl<'a> EvalContext<'a> {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(feature = "libm")]
+    /// # {
     /// use exp_rs::context::EvalContext;
     /// use exp_rs::engine::interp;
     /// use std::rc::Rc;
@@ -281,6 +283,7 @@ impl<'a> EvalContext<'a> {
     ///
     /// let result = interp("hypotenuse(3, 4)", Some(Rc::new(ctx))).unwrap();
     /// assert_eq!(result, 5.0);
+    /// # }
     /// ```
     ///
     /// Expression functions can call other functions:
@@ -440,6 +443,18 @@ impl<'a> EvalContext<'a> {
         self.register_native_function("%", 2, |args| args[0] % args[1]);
         self.register_native_function("^", 2, |args| args[0].powf(args[1]));
 
+        // Comparison operators
+        self.register_native_function("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
+        self.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+        self.register_native_function("<=", 2, |args| if args[0] <= args[1] { 1.0 } else { 0.0 });
+        self.register_native_function(">=", 2, |args| if args[0] >= args[1] { 1.0 } else { 0.0 });
+        self.register_native_function("==", 2, |args| if args[0] == args[1] { 1.0 } else { 0.0 });
+        self.register_native_function("!=", 2, |args| if args[0] != args[1] { 1.0 } else { 0.0 });
+
+        // Logical operators
+        self.register_native_function("&&", 2, |args| if args[0] != 0.0 && args[1] != 0.0 { 1.0 } else { 0.0 });
+        self.register_native_function("||", 2, |args| if args[0] != 0.0 || args[1] != 0.0 { 1.0 } else { 0.0 });
+
         // Function aliases for the operators
         self.register_native_function("add", 2, |args| args[0] + args[1]);
         self.register_native_function("sub", 2, |args| args[0] - args[1]);
@@ -492,6 +507,7 @@ impl<'a> EvalContext<'a> {
             self.register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
             self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
             self.register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
+            self.register_native_function("round", 1, |args| args[0].round()); // Use built-in round
             self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
             self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
             self.register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
@@ -514,6 +530,7 @@ impl<'a> EvalContext<'a> {
             self.register_native_function("cosh", 1, |args| args[0].cosh());
             self.register_native_function("exp", 1, |args| args[0].exp());
             self.register_native_function("floor", 1, |args| args[0].floor());
+            self.register_native_function("round", 1, |args| args[0].round());
             self.register_native_function("ln", 1, |args| args[0].ln());
             self.register_native_function("log", 1, |args| args[0].log10());
             self.register_native_function("log10", 1, |args| args[0].log10());

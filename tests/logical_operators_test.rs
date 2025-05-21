@@ -3,24 +3,29 @@ use exp_rs::engine::interp;
 use std::rc::Rc;
 use std::cell::RefCell;
 
+mod test_helpers;
+use test_helpers::create_context;
+
 #[test]
 fn test_basic_logical_operations() {
+    let ctx = Some(Rc::new(create_context()));
+
     // Test AND operator
-    assert_eq!(interp("1 && 1", None).unwrap(), 1.0);
-    assert_eq!(interp("1 && 0", None).unwrap(), 0.0);
-    assert_eq!(interp("0 && 1", None).unwrap(), 0.0);
-    assert_eq!(interp("0 && 0", None).unwrap(), 0.0);
+    assert_eq!(interp("1 && 1", ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("1 && 0", ctx.clone()).unwrap(), 0.0);
+    assert_eq!(interp("0 && 1", ctx.clone()).unwrap(), 0.0);
+    assert_eq!(interp("0 && 0", ctx.clone()).unwrap(), 0.0);
     
     // Test OR operator
-    assert_eq!(interp("1 || 1", None).unwrap(), 1.0);
-    assert_eq!(interp("1 || 0", None).unwrap(), 1.0);
-    assert_eq!(interp("0 || 1", None).unwrap(), 1.0);
-    assert_eq!(interp("0 || 0", None).unwrap(), 0.0);
+    assert_eq!(interp("1 || 1", ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("1 || 0", ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("0 || 1", ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("0 || 0", ctx.clone()).unwrap(), 0.0);
     
     // Test with actual boolean results from comparisons
-    assert_eq!(interp("(5 > 3) && (2 < 4)", None).unwrap(), 1.0);
-    assert_eq!(interp("(5 < 3) || (2 > 4)", None).unwrap(), 0.0);
-    assert_eq!(interp("(5 > 3) || (2 > 4)", None).unwrap(), 1.0);
+    assert_eq!(interp("(5 > 3) && (2 < 4)", ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("(5 < 3) || (2 > 4)", ctx.clone()).unwrap(), 0.0);
+    assert_eq!(interp("(5 > 3) || (2 > 4)", ctx.clone()).unwrap(), 1.0);
 }
 
 #[test]
@@ -72,28 +77,32 @@ fn test_short_circuit_evaluation() {
 
 #[test]
 fn test_operator_precedence() {
+    let ctx = Some(Rc::new(create_context()));
+
     // Verify AND has higher precedence than OR
-    assert_eq!(interp("0 && 0 || 1", None).unwrap(), 1.0); // (0 && 0) || 1
-    assert_eq!(interp("1 || 0 && 0", None).unwrap(), 1.0); // 1 || (0 && 0)
+    assert_eq!(interp("0 && 0 || 1", ctx.clone()).unwrap(), 1.0); // (0 && 0) || 1
+    assert_eq!(interp("1 || 0 && 0", ctx.clone()).unwrap(), 1.0); // 1 || (0 && 0)
     
     // Verify comparison operators have higher precedence than logical operators
-    assert_eq!(interp("5 > 3 && 2 < 4", None).unwrap(), 1.0); // (5 > 3) && (2 < 4)
-    assert_eq!(interp("5 > 3 || 2 > 4", None).unwrap(), 1.0); // (5 > 3) || (2 > 4)
+    assert_eq!(interp("5 > 3 && 2 < 4", ctx.clone()).unwrap(), 1.0); // (5 > 3) && (2 < 4)
+    assert_eq!(interp("5 > 3 || 2 > 4", ctx.clone()).unwrap(), 1.0); // (5 > 3) || (2 > 4)
     
     // Test with parentheses to force evaluation order
-    assert_eq!(interp("0 && (0 || 1)", None).unwrap(), 0.0);
-    assert_eq!(interp("(1 || 0) && 0", None).unwrap(), 0.0);
+    assert_eq!(interp("0 && (0 || 1)", ctx.clone()).unwrap(), 0.0);
+    assert_eq!(interp("(1 || 0) && 0", ctx.clone()).unwrap(), 0.0);
 }
 
 #[test]
 fn test_complex_logical_expressions() {
+    let base_ctx = Some(Rc::new(create_context()));
+
     // Test nested expressions
-    assert_eq!(interp("(1 && 1) && (1 && 1)", None).unwrap(), 1.0);
-    assert_eq!(interp("(1 || 0) && (0 || 1)", None).unwrap(), 1.0);
-    assert_eq!(interp("(0 || 0) || (0 || 0)", None).unwrap(), 0.0);
+    assert_eq!(interp("(1 && 1) && (1 && 1)", base_ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("(1 || 0) && (0 || 1)", base_ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("(0 || 0) || (0 || 0)", base_ctx.clone()).unwrap(), 0.0);
     
     // Test with variables
-    let mut ctx = EvalContext::new();
+    let mut ctx = create_context();
     ctx.set_parameter("x", 5.0);
     ctx.set_parameter("y", -3.0);
     
@@ -179,18 +188,20 @@ fn test_simplified_logical_operators() {
 
 #[test]
 fn test_mixed_operators_and_logical() {
+    let ctx = Some(Rc::new(create_context()));
+
     // Test mixing arithmetic, comparison, and logical operators
-    assert_eq!(interp("3 + 4 > 6 && 10 - 5 <= 5", None).unwrap(), 1.0);
-    assert_eq!(interp("2 * 3 == 6 || 10 / 2 != 5", None).unwrap(), 1.0);
-    assert_eq!(interp("2^3 > 8 || 3^2 < 9", None).unwrap(), 0.0);
+    assert_eq!(interp("3 + 4 > 6 && 10 - 5 <= 5", ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("2 * 3 == 6 || 10 / 2 != 5", ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("2^3 > 8 || 3^2 < 9", ctx.clone()).unwrap(), 0.0);
     
     // Test with complex expressions
-    assert_eq!(interp("(3 + 4 * 2) > (2 * 5) && (10 - 2) <= 8", None).unwrap(), 1.0);
-    assert_eq!(interp("sqrt(4) == 2 && sin(0) == 0", None).unwrap(), 1.0);
+    assert_eq!(interp("(3 + 4 * 2) > (2 * 5) && (10 - 2) <= 8", ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("sqrt(4) == 2 && sin(0) == 0", ctx.clone()).unwrap(), 1.0);
     
     // Test with more complex nested expressions
-    assert_eq!(interp("(2 > 1 && 3 > 2) || (4 < 3 && 5 < 4)", None).unwrap(), 1.0);
-    assert_eq!(interp("(2 < 1 || 3 < 2) && (4 > 3 || 5 > 4)", None).unwrap(), 0.0);
+    assert_eq!(interp("(2 > 1 && 3 > 2) || (4 < 3 && 5 < 4)", ctx.clone()).unwrap(), 1.0);
+    assert_eq!(interp("(2 < 1 || 3 < 2) && (4 > 3 || 5 > 4)", ctx.clone()).unwrap(), 0.0);
 }
 
 #[test]

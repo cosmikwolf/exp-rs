@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-
+#define USE_F32
 
 #if defined(USE_F32)
 /**

@@ -432,8 +432,7 @@ impl<'a> PrattParser<'a> {
         // Parse infix operators
         lhs = self.parse_infix_operators(lhs, min_bp, allow_comma)?;
 
-        // Parse juxtaposition (implicit function application)
-        lhs = self.parse_juxtaposition(lhs, allow_comma)?;
+        // Juxtaposition parsing disabled - use standard function call syntax with parentheses
 
         // Always decrement the recursion depth before returning
         self.recursion_depth -= 1;
@@ -443,6 +442,14 @@ impl<'a> PrattParser<'a> {
 
     fn parse_prefix_or_primary(&mut self, allow_comma: bool) -> Result<AstExpr, ExprError> {
         if let Some(tok) = self.peek() {
+            // Check for error tokens and report them immediately
+            if tok.kind == TokenKind::Error {
+                return Err(ExprError::Syntax(format!(
+                    "Unexpected token '{}' at position {}",
+                    tok.text.as_deref().unwrap_or("unknown"),
+                    tok.position
+                )));
+            }
             if tok.kind == TokenKind::Operator {
                 let op = tok.text.as_deref().unwrap_or("");
                 let op_position = tok.position;
@@ -672,8 +679,9 @@ impl<'a> PrattParser<'a> {
                     AstExpr::Variable(name) => name.clone(),
                     _ => unreachable!(),
                 };
-                // Parse the argument with the highest precedence (tighter than any binary op)
-                let arg = self.parse_expr_unified(16, allow_comma)?; // Use higher precedence than any unary or power op
+                // Parse only a primary expression for juxtaposition to avoid consuming operators
+                // This ensures "sin 1 + 2" is parsed as "(sin 1) + 2" not "sin(1 + 2)"
+                let arg = self.parse_primary()?;
 
                 // Create a function node
                 lhs = AstExpr::Function {
@@ -766,10 +774,17 @@ impl<'a> PrattParser<'a> {
 
         // Check for unexpected trailing tokens
         if let Some(tok) = self.peek() {
-            // Skip trailing whitespace and error tokens
-            if tok.kind == TokenKind::Error
-                || (tok.kind == TokenKind::Operator
-                    && tok.text.as_deref().is_some_and(|t| t.trim().is_empty()))
+            // Handle error tokens - return an error instead of skipping
+            if tok.kind == TokenKind::Error {
+                return Err(ExprError::Syntax(format!(
+                    "Unexpected token '{}' at position {}",
+                    tok.text.as_deref().unwrap_or("unknown"),
+                    tok.position
+                )));
+            }
+            // Skip trailing whitespace
+            if tok.kind == TokenKind::Operator
+                && tok.text.as_deref().is_some_and(|t| t.trim().is_empty())
             {
                 self.next();
             } else if tok.kind == TokenKind::Close {
@@ -888,9 +903,12 @@ pub fn parse_expression_with_context(
 /// let result = interp("2 + 3 * 4", None).unwrap();
 /// assert_eq!(result, 14.0);
 ///
+/// # #[cfg(feature = "libm")]
+/// # {
 /// // Using built-in functions and constants
 /// let result = interp("sin(pi/6) + cos(pi/3)", None).unwrap();
 /// assert!((result - 1.0).abs() < 0.0001);
+/// # }
 /// ```
 ///
 /// Using a context with variables:
@@ -1565,26 +1583,15 @@ mod tests {
     }
 
     #[test]
-    fn test_function_application_juxtaposition_ast() {
-        // Test with sin x
+    fn test_juxtaposition_disabled() {
+        // Test that juxtaposition is properly disabled - "sin x" should fail
         let ast = parse_expression("sin x");
         match ast {
-            Ok(ast) => {
-                println!("AST for sin x: {:?}", ast);
-                match ast {
-                    AstExpr::Function { ref name, ref args } if name == "sin" => {
-                        assert_eq!(args.len(), 1);
-                        match &args[0] {
-                            AstExpr::Variable(var) => assert_eq!(var, "x"),
-                            _ => panic!("Expected variable as sin arg"),
-                        }
-                    }
-                    _ => panic!("Expected function node for sin x"),
-                }
-            }
+            Ok(_) => panic!("Expected parse error for 'sin x' since juxtaposition is disabled"),
             Err(e) => {
-                println!("Parse error for 'sin x': {:?}", e);
-                panic!("Parse error: {:?}", e);
+                println!("Expected parse error for 'sin x': {:?}", e);
+                // This should fail since juxtaposition is disabled
+                assert!(e.to_string().contains("Unexpected token"));
             }
         }
 

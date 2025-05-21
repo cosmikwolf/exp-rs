@@ -15,7 +15,7 @@
 //! - Ability to override any built-in function at runtime
 //! - Array access with `array[index]` syntax
 //! - Object attributes with `object.attribute` syntax
-//! - Function application by juxtaposition (`sin x` is equivalent to `sin(x)`)
+//! - Standard function call syntax with parentheses (`sin(x)`, `cos(y)`, etc.)
 //! - Comprehensive error handling
 //! - No_std compatibility for embedded systems
 //!
@@ -31,9 +31,12 @@
 //!     let result = interp("2 + 3 * 4", None).unwrap();
 //!     assert_eq!(result, 14.0); // 2 + (3 * 4) = 14
 //!
-//!     // Using built-in functions and constants
-//!     let result = interp("sin(pi/4) + cos(pi/4)", None).unwrap();
-//!     assert!(result - 1.414 < 0.001); // Approximately √2
+//!     #[cfg(feature = "libm")]
+//!     {
+//!         // Using built-in functions and constants
+//!         let result = interp("sin(pi/4) + cos(pi/4)", None).unwrap();
+//!         assert!(result - 1.414 < 0.001); // Approximately √2
+//!     }
 //! }
 //! ```
 //! # Supported Grammar
@@ -44,7 +47,7 @@
 //! - Logical operators (`&&`, `||`) with short-circuit evaluation
 //! - Logical, comparison, bitwise, and exponentiation operators with correct precedence and associativity
 //! - List expressions and both comma and semicolon as separators
-//! - Function call syntax supporting both parentheses and juxtaposition
+//! - Standard function call syntax with parentheses
 //! - Array and attribute access
 //! - Right-associative exponentiation
 //!
@@ -154,9 +157,12 @@
 //! // Access attributes in expressions
 //! interp("point.x + point.y", Some(Rc::clone(&ctx_rc))).unwrap(); // Returns 7.0
 //!
+//! # #[cfg(feature = "libm")]
+//! # {
 //! // Combine array and attribute access in expressions
 //! interp("sqrt(point.x^2 + point.y^2) + data[0]", Some(Rc::clone(&ctx_rc))).unwrap();
 //! // Result: sqrt(3^2 + 4^2) + 10 = 5 + 10 = 15
+//! # }
 //! ```
 //!
 //! # Custom Functions
@@ -192,6 +198,8 @@
 //! Expression functions can be registered and passed into the library at runtime:
 //!
 //! ```rust
+//! # #[cfg(feature = "libm")]
+//! # {
 //! extern crate alloc;
 //! use exp_rs::context::EvalContext;
 //! use exp_rs::engine::interp;
@@ -211,6 +219,7 @@
 //!     let result = interp("hypotenuse(3, 4)", Some(Rc::new(ctx))).unwrap();
 //!     assert_eq!(result, 5.0);
 //! }
+//! # }
 //! ```
 //!
 //! # Performance Optimization with AST Caching

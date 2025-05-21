@@ -1,3 +1,5 @@
+mod test_helpers;
+
 #[cfg(test)]
 mod unit {
     use exp_rs::context::EvalContext;
@@ -10,14 +12,14 @@ mod unit {
     use exp_rs::lexer::Lexer;
     use exp_rs::types::{AstExpr, TokenKind};
     use std::rc::Rc;
-    
+
     use hashbrown::HashMap;
-    
+
+    use crate::test_helpers::create_context;
+
     /// Helper function to create an eval context with all math functions registered
     fn create_math_context() -> Rc<EvalContext<'static>> {
-        let mut ctx = EvalContext::new();
-        ctx.register_default_math_functions();
-        Rc::new(ctx)
+        Rc::new(create_context())
     }
 
     // --- Focused Unit Tests for Parser/Eval Failure Modes ---
@@ -25,10 +27,10 @@ mod unit {
     // --- Additional unit tests for parser internals and edge cases ---
 
     #[test]
-    fn test_parse_postfix_chained_juxtaposition() {
-        // sin cos tan x => sin(cos(tan(x)))
+    fn test_parse_standard_chained_function_calls() {
+        // sin(cos(tan(x))) => sin(cos(tan(x)))
         let ast =
-            parse_expression("sin cos tan x").unwrap_or_else(|e| panic!("Parse error: {}", e));
+            parse_expression("sin(cos(tan(x)))").unwrap_or_else(|e| panic!("Parse error: {}", e));
         match ast {
             AstExpr::Function { name, args } => {
                 assert_eq!(name, "sin");
@@ -317,8 +319,14 @@ mod unit {
         }
 
         // Test in a more complex expression
-        let result2 = interp("sin(.5) + cos(.5)", None).unwrap();
-        let expected = sin(0.5, 0.0) + cos(0.5, 0.0);
+        let result2 = interp("sin(.5) + cos(.5)", Some(create_math_context())).unwrap();
+        
+        // Calculate expected value through context to avoid direct function calls when libm is unavailable
+        let ctx = create_math_context();
+        let expected_sin = interp("sin(.5)", Some(ctx.clone())).unwrap();
+        let expected_cos = interp("cos(.5)", Some(ctx.clone())).unwrap();
+        let expected = expected_sin + expected_cos;
+        
         #[cfg(feature = "f32")]
         assert!((result2 - expected).abs() < 1e-6);
         #[cfg(not(feature = "f32"))]
@@ -409,7 +417,7 @@ mod unit {
             name: "sin".to_string(),
             args: vec![AstExpr::Constant(1.0), AstExpr::Constant(2.0)],
         };
-        let err = eval_ast(&ast, None).unwrap_err();
+        let err = eval_ast(&ast, Some(create_math_context())).unwrap_err();
         match err {
             ExprError::InvalidFunctionCall {
                 name,
@@ -516,9 +524,9 @@ mod unit {
     }
 
     #[test]
-    fn test_function_application_juxtaposition_ast() {
-        let ast = parse_expression("sin x").unwrap();
-        println!("AST for sin x: {:?}", ast);
+    fn test_function_application_standard_syntax_ast() {
+        let ast = parse_expression("sin(x)").unwrap();
+        println!("AST for sin(x): {:?}", ast);
         match ast {
             AstExpr::Function { ref name, ref args } if name == "sin" => {
                 assert_eq!(args.len(), 1);
@@ -554,11 +562,11 @@ mod unit {
     }
 
     #[test]
-    fn test_function_application_juxtaposition_eval() {
+    fn test_function_application_standard_syntax_eval() {
         // Create context with math functions for reliable testing
         let ctx = create_math_context();
-        
-        let val = interp("abs abs abs abs abs -42", Some(ctx.clone())).unwrap();
+
+        let val = interp("abs(abs(abs(abs(abs(-42)))))", Some(ctx.clone())).unwrap();
         assert_eq!(val, 42.0);
     }
 
@@ -647,10 +655,16 @@ mod unit {
     fn test_array_access() {
         // Setup context with an array
         let mut ctx = EvalContext::default();
-        ctx.arrays
-            .insert("climb_wave_wait_time".to_string().into(), vec![10.0, 20.0, 30.0]);
+        ctx.arrays.insert(
+            "climb_wave_wait_time".to_string().into(),
+            vec![10.0, 20.0, 30.0],
+        );
         // Use the new API to parse and evaluate the array access expression
-        let val = interp("climb_wave_wait_time[1]", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
+        let val = interp(
+            "climb_wave_wait_time[1]",
+            Some(std::rc::Rc::new(ctx.clone())),
+        )
+        .unwrap();
         assert_eq!(val, 20.0);
     }
 
@@ -658,8 +672,10 @@ mod unit {
     fn test_array_access_ast_structure() {
         // Setup context with an array
         let mut ctx = EvalContext::default();
-        ctx.arrays
-            .insert("climb_wave_wait_time".to_string().into(), vec![10.0, 20.0, 30.0]);
+        ctx.arrays.insert(
+            "climb_wave_wait_time".to_string().into(),
+            vec![10.0, 20.0, 30.0],
+        );
         // Parse the array access expression using the new API
         let ast = exp_rs::engine::parse_expression("climb_wave_wait_time[1]").unwrap();
         match ast {
@@ -739,7 +755,7 @@ mod unit {
     fn test_acos() {
         #[cfg(feature = "libm")]
         assert!((acos(1.0, 0.0) - 0.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("acos(1)", Some(ctx.clone())).unwrap();
@@ -750,7 +766,7 @@ mod unit {
     fn test_asin() {
         #[cfg(feature = "libm")]
         assert!((asin(0.0, 0.0) - 0.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("asin(0)", Some(ctx.clone())).unwrap();
@@ -761,7 +777,7 @@ mod unit {
     fn test_atan() {
         #[cfg(feature = "libm")]
         assert!((atan(0.0, 0.0) - 0.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("atan(0)", Some(ctx.clone())).unwrap();
@@ -774,16 +790,16 @@ mod unit {
         assert!((atan2(1.0, 1.0) - core::f32::consts::FRAC_PI_4).abs() < 1e-10);
         #[cfg(all(feature = "libm", not(feature = "f32")))]
         assert!((atan2(1.0, 1.0) - core::f64::consts::FRAC_PI_4).abs() < 1e-10);
-        
+
         // For all feature combinations, test atan2 via the context
         let ctx = create_math_context();
         let result = interp("atan2(1, 1)", Some(ctx.clone())).unwrap();
-        
+
         #[cfg(feature = "f32")]
         let expected = core::f32::consts::FRAC_PI_4;
         #[cfg(not(feature = "f32"))]
         let expected = core::f64::consts::FRAC_PI_4;
-        
+
         assert!((result - expected).abs() < 1e-6, "atan2(1,1) should be π/4");
     }
 
@@ -796,7 +812,7 @@ mod unit {
     fn test_cos() {
         #[cfg(feature = "libm")]
         assert!((cos(0.0, 0.0) - 1.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("cos(0)", Some(ctx.clone())).unwrap();
@@ -807,7 +823,7 @@ mod unit {
     fn test_cosh() {
         #[cfg(feature = "libm")]
         assert!((cosh(0.0, 0.0) - 1.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("cosh(0)", Some(ctx.clone())).unwrap();
@@ -818,7 +834,7 @@ mod unit {
     fn test_e() {
         #[cfg(feature = "libm")]
         assert!((e(0.0, 0.0) - exp_rs::constants::E).abs() < exp_rs::constants::TEST_PRECISION);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("e()", Some(ctx.clone())).unwrap();
@@ -831,16 +847,16 @@ mod unit {
         assert!((exp(1.0, 0.0) - core::f32::consts::E).abs() < 1e-10);
         #[cfg(all(feature = "libm", not(feature = "f32")))]
         assert!((exp(1.0, 0.0) - core::f64::consts::E).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("exp(1)", Some(ctx.clone())).unwrap();
-        
+
         #[cfg(feature = "f32")]
         let expected = core::f32::consts::E;
         #[cfg(not(feature = "f32"))]
         let expected = core::f64::consts::E;
-        
+
         assert!((result - expected).abs() < 1e-6);
     }
 
@@ -848,7 +864,7 @@ mod unit {
     fn test_floor() {
         #[cfg(feature = "libm")]
         assert_eq!(floor(2.7, 0.0), 2.0);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("floor(2.7)", Some(ctx.clone())).unwrap();
@@ -859,7 +875,7 @@ mod unit {
     fn test_ln() {
         #[cfg(feature = "libm")]
         assert!((ln(exp_rs::constants::E, 0.0) - 1.0).abs() < exp_rs::constants::TEST_PRECISION);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("ln(e())", Some(ctx.clone())).unwrap();
@@ -877,15 +893,15 @@ mod unit {
             assert!((log(100.0, 0.0) - 2.0).abs() < 1e-10);
             assert!((log(10.0, 0.0) - 1.0).abs() < 1e-10);
         }
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result1 = interp("log(1000)", Some(ctx.clone())).unwrap();
         assert!((result1 - 3.0).abs() < 1e-10);
-        
+
         let result2 = interp("log(100)", Some(ctx.clone())).unwrap();
         assert!((result2 - 2.0).abs() < 1e-10);
-        
+
         let result3 = interp("log(10)", Some(ctx.clone())).unwrap();
         assert!((result3 - 1.0).abs() < 1e-10);
     }
@@ -894,7 +910,7 @@ mod unit {
     fn test_log10() {
         #[cfg(feature = "libm")]
         assert!((log10(1000.0, 0.0) - 3.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("log10(1000)", Some(ctx.clone())).unwrap();
@@ -905,7 +921,7 @@ mod unit {
     fn test_pi() {
         #[cfg(feature = "libm")]
         assert!((pi(0.0, 0.0) - exp_rs::constants::PI).abs() < exp_rs::constants::TEST_PRECISION);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("pi()", Some(ctx.clone())).unwrap();
@@ -916,7 +932,7 @@ mod unit {
     fn test_pow() {
         #[cfg(feature = "libm")]
         assert_eq!(pow(2.0, 3.0), 8.0);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("pow(2, 3)", Some(ctx.clone())).unwrap();
@@ -927,7 +943,7 @@ mod unit {
     fn test_sin() {
         #[cfg(feature = "libm")]
         assert!((sin(0.0, 0.0) - 0.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("sin(0)", Some(ctx.clone())).unwrap();
@@ -938,7 +954,7 @@ mod unit {
     fn test_sinh() {
         #[cfg(feature = "libm")]
         assert!((sinh(0.0, 0.0) - 0.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("sinh(0)", Some(ctx.clone())).unwrap();
@@ -949,7 +965,7 @@ mod unit {
     fn test_sqrt() {
         #[cfg(feature = "libm")]
         assert_eq!(sqrt(4.0, 0.0), 2.0);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("sqrt(4)", Some(ctx.clone())).unwrap();
@@ -960,7 +976,7 @@ mod unit {
     fn test_tan() {
         #[cfg(feature = "libm")]
         assert!((tan(0.0, 0.0) - 0.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("tan(0)", Some(ctx.clone())).unwrap();
@@ -971,7 +987,7 @@ mod unit {
     fn test_tanh() {
         #[cfg(feature = "libm")]
         assert!((tanh(0.0, 0.0) - 0.0).abs() < 1e-10);
-        
+
         // For all feature combinations, test via context
         let ctx = create_math_context();
         let result = interp("tanh(0)", Some(ctx.clone())).unwrap();
@@ -1043,8 +1059,8 @@ mod unit {
             _ => panic!("Expected function node"),
         }
 
-        // sin x
-        let ast2 = parse_expression("sin x").unwrap();
+        // sin(x)
+        let ast2 = parse_expression("sin(x)").unwrap();
         match ast2 {
             AstExpr::Function { name, args } => {
                 assert_eq!(name, "sin");
@@ -1108,7 +1124,7 @@ mod unit {
 
         // Use sin with 2 args instead of pow(2) since pow now has special handling
         let ast = parse_expression("sin(1, 2)").unwrap();
-        let err = eval_ast(&ast, None).unwrap_err();
+        let err = eval_ast(&ast, Some(create_math_context())).unwrap_err();
         match err {
             ExprError::InvalidFunctionCall {
                 name,
