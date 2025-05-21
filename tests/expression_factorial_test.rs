@@ -220,7 +220,7 @@ fn test_expression_factorial_depth() {
         depth_range
     );
     assert_eq!(
-        depth_range, 9,
+        depth_range, 12,
         "Recursion depth range for factorial(4) should reflect AST evaluation"
     );
 

@@ -20,6 +20,10 @@ const MAX_RECURSION_DEPTH: usize = 250;
 pub fn check_and_increment_recursion_depth() -> Result<(), ExprError> {
     let current = RECURSION_DEPTH.load(Ordering::Relaxed);
     if current >= MAX_RECURSION_DEPTH {
+        // Immediately reset the counter to prevent potential state inconsistency
+        // This ensures future evaluations don't start with a maxed-out counter
+        RECURSION_DEPTH.store(0, Ordering::Relaxed);
+        
         Err(ExprError::RecursionLimit(format!(
             "Maximum recursion depth of {} exceeded during expression evaluation",
             MAX_RECURSION_DEPTH

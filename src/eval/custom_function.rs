@@ -191,6 +191,11 @@ where
                             found: arg_values.len(),
                         })
                     } else {
+                        // Explicitly check recursion depth before proceeding to nested evaluation
+                        // This provides an additional safety check before entering a potentially
+                        // recursive function evaluation path
+                        check_and_increment_recursion_depth()?;
+                        
                         // Create a fresh context for this function call
                         let mut nested_func_ctx = EvalContext::new();
 
@@ -205,13 +210,18 @@ where
                         }
 
                         // Evaluate directly using the AST without going through eval_expression_function
-                        eval_custom_function_ast(
+                        let result = eval_custom_function_ast(
                             &expr_fn.compiled_ast,
                             &nested_func_ctx,
                             global_ctx,
                             func_cache,
                             var_cache,
-                        )
+                        );
+                        
+                        // Ensure we always decrement the counter after evaluation
+                        decrement_recursion_depth();
+                        
+                        result
                     }
                 } else {
                     // Not found in the contexts, try built-in functions
