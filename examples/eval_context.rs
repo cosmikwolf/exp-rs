@@ -1,10 +1,7 @@
 extern crate alloc;
 use exp_rs::EvalContext;
-use exp_rs::Real;
 
 // Import libm only when the feature is enabled
-#[cfg(feature = "libm")]
-use libm::*;
 
 use std::println;
 
@@ -71,7 +68,7 @@ macro_rules! c_fn {
 }
 
 fn main() {
-    let mut ctx = EvalContext::new();
+    let ctx = EvalContext::new();
 
     #[cfg(feature = "f64")]
     {

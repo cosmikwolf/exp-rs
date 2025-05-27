@@ -131,7 +131,7 @@ impl EvalContext {
         // Always register default math functions
         // This now includes basic operators and core functions regardless of features,
         // while advanced math functions are guarded by feature flags within the function
-        let _ = ctx.register_default_math_functions();
+        ctx.register_default_math_functions();
 
         ctx
     }
@@ -745,7 +745,6 @@ impl Default for EvalContext {
 
 // Helper trait removed - heapless containers support Clone directly
 
-use alloc::borrow::Cow;
 
 /// User-defined function.
 #[derive(Clone)]

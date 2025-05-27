@@ -4,13 +4,13 @@
 use exp_rs::assert_approx_eq;
 use exp_rs::interp;
 use std::time::{Duration, Instant};
+use test_helpers::create_context_rc;
 
 // Remove unused import
 // use exp_rs::Real;
 
 // Import test helpers for function registration when libm is missing
 mod test_helpers;
-use test_helpers::{create_context, create_context_rc};
 
 // --- All parser/tokenizer internals and legacy AST tests removed ---
 // All tests now use the new interp() API and check results only.
@@ -29,7 +29,7 @@ fn with_timeout<F: FnOnce()>(f: F) {
 #[cfg(test)]
 mod results {
     use super::*;
-    use exp_rs::Real; // Import Real here as it's used in casts
+    // Import Real here as it's used in casts
 
     #[test]
     fn basic_results() {
@@ -761,10 +761,15 @@ fn error_handling_and_invalid_inputs() {
                 Err(e) => {
                     let err_msg = e.to_string();
                     assert!(
-                        err_msg.contains(expected_err_contains) || 
-                        (expected_err_contains == "Mismatched parentheses" && err_msg.contains("Expected closing parenthesis")) ||
-                        (expected_err_contains == "Unexpected end of input" && (err_msg.contains("Unmatched parenthesis") || err_msg.contains("used without arguments"))) ||
-                        (expected_err_contains == "Unexpected token" && (err_msg.contains("Unexpected closing parenthesis") || err_msg.contains("Unexpected end of input"))),
+                        err_msg.contains(expected_err_contains)
+                            || (expected_err_contains == "Mismatched parentheses"
+                                && err_msg.contains("Expected closing parenthesis"))
+                            || (expected_err_contains == "Unexpected end of input"
+                                && (err_msg.contains("Unmatched parenthesis")
+                                    || err_msg.contains("used without arguments")))
+                            || (expected_err_contains == "Unexpected token"
+                                && (err_msg.contains("Unexpected closing parenthesis")
+                                    || err_msg.contains("Unexpected end of input"))),
                         "Error message '{}' for '{}' should contain '{}' or related error",
                         err_msg,
                         expr,

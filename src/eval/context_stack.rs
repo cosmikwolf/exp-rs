@@ -32,6 +32,12 @@ struct ContextWrapper {
     is_owned: bool,
 }
 
+impl Default for ContextStack {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ContextStack {
     /// Create a new context stack
     pub fn new() -> Self {

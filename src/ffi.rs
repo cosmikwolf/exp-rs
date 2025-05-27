@@ -621,7 +621,7 @@ pub extern "C" fn exp_rs_context_set_parameter(
     
     EvalResult {
         status: 0,
-        value: value,  // Return the value that was set
+        value,  // Return the value that was set
         error: ptr::null(),
     }
 }

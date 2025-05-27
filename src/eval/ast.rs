@@ -8,8 +8,6 @@ use crate::error::ExprError;
 use crate::types::AstExpr;
 #[cfg(not(test))]
 use alloc::rc::Rc;
-#[cfg(not(test))]
-use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(test)]
 use std::rc::Rc;
 #[cfg(test)]
@@ -18,7 +16,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::vec::Vec;
 
 use alloc::collections::BTreeMap;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 
 #[cfg(feature = "libm")]
 #[allow(dead_code)]

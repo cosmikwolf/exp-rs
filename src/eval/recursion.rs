@@ -2,7 +2,6 @@ extern crate alloc;
 use crate::error::ExprError;
 #[cfg(not(test))]
 use alloc::format;
-use alloc::string::{String, ToString};
 
 // Add recursion depth tracking for evaluating expression functions
 #[cfg(not(test))]

@@ -145,12 +145,7 @@ pub fn eval_function<'a>(
             // Convert to our owned version
             let owned_fn = OwnedNativeFunction::from(native_fn);
             Some(FunctionCacheEntry::Native(owned_fn))
-        } else if let Some(user_fn) = ctx_ref.get_user_function(name) {
-            // UserFunction is already Clone so we can use it directly
-            Some(FunctionCacheEntry::User(user_fn.clone()))
-        } else {
-            None
-        }
+        } else { ctx_ref.get_user_function(name).map(|user_fn| FunctionCacheEntry::User(user_fn.clone())) }
     } else {
         None
     };
@@ -424,9 +419,9 @@ pub fn eval_function<'a>(
         }
 
         // If we get here, the function is unknown
-        return Err(ExprError::UnknownFunction {
+        Err(ExprError::UnknownFunction {
             name: name.to_string(),
-        });
+        })
     }
 }
 

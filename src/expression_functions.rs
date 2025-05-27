@@ -9,20 +9,20 @@ use crate::context::EvalContext;
 use crate::error::Result;
 use crate::eval::eval_ast;
 use crate::types::AstExpr;
+use crate::types::TryIntoHeaplessString;
+use alloc::borrow::Cow;
 #[cfg(not(test))]
 use alloc::rc::Rc;
+use alloc::string::ToString;
 #[cfg(test)]
 use std::rc::Rc;
-use alloc::borrow::Cow;
-use alloc::string::ToString;
-use crate::types::{TryIntoHeaplessString, TryIntoFunctionName};
 
 /// Evaluates an expression function with the given arguments.
 ///
 /// This is a helper function used internally by the evaluation logic.
 pub fn eval_expression_function<'a>(
     ast: &AstExpr,
-    param_names: &[Cow<'a , str>],
+    param_names: &[Cow<'a, str>],
     arg_values: &[Real],
     parent_ctx: Option<Rc<EvalContext>>,
 ) -> Result<Real> {
@@ -38,7 +38,6 @@ pub fn eval_expression_function<'a>(
     eval_ast(ast, Some(Rc::new(temp_ctx)))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -48,6 +47,7 @@ mod tests {
     use crate::assert_approx_eq;
     // Import Real for casting
     use crate::Real;
+    use crate::TryIntoFunctionName;
 
     #[test]
     fn test_simple_expression_function() {
@@ -69,10 +69,26 @@ mod tests {
         ctx.register_expression_function("cube", &["x"], "x * square(x)")
             .unwrap();
 
-        println!("Registered expression functions: {:?}", ctx.function_registry.expression_functions.keys().collect::<Vec<_>>());
+        println!(
+            "Registered expression functions: {:?}",
+            ctx.function_registry
+                .expression_functions
+                .keys()
+                .collect::<Vec<_>>()
+        );
 
-        assert!(ctx.function_registry.expression_functions.contains_key(&"square".try_into_function_name().unwrap()), "Context missing 'square' function");
-        assert!(ctx.function_registry.expression_functions.contains_key(&"cube".try_into_function_name().unwrap()), "Context missing 'cube' function");
+        assert!(
+            ctx.function_registry
+                .expression_functions
+                .contains_key(&"square".try_into_function_name().unwrap()),
+            "Context missing 'square' function"
+        );
+        assert!(
+            ctx.function_registry
+                .expression_functions
+                .contains_key(&"cube".try_into_function_name().unwrap()),
+            "Context missing 'cube' function"
+        );
 
         let ast = crate::engine::parse_expression("cube(3)").unwrap();
         println!("Parsed expression: {:?}", ast);
@@ -82,8 +98,22 @@ mod tests {
             Ok(val) => assert_eq!(*val, 27.0),
             Err(e) => {
                 println!("Error evaluating cube(3): {:?}", e);
-                println!("Context expression functions: {:?}", ctx.function_registry.expression_functions.keys().collect::<Vec<_>>());
-                println!("Full context: variables={:?}, constants={:?}, expression_functions={:?}", ctx.variables, ctx.constants, ctx.function_registry.expression_functions.keys().collect::<Vec<_>>());
+                println!(
+                    "Context expression functions: {:?}",
+                    ctx.function_registry
+                        .expression_functions
+                        .keys()
+                        .collect::<Vec<_>>()
+                );
+                println!(
+                    "Full context: variables={:?}, constants={:?}, expression_functions={:?}",
+                    ctx.variables,
+                    ctx.constants,
+                    ctx.function_registry
+                        .expression_functions
+                        .keys()
+                        .collect::<Vec<_>>()
+                );
                 panic!("Failed to evaluate cube(3): {:?}", e);
             }
         }
@@ -98,14 +128,21 @@ mod tests {
 
         let body_ast = crate::engine::parse_expression_with_reserved(
             "a * w + b * (1 - w)",
-            Some(&["a".to_string(), "b".to_string(), "w".to_string()])
-        ).unwrap();
-        println!("AST for function body 'a * w + b * (1 - w)': {:?}", body_ast);
+            Some(&["a".to_string(), "b".to_string(), "w".to_string()]),
+        )
+        .unwrap();
+        println!(
+            "AST for function body 'a * w + b * (1 - w)': {:?}",
+            body_ast
+        );
 
         fn assert_no_function_w(ast: &AstExpr) {
             match ast {
                 AstExpr::Function { name, args } => {
-                    assert_ne!(name, "w", "Parameter 'w' should not be parsed as a function");
+                    assert_ne!(
+                        name, "w",
+                        "Parameter 'w' should not be parsed as a function"
+                    );
                     for arg in args {
                         assert_no_function_w(arg);
                     }
@@ -116,22 +153,21 @@ mod tests {
         }
         assert_no_function_w(&body_ast);
 
-        let w_ast = crate::engine::parse_expression_with_reserved(
-            "w",
-            Some(&["w".to_string()])
-        ).unwrap();
+        let w_ast =
+            crate::engine::parse_expression_with_reserved("w", Some(&["w".to_string()])).unwrap();
         println!("AST for 'w': {:?}", w_ast);
         match w_ast {
             AstExpr::Variable(ref name) => assert_eq!(name, "w"),
             _ => panic!("Expected variable node for 'w'"),
         }
 
-        let w_b_ast = crate::engine::parse_expression_with_reserved(
-            "w b",
-            Some(&["w".to_string()])
-        );
+        let w_b_ast =
+            crate::engine::parse_expression_with_reserved("w b", Some(&["w".to_string()]));
         println!("AST for 'w b': {:?}", w_b_ast);
-        assert!(w_b_ast.is_err(), "Expected parse error for 'w b' when 'w' is a reserved parameter");
+        assert!(
+            w_b_ast.is_err(),
+            "Expected parse error for 'w b' when 'w' is a reserved parameter"
+        );
 
         let ast = crate::engine::parse_expression("weighted_sum(10, 20, 0.3)");
         match ast {
@@ -162,8 +198,12 @@ mod tests {
     fn test_expression_function_with_context_variables() {
         let mut ctx = EvalContext::new();
 
-        ctx.variables.insert("base".try_into_heapless().unwrap(), 10.0).expect("Failed to insert variable");
-        ctx.constants.insert("FACTOR".try_into_heapless().unwrap(), 2.5).expect("Failed to insert constant");
+        ctx.variables
+            .insert("base".try_into_heapless().unwrap(), 10.0)
+            .expect("Failed to insert variable");
+        ctx.constants
+            .insert("FACTOR".try_into_heapless().unwrap(), 2.5)
+            .expect("Failed to insert constant");
 
         println!("Context variables before: {:?}", ctx.variables);
         println!("Context constants before: {:?}", ctx.constants);
@@ -174,8 +214,16 @@ mod tests {
         println!("Context variables after: {:?}", ctx.variables);
         println!("Context constants after: {:?}", ctx.constants);
 
-        assert!(ctx.variables.contains_key(&"base".try_into_heapless().unwrap()), "Context missing 'base' variable");
-        assert!(ctx.constants.contains_key(&"FACTOR".try_into_heapless().unwrap()), "Context missing 'FACTOR' constant");
+        assert!(
+            ctx.variables
+                .contains_key(&"base".try_into_heapless().unwrap()),
+            "Context missing 'base' variable"
+        );
+        assert!(
+            ctx.constants
+                .contains_key(&"FACTOR".try_into_heapless().unwrap()),
+            "Context missing 'FACTOR' constant"
+        );
 
         let ast = crate::engine::parse_expression("scaled_value(4)").unwrap();
         println!("Parsed expression: {:?}", ast);
@@ -187,7 +235,15 @@ mod tests {
                 println!("Error evaluating scaled_value(4): {:?}", e);
                 println!("Context variables at error: {:?}", ctx.variables);
                 println!("Context constants at error: {:?}", ctx.constants);
-                println!("Full context: variables={:?}, constants={:?}, expression_functions={:?}", ctx.variables, ctx.constants, ctx.function_registry.expression_functions.keys().collect::<Vec<_>>());
+                println!(
+                    "Full context: variables={:?}, constants={:?}, expression_functions={:?}",
+                    ctx.variables,
+                    ctx.constants,
+                    ctx.function_registry
+                        .expression_functions
+                        .keys()
+                        .collect::<Vec<_>>()
+                );
                 panic!("Failed to evaluate scaled_value(4): {:?}", e);
             }
         }
@@ -231,11 +287,7 @@ mod tests {
         );
 
         // Now let's use a comparison operator without ternary (this should work)
-        let result4 = ctx.register_expression_function(
-            "is_big",
-            &["n"],
-            "n > 100",
-        );
+        let result4 = ctx.register_expression_function("is_big", &["n"], "n > 100");
         assert!(
             result4.is_ok(),
             "Should accept expressions with comparison operators"
@@ -280,16 +332,12 @@ mod tests {
 
         // Test the circle area function
         let result = interp("circle_area(2)", Some(Rc::new(ctx.clone()))).unwrap();
-        assert_approx_eq!(
-            result, constants::PI * 4.0, constants::TEST_PRECISION
-        );
+        assert_approx_eq!(result, constants::PI * 4.0, constants::TEST_PRECISION);
 
         // Test the sphere volume function
         let result2 = interp("sphere_volume(3)", Some(Rc::new(ctx.clone()))).unwrap();
         let expected = (4.0 / 3.0) * constants::PI * 27.0;
-        assert_approx_eq!(
-            result2, expected, constants::TEST_PRECISION
-        );
+        assert_approx_eq!(result2, expected, constants::TEST_PRECISION);
     }
 
     #[test]
@@ -335,11 +383,7 @@ mod tests {
             "max",
             2,
             |args| {
-                if args[0] > args[1] {
-                    args[0]
-                } else {
-                    args[1]
-                }
+                if args[0] > args[1] { args[0] } else { args[1] }
             },
         );
 
@@ -350,16 +394,20 @@ mod tests {
         // Test with division by zero using the better function
         let result3 = interp("better_divide(10, 0)", Some(Rc::new(ctx.clone()))).unwrap();
         println!("better_divide(10, 0) = {}", result3); // Debug output
-                                                        // When y is 0, we use max(0, 1e-10) which is 1e-10
-                                                        // So the result is 10 / 1e-10 = 1e11
+        // When y is 0, we use max(0, 1e-10) which is 1e-10
+        // So the result is 10 / 1e-10 = 1e11
         #[cfg(feature = "f32")]
         assert_approx_eq!(
-            result3, 1e11 as Real, 1e6 as Real // Cast literals to Real
+            result3,
+            1e11 as Real,
+            1e6 as Real // Cast literals to Real
         );
 
         #[cfg(not(feature = "f32"))]
         assert_approx_eq!(
-            result3, 1e11 as Real, 1e6 as Real // Cast literals to Real
+            result3,
+            1e11 as Real,
+            1e6 as Real // Cast literals to Real
         );
     }
 

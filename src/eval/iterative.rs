@@ -9,7 +9,7 @@ use crate::Real;
 use crate::error::ExprError;
 use crate::context::EvalContext;
 use crate::eval::types::{FunctionCacheEntry, OwnedNativeFunction};
-use crate::eval::stack_ops::{EvalOp, UnaryOp, ast_to_stack_op, is_binary_operator};
+use crate::eval::stack_ops::EvalOp;
 use crate::eval::context_stack::ContextStack;
 use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
 
@@ -45,6 +45,12 @@ pub struct EvalEngine {
     ctx_stack: ContextStack,
     /// Function cache
     func_cache: BTreeMap<String, Option<FunctionCacheEntry>>,
+}
+
+impl Default for EvalEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EvalEngine {

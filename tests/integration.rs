@@ -18,8 +18,7 @@ use alloc::rc::Rc;
 
 // Use the shared test helper functions
 mod test_helpers;
-use test_helpers::{create_context, create_context_rc, hstr, set_var, set_attr, set_const};
-use exp_rs::types::TryIntoHeaplessString;
+use test_helpers::{create_context, create_context_rc, hstr, set_attr, set_const, set_var};
 
 // The helper function implementation is now in test_helpers.rs
 
@@ -229,10 +228,9 @@ fn test_array_expressions() {
     let mut ctx = EvalContext::default();
 
     // Add an array
-    ctx.arrays.insert(
-        hstr("data"),
-        vec![10.0, 20.0, 30.0, 40.0, 50.0],
-    ).expect("Failed to insert array");
+    ctx.arrays
+        .insert(hstr("data"), vec![10.0, 20.0, 30.0, 40.0, 50.0])
+        .expect("Failed to insert array");
 
     // Access array elements
     assert_eq!(
@@ -907,10 +905,12 @@ fn test_config_expressions() {
     set_const(&mut ctx, "VOLTAGE_MAX", 5.0);
 
     // Add data tables
-    ctx.arrays.insert(
-        hstr("wait_times"),
-        vec![64691.0, 64625.0, 64559.0, 64494.0, 64428.0],
-    ).expect("Failed to insert array");
+    ctx.arrays
+        .insert(
+            hstr("wait_times"),
+            vec![64691.0, 64625.0, 64559.0, 64494.0, 64428.0],
+        )
+        .expect("Failed to insert array");
 
     // Add parameters
     set_var(&mut ctx, "power", 50.0);
