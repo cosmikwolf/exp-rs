@@ -9,17 +9,16 @@ use exp_rs::engine::interp;
 use exp_rs::error::ExprError;
 use std::rc::Rc;
 
-/// Test that the recursion depth limit is enforced
+/// Test that the recursion/capacity limit is enforced
 #[test]
-#[ignore = "Integration tests use production recursion limit which may cause stack overflow"]
 fn test_recursion_depth_limit() {
-    // Reset recursion depth to ensure clean test state
-    exp_rs::eval::recursion::reset_recursion_depth();
+    // With the iterative evaluator, we don't need to reset recursion depth
+    // as it uses a fixed-size context stack instead
     
     // Create a new evaluation context
     let mut ctx = EvalContext::default();
     
-    // Register a recursive function that would cause stack overflow without depth tracking
+    // Register a recursive function that would cause stack overflow without limits
     // This function calls itself without ever reaching a base case
     ctx.register_expression_function(
         "infinite_recursion", 
@@ -27,21 +26,26 @@ fn test_recursion_depth_limit() {
         "infinite_recursion(x + 1)"
     ).unwrap();
     
-    // Try to evaluate the function - should throw a recursion limit error
+    // Try to evaluate the function - should throw a capacity exceeded error
     let result = interp("infinite_recursion(0)", Some(Rc::new(ctx.clone())));
     
     // Verify that we got the expected error
-    assert!(result.is_err(), "Expected an error due to recursion limit");
+    assert!(result.is_err(), "Expected an error due to capacity limit");
     
     // Check the specific error type
     let error = result.unwrap_err();
     match error {
+        ExprError::CapacityExceeded(resource) => {
+            // Success - we caught the capacity limit
+            println!("Successfully caught capacity limit: {}", resource);
+            assert_eq!(resource, "context stack", "Error should be for context stack");
+        },
         ExprError::RecursionLimit(msg) => {
-            // Success - we caught the recursion limit
+            // Also accept RecursionLimit for compatibility
             println!("Successfully caught recursion limit: {}", msg);
             assert!(msg.contains("recursion depth"), "Error message should mention recursion depth");
         },
-        _ => panic!("Expected RecursionLimit error, got: {:?}", error),
+        _ => panic!("Expected CapacityExceeded or RecursionLimit error, got: {:?}", error),
     }
 }
 
@@ -94,6 +98,11 @@ fn test_proper_recursion() {
                 // This is acceptable - the recursion depth limit is working as expected
                 println!("Recursion limit reached for: {} ({})", expr, msg);
                 false // Indicate recursion limit was hit
+            },
+            Err(ExprError::CapacityExceeded(resource)) => {
+                // With the iterative evaluator, we get capacity exceeded instead of recursion limit
+                println!("Capacity limit reached for: {} ({})", expr, resource);
+                false // Indicate capacity limit was hit
             },
             Err(e) => {
                 panic!("Unexpected error for {}: {:?}", expr, e);

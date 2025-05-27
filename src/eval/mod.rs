@@ -9,6 +9,9 @@ pub mod custom_function;
 pub mod evaluator;
 pub mod recursion;
 pub mod types;
+pub mod stack_ops;
+pub mod context_stack;
+pub mod iterative;
 
 // Re-export the main evaluation functions for backward compatibility
 pub use ast::*;
@@ -44,7 +47,7 @@ mod tests {
     use crate::neg;
     use crate::pow;
     use crate::sin;
-    use std::collections::HashMap;
+    // Removed - using heapless instead
     use std::rc::Rc;
 
     // Helper functions for tests that need to call eval functions directly
@@ -100,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_eval_user_function_polynomial() {
-        let mut ctx = EvalContext::new();
+        let mut ctx = create_test_context();
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
         let mut func_cache = std::collections::BTreeMap::new();
@@ -176,6 +179,41 @@ mod tests {
     // Helper to create a context and register defaults IF builtins are enabled
     fn create_test_context<'a>() -> EvalContext {
         let mut ctx = EvalContext::new();
+        
+        // In tests, we can use stdlib functions even when libm is disabled
+        #[cfg(all(test, not(feature = "libm")))]
+        {
+            // Register basic math functions using stdlib
+            let _ = ctx.register_native_function("sin", 1, |args| args[0].sin());
+            let _ = ctx.register_native_function("cos", 1, |args| args[0].cos());
+            let _ = ctx.register_native_function("tan", 1, |args| args[0].tan());
+            let _ = ctx.register_native_function("asin", 1, |args| args[0].asin());
+            let _ = ctx.register_native_function("acos", 1, |args| args[0].acos());
+            let _ = ctx.register_native_function("atan", 1, |args| args[0].atan());
+            let _ = ctx.register_native_function("atan2", 2, |args| args[0].atan2(args[1]));
+            let _ = ctx.register_native_function("sinh", 1, |args| args[0].sinh());
+            let _ = ctx.register_native_function("cosh", 1, |args| args[0].cosh());
+            let _ = ctx.register_native_function("tanh", 1, |args| args[0].tanh());
+            let _ = ctx.register_native_function("exp", 1, |args| args[0].exp());
+            let _ = ctx.register_native_function("ln", 1, |args| args[0].ln());
+            let _ = ctx.register_native_function("log", 1, |args| args[0].ln());
+            let _ = ctx.register_native_function("log10", 1, |args| args[0].log10());
+            let _ = ctx.register_native_function("log2", 1, |args| args[0].log2());
+            let _ = ctx.register_native_function("sqrt", 1, |args| args[0].sqrt());
+            let _ = ctx.register_native_function("abs", 1, |args| args[0].abs());
+            let _ = ctx.register_native_function("floor", 1, |args| args[0].floor());
+            let _ = ctx.register_native_function("ceil", 1, |args| args[0].ceil());
+            let _ = ctx.register_native_function("round", 1, |args| args[0].round());
+            let _ = ctx.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+            let _ = ctx.register_native_function("^", 2, |args| args[0].powf(args[1]));
+            let _ = ctx.register_native_function("min", 2, |args| args[0].min(args[1]));
+            let _ = ctx.register_native_function("max", 2, |args| args[0].max(args[1]));
+            let _ = ctx.register_native_function("neg", 1, |args| -args[0]);
+            let _ = ctx.register_native_function("sign", 1, |args| {
+                if args[0] > 0.0 { 1.0 } else if args[0] < 0.0 { -1.0 } else { 0.0 }
+            });
+        }
+        
         // Register defaults only if the feature allows it
         #[cfg(feature = "libm")]
         {
@@ -405,15 +443,15 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "libm"))] // Test behavior when builtins are disabled
+    #[cfg(all(not(feature = "libm"), feature = "std"))] // Test behavior when builtins are disabled but std is available
     fn test_neg_pow_eval_no_builtins() {
         // Create a clean context with no auto-registered functions
         let mut ctx = EvalContext {
-            variables: HashMap::new(),
-            constants: HashMap::new(),
-            arrays: HashMap::new(),
-            attributes: HashMap::new(),
-            nested_arrays: HashMap::new(),
+            variables: Default::default(),
+            constants: Default::default(),
+            arrays: Default::default(),
+            attributes: Default::default(),
+            nested_arrays: Default::default(),
             function_registry: Rc::new(FunctionRegistry::default()),
             parent: None,
             ast_cache: None,
@@ -433,11 +471,11 @@ mod tests {
 
         // Create another completely empty context for error testing
         let empty_ctx = Rc::new(EvalContext {
-            variables: HashMap::new(),
-            constants: HashMap::new(),
-            arrays: HashMap::new(),
-            attributes: HashMap::new(),
-            nested_arrays: HashMap::new(),
+            variables: Default::default(),
+            constants: Default::default(),
+            arrays: Default::default(),
+            attributes: Default::default(),
+            nested_arrays: Default::default(),
             function_registry: Rc::new(FunctionRegistry::default()),
             parent: None,
             ast_cache: None,
@@ -601,11 +639,11 @@ mod tests {
     fn test_pow_arity_eval_no_builtins() {
         // Create a minimal context with only what we need
         let mut ctx = EvalContext {
-            variables: HashMap::new(),
-            constants: HashMap::new(),
-            arrays: HashMap::new(),
-            attributes: HashMap::new(),
-            nested_arrays: HashMap::new(),
+            variables: Default::default(),
+            constants: Default::default(),
+            arrays: Default::default(),
+            attributes: Default::default(),
+            nested_arrays: Default::default(),
             function_registry: Rc::new(FunctionRegistry::default()),
             parent: None,
             ast_cache: None,
@@ -1039,28 +1077,19 @@ mod tests {
 
     #[test]
     fn test_recursion_depth_tracking_reset() {
-        // This test ensures that recursion depth is correctly reset at the start of evaluation
-
-        // Force the counter to a non-zero value
-        RECURSION_DEPTH.store(100, Ordering::Relaxed);
-
-        // Create a simple AST
+        // This test is no longer relevant with the iterative evaluator
+        // The iterative evaluator doesn't use a global recursion counter
+        // Instead, it uses a context stack with a fixed capacity
+        
+        // We'll test that simple expressions evaluate correctly
         let ast = AstExpr::Constant(42.0);
-
-        // Evaluate - this should reset the counter
         let result = eval_ast(&ast, None);
-
-        // Verify the result is correct
+        
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42.0);
-
-        // Check that the counter is back to 0 or a small value after full evaluation
-        let final_depth = RECURSION_DEPTH.load(Ordering::Relaxed);
-        assert!(
-            final_depth < 10,
-            "Recursion depth not properly reset, got {}",
-            final_depth
-        );
+        
+        // The iterative evaluator automatically cleans up its stack after evaluation
+        // so there's no need to check for reset behavior
     }
 
     #[test]
@@ -1075,35 +1104,24 @@ mod tests {
         ctx.register_expression_function("infinite_recursion", &["x"], "infinite_recursion(x + 1)")
             .unwrap();
 
-        // Try to evaluate - should fail with recursion limit
+        // Try to evaluate - should fail with capacity exceeded
         let result = interp("infinite_recursion(0)", Some(Rc::new(ctx)));
 
         // Verify we get the expected error
-        assert!(result.is_err(), "Should have failed with recursion limit");
+        assert!(result.is_err(), "Should have failed with capacity exceeded");
         match result.unwrap_err() {
-            ExprError::RecursionLimit(msg) => {
-                assert!(
-                    msg.contains("recursion depth"),
-                    "Error should mention recursion depth, got: {}",
-                    msg
-                );
-                // In test mode, we use a lower limit
-                assert!(
-                    msg.contains("10"),
-                    "Error should mention the test recursion limit of 10, got: {}",
-                    msg
+            ExprError::CapacityExceeded(resource) => {
+                assert_eq!(
+                    resource, "context stack",
+                    "Expected context stack overflow, got: {}",
+                    resource
                 );
             }
-            other => panic!("Expected RecursionLimit error, got: {:?}", other),
+            other => panic!("Expected CapacityExceeded error, got: {:?}", other),
         }
-
-        // Verify the counter was reset after the error
-        let final_depth = RECURSION_DEPTH.load(Ordering::Relaxed);
-        assert!(
-            final_depth < 10,
-            "Recursion depth not properly reset after error, got {}",
-            final_depth
-        );
+        
+        // The iterative evaluator automatically cleans up on error,
+        // so there's no global state to check
     }
 
     #[test]

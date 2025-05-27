@@ -187,6 +187,10 @@ fn test_safe_recursion() {
                 // This is acceptable - the recursion depth limit is working as expected
                 println!("Recursion limit reached for: {} (this is normal)", expr);
             },
+            Err(exp_rs::error::ExprError::CapacityExceeded(resource)) => {
+                // With the iterative evaluator, we get capacity exceeded instead of recursion limit
+                println!("Capacity limit reached for: {} ({}) (this is normal)", expr, resource);
+            },
             Err(e) => {
                 panic!("Unexpected error for {}: {:?}", expr, e);
             }
@@ -430,6 +434,10 @@ fn test_mutual_recursion() {
             Err(exp_rs::error::ExprError::RecursionLimit(_)) => {
                 // This is acceptable - the recursion depth limit is working as expected
                 println!("Recursion limit reached for: {} (this is normal)", expr);
+            },
+            Err(exp_rs::error::ExprError::CapacityExceeded(resource)) => {
+                // With the iterative evaluator, we get capacity exceeded instead of recursion limit
+                println!("Capacity limit reached for: {} ({}) (this is normal)", expr, resource);
             },
             Err(e) => {
                 panic!("Unexpected error for {}: {:?}", expr, e);

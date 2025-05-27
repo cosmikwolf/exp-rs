@@ -25,36 +25,9 @@ use alloc::string::{String, ToString};
 type MathFunc = fn(Real, Real) -> Real;
 
 pub fn eval_ast<'a>(ast: &AstExpr, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
-    // Reset recursion depth counter at the start of a new expression evaluation
-    // This ensures each top-level evaluation starts with a fresh recursion budget
-    RECURSION_DEPTH.store(0, Ordering::Relaxed);
-
-    // Create a guard that will reset the recursion depth when dropped
-    // This ensures it happens even if a panic occurs during evaluation
-    struct RecursionGuard;
-    impl Drop for RecursionGuard {
-        fn drop(&mut self) {
-            // Reset counter on drop, ensuring it's always reset
-            RECURSION_DEPTH.store(0, Ordering::Relaxed);
-        }
-    }
-    
-    // Create guard that will be dropped at the end of this function
-    let _guard = RecursionGuard;
-
-    // Don't use a shared cache - we'll operate directly on the function cache
-    let mut func_cache: BTreeMap<String, Option<FunctionCacheEntry>> = BTreeMap::new();
-    // Also maintain a variable cache specific to this evaluation
-    let mut var_cache: BTreeMap<String, Real> = BTreeMap::new();
-
-    // Store result to ensure we reset the counter even on error
-    let result = eval_ast_inner(ast, ctx, &mut func_cache, &mut var_cache);
-
-    // Always reset the counter after evaluation to prevent leaks between calls
-    // This is redundant with the guard, but we keep it for explicitness
-    RECURSION_DEPTH.store(0, Ordering::Relaxed);
-
-    result
+    // Use the iterative evaluator - this eliminates stack overflow issues
+    // and provides better performance than the recursive approach
+    crate::eval::iterative::eval_iterative(ast, ctx)
 }
 
 pub fn eval_ast_inner<'a>(

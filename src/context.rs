@@ -57,7 +57,7 @@ use core::cell::RefCell;
 /// ctx.set_parameter("y", 10.0 as Real);
 ///
 /// // Add a constant
-/// ctx.constants.insert("PI_SQUARED".to_string(), 9.8696 as Real);
+/// ctx.constants.insert("PI_SQUARED".try_into().unwrap(), 9.8696 as Real).unwrap();
 ///
 /// // Register a custom function
 /// ctx.register_native_function("multiply", 2, |args| args[0] * args[1]);

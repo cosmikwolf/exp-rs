@@ -123,7 +123,7 @@
 //! ctx.set_parameter("y", 10.0);
 //!
 //! // Add constants - these won't change once set
-//! ctx.constants.insert("FACTOR".to_string(), 2.5);
+//! ctx.constants.insert("FACTOR".try_into().unwrap(), 2.5).unwrap();
 //!
 //! // Evaluate expression with variables and constants
 //! let result = interp("x + y * FACTOR", Some(Rc::new(ctx))).unwrap();
@@ -136,19 +136,19 @@
 //! extern crate alloc;
 //! use exp_rs::interp;
 //! use exp_rs::context::EvalContext;
-//! use hashbrown::HashMap;
+//! use heapless::FnvIndexMap;
 //! use alloc::rc::Rc;
 //!
 //! // Create an evaluation context
 //! let mut ctx = EvalContext::new();
 //! // Add an array
-//! ctx.arrays.insert("data".to_string(), vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+//! ctx.arrays.insert("data".try_into().unwrap(), vec![10.0, 20.0, 30.0, 40.0, 50.0]).unwrap();
 //!
 //! // Add an object with attributes
-//! let mut point = HashMap::new();
-//! point.insert("x".to_string(), 3.0);
-//! point.insert("y".to_string(), 4.0);
-//! ctx.attributes.insert("point".to_string(), point);
+//! let mut point = FnvIndexMap::new();
+//! point.insert("x".try_into().unwrap(), 3.0).unwrap();
+//! point.insert("y".try_into().unwrap(), 4.0).unwrap();
+//! ctx.attributes.insert("point".try_into().unwrap(), point).unwrap();
 //! let ctx_rc = Rc::new(ctx);
 //!
 //! // Access array elements in expressions

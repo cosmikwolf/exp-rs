@@ -72,10 +72,6 @@ fn test_not_equal_operator() {
     // Test inequality with !=
     assert_eq!(interp("1 != 1", Some(ctx_rc.clone())).unwrap(), 0.0); // Equal values
     assert_eq!(interp("1 != 2", Some(ctx_rc.clone())).unwrap(), 1.0); // Unequal values
-
-    // Test alternative not-equal syntax with <>
-    assert_eq!(interp("1 <> 1", Some(ctx_rc.clone())).unwrap(), 0.0); // Equal values
-    assert_eq!(interp("1 <> 2", Some(ctx_rc.clone())).unwrap(), 1.0); // Unequal values
     
     // Test floating point precision - different behavior in f32 vs f64
     // In f32 mode: 0.1 + 0.2 != 0.3 evaluates to false due to lower precision

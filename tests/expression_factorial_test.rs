@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 /// Test that directly examines recursion depth during factorial evaluation
 #[test]
+#[ignore = "Recursion depth tracking is not applicable with the iterative evaluator"]
 fn test_expression_factorial_depth() {
     // Create a new evaluation context
     let mut ctx = EvalContext::default();

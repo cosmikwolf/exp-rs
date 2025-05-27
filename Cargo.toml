@@ -23,8 +23,7 @@ serde = { version = "1.0", features = ["derive"], default-features = false }
 default = ["libm"]
 f32 = []
 libm = ["dep:libm"]
-custom_cbindgen_alloc = [
-] # Use exp_rs_malloc and exp_rs_free instead of malloc/free
+custom_cbindgen_alloc = [] # Use exp_rs_malloc and exp_rs_free instead of malloc/free
 
 # Note: 64-bit floating point is now the default when f32 is not enabled
 # When f32 feature is enabled, 32-bit floating point is used instead
