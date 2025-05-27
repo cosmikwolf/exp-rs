@@ -9,7 +9,31 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define EXP_RS_CUSTOM_ALLOC
+
+
+#define MAX_VARIABLES 64
+
+#define MAX_CONSTANTS 32
+
+#define MAX_ARRAYS 16
+
+#define MAX_ATTRIBUTES 16
+
+#define MAX_NESTED_ARRAYS 8
+
+#define MAX_AST_CACHE 128
+
+#define MAX_NATIVE_FUNCTIONS 64
+
+#define MAX_EXPRESSION_FUNCTIONS 32
+
+#define MAX_USER_FUNCTIONS 16
+
+#define MAX_ATTR_KEYS 8
+
+#define MAX_KEY_LENGTH 32
+
+#define MAX_FUNCTION_NAME_LENGTH 24
 
 #if defined(USE_F32)
 /**

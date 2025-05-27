@@ -8,7 +8,6 @@ use exp_rs::context::EvalContext;
 use exp_rs::engine::{interp, parse_expression};
 use exp_rs::eval::{eval_ast, get_recursion_depth, reset_recursion_depth};
 use exp_rs::{assert_approx_eq, constants};
-use hashbrown::HashMap;
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -19,7 +18,8 @@ use alloc::rc::Rc;
 
 // Use the shared test helper functions
 mod test_helpers;
-use test_helpers::{create_context, create_context_rc};
+use test_helpers::{create_context, create_context_rc, hstr, set_var, set_attr, set_const};
+use exp_rs::types::TryIntoHeaplessString;
 
 // The helper function implementation is now in test_helpers.rs
 
@@ -163,8 +163,8 @@ fn test_variable_expressions() {
     let mut ctx = EvalContext::default();
 
     // Add some variables
-    ctx.variables.insert("x".to_string().into(), 5.0);
-    ctx.variables.insert("y".to_string().into(), 10.0);
+    set_var(&mut ctx, "x", 5.0);
+    set_var(&mut ctx, "y", 10.0);
 
     // Use variables in expressions
     assert_eq!(
@@ -213,7 +213,7 @@ fn test_variable_expressions() {
     }
 
     // Update variables and re-evaluate
-    ctx.variables.insert("x".to_string().into(), 7.0);
+    set_var(&mut ctx, "x", 7.0);
     assert_eq!(
         interp("x + y", Some(std::rc::Rc::new(ctx.clone()))).unwrap(),
         17.0
@@ -230,9 +230,9 @@ fn test_array_expressions() {
 
     // Add an array
     ctx.arrays.insert(
-        "data".to_string().into(),
+        hstr("data"),
         vec![10.0, 20.0, 30.0, 40.0, 50.0],
-    );
+    ).expect("Failed to insert array");
 
     // Access array elements
     assert_eq!(
@@ -269,7 +269,7 @@ fn test_array_expressions() {
     );
 
     // Add variables to use as indices
-    ctx.variables.insert("i".to_string().into(), 3.0);
+    set_var(&mut ctx, "i", 3.0);
     assert_eq!(
         interp("data[i]", Some(std::rc::Rc::new(ctx.clone()))).unwrap(),
         40.0
@@ -285,10 +285,8 @@ fn test_attribute_expressions() {
     let mut ctx = EvalContext::default();
 
     // Add an object with attributes
-    let mut point = HashMap::new();
-    point.insert("x".to_string().into(), 3.0);
-    point.insert("y".to_string().into(), 4.0);
-    ctx.attributes.insert("point".to_string().into(), point);
+    set_attr(&mut ctx, "point", "x", 3.0);
+    set_attr(&mut ctx, "point", "y", 4.0);
 
     // Access attributes
     assert_eq!(
@@ -317,11 +315,9 @@ fn test_attribute_expressions() {
     );
 
     // Add another object
-    let mut circle = HashMap::new();
-    circle.insert("radius".to_string().into(), 10.0);
-    circle.insert("center_x".to_string().into(), 5.0);
-    circle.insert("center_y".to_string().into(), 5.0);
-    ctx.attributes.insert("circle".to_string().into(), circle);
+    set_attr(&mut ctx, "circle", "radius", 10.0);
+    set_attr(&mut ctx, "circle", "center_x", 5.0);
+    set_attr(&mut ctx, "circle", "center_y", 5.0);
 
     // Calculate distance from point to circle center
     let expr = "sqrt((point.x - circle.center_x)^2 + (point.y - circle.center_y)^2)";
@@ -497,19 +493,18 @@ fn test_complex_expressions() {
     let mut ctx = EvalContext::default();
 
     // Set up variables
-    ctx.variables.insert("t".to_string().into(), 0.5);
-    ctx.variables.insert("amplitude".to_string().into(), 10.0);
-    ctx.variables.insert("frequency".to_string().into(), 2.0);
+    set_var(&mut ctx, "t", 0.5);
+    set_var(&mut ctx, "amplitude", 10.0);
+    set_var(&mut ctx, "frequency", 2.0);
 
     // Set up arrays
     ctx.arrays
-        .insert("samples".to_string().into(), vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        .insert(hstr("samples"), vec![1.0, 2.0, 3.0, 4.0, 5.0])
+        .expect("Failed to insert array");
 
     // Set up attributes
-    let mut wave = HashMap::new();
-    wave.insert("phase".to_string().into(), 0.25);
-    wave.insert("offset".to_string().into(), 5.0);
-    ctx.attributes.insert("wave".to_string().into(), wave);
+    set_attr(&mut ctx, "wave", "phase", 0.25);
+    set_attr(&mut ctx, "wave", "offset", 5.0);
 
     // Register native functions
     ctx.register_native_function("interpolate", 3, |args| {
@@ -604,11 +599,11 @@ fn test_expression_performance() {
     let mut ctx = create_context();
     #[cfg(feature = "libm")]
     let mut ctx = EvalContext::default();
-    ctx.variables.insert("x".to_string().into(), 1.0);
-    ctx.variables.insert("y".to_string().into(), 2.0);
-    ctx.variables.insert("z".to_string().into(), 3.0);
-    ctx.variables.insert("w".to_string().into(), 4.0);
-    ctx.variables.insert("u".to_string().into(), 5.0);
+    set_var(&mut ctx, "x", 1.0);
+    set_var(&mut ctx, "y", 2.0);
+    set_var(&mut ctx, "z", 3.0);
+    set_var(&mut ctx, "w", 4.0);
+    set_var(&mut ctx, "u", 5.0);
 
     // Parse the expression once
     let ast = parse_expression(expr).unwrap();
@@ -619,8 +614,7 @@ fn test_expression_performance() {
 
     for i in 0..iterations {
         // Update a variable to ensure we're not just caching the result
-        ctx.variables
-            .insert("x".to_string().into(), (i % 100) as Real / 100.0);
+        set_var(&mut ctx, "x", (i % 100) as Real / 100.0);
         let _ = eval_ast(&ast, Some(Rc::new(ctx.clone()))).unwrap();
     }
 
@@ -691,7 +685,8 @@ fn test_error_handling() {
     #[cfg(feature = "libm")]
     let mut ctx = EvalContext::new();
     ctx.arrays
-        .insert("arr".to_string().into(), vec![1.0, 2.0, 3.0]);
+        .insert(hstr("arr"), vec![1.0, 2.0, 3.0])
+        .expect("Failed to insert array");
 
     let result = interp("arr[5]", Some(std::rc::Rc::new(ctx.clone())));
     assert!(result.is_err());
@@ -700,9 +695,7 @@ fn test_error_handling() {
     assert!(err_msg.contains("Array index out of bounds"));
 
     // Test attribute not found
-    let mut obj = HashMap::new();
-    obj.insert("x".to_string().into(), 1.0);
-    ctx.attributes.insert("obj".to_string().into(), obj);
+    set_attr(&mut ctx, "obj", "x", 1.0);
 
     let result = interp("obj.y", Some(std::rc::Rc::new(ctx.clone())));
     assert!(result.is_err());
@@ -845,8 +838,8 @@ fn test_expression_functions() {
     let mut ctx = create_context();
     #[cfg(feature = "libm")]
     let mut ctx = EvalContext::new();
-    ctx.variables.insert("x".to_string().into(), 5.0);
-    ctx.variables.insert("y".to_string().into(), 10.0);
+    set_var(&mut ctx, "x", 5.0);
+    set_var(&mut ctx, "y", 10.0);
 
     // Register an expression function that calculates the hypotenuse of a right triangle
     ctx.register_expression_function("hypotenuse", &["a", "b"], "sqrt(a^2 + b^2)")
@@ -909,33 +902,29 @@ fn test_config_expressions() {
     let mut ctx = EvalContext::default();
 
     // Add constants
-    ctx.constants
-        .insert("AMPLITUDE_MIN".to_string().into(), 2.0);
-    ctx.constants
-        .insert("AMPLITUDE_MAX".to_string().into(), 75.0);
-    ctx.constants.insert("VOLTAGE_MAX".to_string().into(), 5.0);
+    set_const(&mut ctx, "AMPLITUDE_MIN", 2.0);
+    set_const(&mut ctx, "AMPLITUDE_MAX", 75.0);
+    set_const(&mut ctx, "VOLTAGE_MAX", 5.0);
 
     // Add data tables
     ctx.arrays.insert(
-        "wait_times".to_string().into(),
+        hstr("wait_times"),
         vec![64691.0, 64625.0, 64559.0, 64494.0, 64428.0],
-    );
+    ).expect("Failed to insert array");
 
     // Add parameters
-    ctx.variables.insert("power".to_string().into(), 50.0);
-    ctx.variables.insert("speed".to_string().into(), 50.0);
-    ctx.variables.insert("t".to_string().into(), 0.5);
+    set_var(&mut ctx, "power", 50.0);
+    set_var(&mut ctx, "speed", 50.0);
+    set_var(&mut ctx, "t", 0.5);
 
     // Evaluate derived parameters
     let pattern_step_expr = "(speed / 100.0) * (9.2 - 0.27) + 0.27";
     let pattern_step = interp(pattern_step_expr, Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    ctx.variables
-        .insert("pattern_step".to_string().into(), pattern_step);
+    set_var(&mut ctx, "pattern_step", pattern_step);
 
     let pattern_index_expr = "t * pattern_step";
     let pattern_index = interp(pattern_index_expr, Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    ctx.variables
-        .insert("pattern_index".to_string().into(), pattern_index);
+    set_var(&mut ctx, "pattern_index", pattern_index);
 
     // Evaluate main function
     let main_function = "((power * (AMPLITUDE_MAX - AMPLITUDE_MIN) + AMPLITUDE_MIN) * VOLTAGE_MAX) / AMPLITUDE_MAX * 1000";
@@ -953,18 +942,16 @@ fn test_config_expressions() {
     assert_approx_eq!(result, expected, relative_precision);
 
     // Test with different parameter values
-    ctx.variables.insert("power".to_string().into(), 75.0);
-    ctx.variables.insert("speed".to_string().into(), 25.0);
-    ctx.variables.insert("t".to_string().into(), 1.0);
+    set_var(&mut ctx, "power", 75.0);
+    set_var(&mut ctx, "speed", 25.0);
+    set_var(&mut ctx, "t", 1.0);
 
     // Re-evaluate derived parameters
     let pattern_step = interp(pattern_step_expr, Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    ctx.variables
-        .insert("pattern_step".to_string().into(), pattern_step);
+    set_var(&mut ctx, "pattern_step", pattern_step);
 
     let pattern_index = interp(pattern_index_expr, Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    ctx.variables
-        .insert("pattern_index".to_string().into(), pattern_index);
+    set_var(&mut ctx, "pattern_index", pattern_index);
 
     // Re-evaluate main function
     let result = interp(main_function, Some(std::rc::Rc::new(ctx.clone()))).unwrap();

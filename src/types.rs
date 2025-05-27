@@ -6,6 +6,45 @@
 
 extern crate alloc;
 
+// ============================================================================
+// Heapless Migration - Type Aliases and Configuration
+// ============================================================================
+
+use heapless::{FnvIndexMap, String as HeaplessString};
+
+// Configuration constants - can be adjusted based on target constraints
+pub const MAX_VARIABLES: usize = 64;
+pub const MAX_CONSTANTS: usize = 32; 
+pub const MAX_ARRAYS: usize = 16;
+pub const MAX_ATTRIBUTES: usize = 16;
+pub const MAX_NESTED_ARRAYS: usize = 8;
+pub const MAX_AST_CACHE: usize = 128;
+pub const MAX_NATIVE_FUNCTIONS: usize = 64;
+pub const MAX_EXPRESSION_FUNCTIONS: usize = 32;
+pub const MAX_USER_FUNCTIONS: usize = 16;
+pub const MAX_ATTR_KEYS: usize = 8;
+
+// String length limits for embedded efficiency
+pub const MAX_KEY_LENGTH: usize = 32;
+pub const MAX_FUNCTION_NAME_LENGTH: usize = 24;
+
+// Primary type aliases
+pub type HString = HeaplessString<MAX_KEY_LENGTH>;
+pub type FunctionName = HeaplessString<MAX_FUNCTION_NAME_LENGTH>;
+
+// Container type aliases - using heapless FnvIndexMap
+pub type VariableMap = FnvIndexMap<HString, crate::Real, MAX_VARIABLES>;
+pub type ConstantMap = FnvIndexMap<HString, crate::Real, MAX_CONSTANTS>;
+pub type ArrayMap = FnvIndexMap<HString, alloc::vec::Vec<crate::Real>, MAX_ARRAYS>;
+pub type AttributeMap = FnvIndexMap<HString, FnvIndexMap<HString, crate::Real, MAX_ATTR_KEYS>, MAX_ATTRIBUTES>;
+pub type NestedArrayMap = FnvIndexMap<HString, FnvIndexMap<usize, alloc::vec::Vec<crate::Real>, MAX_NESTED_ARRAYS>, MAX_NESTED_ARRAYS>;
+pub type NativeFunctionMap = FnvIndexMap<FunctionName, NativeFunction, MAX_NATIVE_FUNCTIONS>;
+pub type ExpressionFunctionMap = FnvIndexMap<FunctionName, ExpressionFunction, MAX_EXPRESSION_FUNCTIONS>;
+pub type UserFunctionMap = FnvIndexMap<FunctionName, crate::context::UserFunction, MAX_USER_FUNCTIONS>;
+
+// AST cache type - defined later after AstExpr is declared
+// pub type AstCacheMap = FnvIndexMap<HString, alloc::rc::Rc<AstExpr>, MAX_AST_CACHE>;
+
 #[cfg(test)]
 use crate::Real;
 #[cfg(not(test))]
@@ -139,6 +178,47 @@ pub enum AstExpr {
         /// Expression to evaluate if condition is false (zero)
         false_branch: Box<AstExpr>
     },
+}
+
+// AST cache type - now that AstExpr is defined
+pub type AstCacheMap = FnvIndexMap<HString, alloc::rc::Rc<AstExpr>, MAX_AST_CACHE>;
+
+// Helper trait for string conversion to heapless strings
+pub trait TryIntoHeaplessString {
+    fn try_into_heapless(self) -> Result<HString, crate::error::ExprError>;
+}
+
+impl TryIntoHeaplessString for &str {
+    fn try_into_heapless(self) -> Result<HString, crate::error::ExprError> {
+        HString::try_from(self)
+            .map_err(|_| crate::error::ExprError::StringTooLong)
+    }
+}
+
+impl TryIntoHeaplessString for alloc::string::String {
+    fn try_into_heapless(self) -> Result<HString, crate::error::ExprError> {
+        HString::try_from(self.as_str())
+            .map_err(|_| crate::error::ExprError::StringTooLong)
+    }
+}
+
+// Helper trait for function names
+pub trait TryIntoFunctionName {
+    fn try_into_function_name(self) -> Result<FunctionName, crate::error::ExprError>;
+}
+
+impl TryIntoFunctionName for &str {
+    fn try_into_function_name(self) -> Result<FunctionName, crate::error::ExprError> {
+        FunctionName::try_from(self)
+            .map_err(|_| crate::error::ExprError::StringTooLong)
+    }
+}
+
+impl TryIntoFunctionName for alloc::string::String {
+    fn try_into_function_name(self) -> Result<FunctionName, crate::error::ExprError> {
+        FunctionName::try_from(self.as_str())
+            .map_err(|_| crate::error::ExprError::StringTooLong)
+    }
 }
 
 impl AstExpr {
@@ -427,7 +507,7 @@ impl core::fmt::Display for LogicalOperator {
 /// assert_eq!(result, 5.0);
 /// ```
 #[derive(Clone)]
-pub struct NativeFunction<'a> {
+pub struct NativeFunction {
     /// Number of arguments the function takes.
     pub arity: usize,
     
@@ -435,7 +515,7 @@ pub struct NativeFunction<'a> {
     pub implementation: Rc<dyn Fn(&[Real]) -> Real>,
     
     /// The name of the function as it will be used in expressions.
-    pub name: Cow<'a, str>,
+    pub name: FunctionName,
     
     /// Optional description of what the function does.
     pub description: Option<String>,
@@ -476,7 +556,7 @@ use alloc::borrow::Cow;
 #[derive(Clone)]
 pub struct ExpressionFunction {
     /// The name of the function as it will be used in expressions.
-    pub name: String,
+    pub name: FunctionName,
     
     /// The parameter names that the function accepts.
     pub params: Vec<String>,

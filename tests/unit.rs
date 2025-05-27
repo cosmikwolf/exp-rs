@@ -13,12 +13,13 @@ mod unit {
     use exp_rs::types::{AstExpr, TokenKind};
     use std::rc::Rc;
 
-    use hashbrown::HashMap;
+    use std::collections::HashMap;
 
-    use crate::test_helpers::create_context;
+    use crate::test_helpers::{create_context, hstr, set_var, set_attr};
+    use exp_rs::types::TryIntoHeaplessString;
 
     /// Helper function to create an eval context with all math functions registered
-    fn create_math_context() -> Rc<EvalContext<'static>> {
+    fn create_math_context() -> Rc<EvalContext> {
         Rc::new(create_context())
     }
 
@@ -656,9 +657,9 @@ mod unit {
         // Setup context with an array
         let mut ctx = EvalContext::default();
         ctx.arrays.insert(
-            "climb_wave_wait_time".to_string().into(),
+            hstr("climb_wave_wait_time"),
             vec![10.0, 20.0, 30.0],
-        );
+        ).expect("Failed to insert array");
         // Use the new API to parse and evaluate the array access expression
         let val = interp(
             "climb_wave_wait_time[1]",
@@ -673,9 +674,9 @@ mod unit {
         // Setup context with an array
         let mut ctx = EvalContext::default();
         ctx.arrays.insert(
-            "climb_wave_wait_time".to_string().into(),
+            hstr("climb_wave_wait_time"),
             vec![10.0, 20.0, 30.0],
-        );
+        ).expect("Failed to insert array");
         // Parse the array access expression using the new API
         let ast = exp_rs::engine::parse_expression("climb_wave_wait_time[1]").unwrap();
         match ast {
@@ -705,9 +706,7 @@ mod unit {
     fn test_attribute_access() {
         // Setup context with attributes
         let mut ctx = EvalContext::default();
-        let mut foo_map = HashMap::new();
-        foo_map.insert("bar".to_string().into(), 42.0);
-        ctx.attributes.insert("foo".to_string().into(), foo_map);
+        set_attr(&mut ctx, "foo", "bar", 42.0);
 
         let val = interp("foo.bar", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 42.0);

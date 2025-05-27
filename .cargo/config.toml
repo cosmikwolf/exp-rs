@@ -1,2 +1,15 @@
 [build]
 rustflags = ["-A", "unused-doc-comments"]
+
+[target.thumbv7em-none-eabihf]
+rustflags = [
+  "-A",
+  "unused-doc-comments",
+  "-C",
+  "target-feature=+strict-align",
+  "-C",
+  "target-cpu=cortex-m7",
+  "-C",
+  "llvm-args=--strict-align",
+]
+

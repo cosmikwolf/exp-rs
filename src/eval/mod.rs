@@ -26,6 +26,7 @@ pub use recursion::{
 #[cfg(test)]
 mod tests {
     use alloc::collections::BTreeMap;
+    use crate::types::{TryIntoHeaplessString, TryIntoFunctionName};
 
     use super::*;
     use crate::AstExpr;
@@ -150,7 +151,7 @@ mod tests {
             let nf = ctx
                 .function_registry
                 .native_functions
-                .get("triple")
+                .get(&"triple".try_into_function_name().unwrap())
                 .unwrap();
             OwnedNativeFunction {
                 arity: nf.arity,
@@ -173,7 +174,7 @@ mod tests {
     }
 
     // Helper to create a context and register defaults IF builtins are enabled
-    fn create_test_context<'a>() -> EvalContext<'a> {
+    fn create_test_context<'a>() -> EvalContext {
         let mut ctx = EvalContext::new();
         // Register defaults only if the feature allows it
         #[cfg(feature = "libm")]
@@ -212,7 +213,7 @@ mod tests {
     fn test_eval_variable_context_lookup() {
         let mut ctx = EvalContext::new();
         ctx.set_parameter("x", 42.0);
-        ctx.constants.insert("y".into(), crate::constants::PI);
+        ctx.constants.insert("y".try_into_heapless().unwrap(), crate::constants::PI).expect("Failed to insert constant");
         assert_eq!(
             test_eval_variable("x", Some(Rc::new(ctx.clone()))).unwrap(),
             42.0
@@ -303,7 +304,7 @@ mod tests {
     #[test]
     fn test_eval_array_success_and_out_of_bounds() {
         let mut ctx = EvalContext::new();
-        ctx.arrays.insert("arr".into(), vec![1.0, 2.0, 3.0]);
+        ctx.arrays.insert("arr".try_into_heapless().unwrap(), vec![1.0, 2.0, 3.0]).expect("Failed to insert array");
 
         // Create separate caches for each call to avoid borrowing issues
         let mut func_cache1 = std::collections::BTreeMap::new();
@@ -349,9 +350,8 @@ mod tests {
     #[test]
     fn test_eval_attribute_success_and_not_found() {
         let mut ctx = EvalContext::new();
-        let mut map = HashMap::new();
-        map.insert("foo".to_string(), 123.0);
-        ctx.attributes.insert("bar".to_string(), map);
+        // Use the helper method to set attributes
+        ctx.set_attribute("bar", "foo", 123.0).expect("Failed to set attribute");
         let val = super::eval_attribute("bar", "foo", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 123.0);
         let err = super::eval_attribute("bar", "baz", Some(Rc::new(ctx.clone()))).unwrap_err();
@@ -722,7 +722,7 @@ mod tests {
             let ctx_rc = Rc::new(ctx.clone());
         }
         // If cos wasn't registered by create_test_context and libm is enabled, this might fail
-        if ctx.function_registry.native_functions.contains_key("cos") || cfg!(feature = "libm") {
+        if ctx.function_registry.native_functions.contains_key(&"cos".try_into_function_name().unwrap()) || cfg!(feature = "libm") {
             let val_cos = interp("cos(0)", Some(ctx_rc.clone())).unwrap();
             // Use approx eq for floating point results
             let expected_cos = 1.0;
@@ -758,7 +758,7 @@ mod tests {
             ctx_rc = Rc::new(ctx.clone());
         }
         // If min wasn't registered by create_test_context and libm is enabled, this might fail
-        if ctx.function_registry.native_functions.contains_key("min") || cfg!(feature = "libm") {
+        if ctx.function_registry.native_functions.contains_key(&"min".try_into_function_name().unwrap()) || cfg!(feature = "libm") {
             ctx.register_expression_function("max", &["a", "b"], "min(a, b)")
                 .unwrap();
             // Update Rc after modifying ctx
@@ -791,7 +791,7 @@ mod tests {
             // Update Rc after modifying ctx
             ctx_rc = Rc::new(ctx.clone());
         }
-        if ctx.function_registry.native_functions.contains_key("sin") || cfg!(feature = "libm") {
+        if ctx.function_registry.native_functions.contains_key(&"sin".try_into_function_name().unwrap()) || cfg!(feature = "libm") {
             let val_sin = interp("sin(0)", Some(ctx_rc.clone())).unwrap();
             assert!(
                 (val_sin - 0.0).abs() < 1e-9,
@@ -806,8 +806,8 @@ mod tests {
     #[test]
     fn test_expression_function_uses_correct_context() {
         let mut ctx = create_test_context(); // Start with defaults (if enabled)
-        ctx.set_parameter("a", 10.0); // Variable in outer context
-        ctx.constants.insert("my_const".to_string().into(), 100.0); // Constant in outer context
+        ctx.set_parameter("a", 10.0).expect("Failed to set parameter"); // Variable in outer context
+        ctx.constants.insert("my_const".try_into_heapless().unwrap(), 100.0).expect("Failed to insert constant"); // Constant in outer context
 
         // Define func1_const(x) = x + my_const
         // Expression functions inherit constants.
@@ -1065,6 +1065,9 @@ mod tests {
 
     #[test]
     fn test_infinite_recursion_detection() {
+        // Reset recursion depth to ensure clean test state
+        crate::eval::recursion::reset_recursion_depth();
+        
         // Test that infinite recursion is properly detected and halted
         let mut ctx = EvalContext::new();
 
@@ -1082,6 +1085,12 @@ mod tests {
                 assert!(
                     msg.contains("recursion depth"),
                     "Error should mention recursion depth, got: {}",
+                    msg
+                );
+                // In test mode, we use a lower limit
+                assert!(
+                    msg.contains("10"),
+                    "Error should mention the test recursion limit of 10, got: {}",
                     msg
                 );
             }
@@ -1223,7 +1232,7 @@ mod tests {
 
         let mut ctx = EvalContext::new();
         ctx.ast_cache = Some(RefCell::new(
-            HashMap::<String, Rc<crate::types::AstExpr>>::new(),
+            crate::types::AstCacheMap::new(),
         ));
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();

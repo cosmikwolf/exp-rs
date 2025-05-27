@@ -38,39 +38,39 @@ fn test_short_circuit_evaluation() {
     
     // Clone Rc for use in closures
     let count1 = Rc::clone(&eval_count);
-    ctx.register_native_function("increment_and_return_true", 0, move |_| {
+    ctx.register_native_function("inc_true", 0, move |_| {
         *count1.borrow_mut() += 1;
         1.0
-    });
+    }).unwrap();
     
     let count2 = Rc::clone(&eval_count);
-    ctx.register_native_function("increment_and_return_false", 0, move |_| {
+    ctx.register_native_function("inc_false", 0, move |_| {
         *count2.borrow_mut() += 1;
         0.0
-    });
+    }).unwrap();
     
     let ctx_rc = Rc::new(ctx);
     
     // Test AND short-circuit
     *eval_count.borrow_mut() = 0;
-    let result = interp("0 && increment_and_return_true()", Some(ctx_rc.clone())).unwrap();
+    let result = interp("0 && inc_true()", Some(ctx_rc.clone())).unwrap();
     assert_eq!(result, 0.0);
     assert_eq!(*eval_count.borrow(), 0, "Right side of AND should not be evaluated when left is false");
     
     // Test OR short-circuit
     *eval_count.borrow_mut() = 0;
-    let result = interp("1 || increment_and_return_false()", Some(ctx_rc.clone())).unwrap();
+    let result = interp("1 || inc_false()", Some(ctx_rc.clone())).unwrap();
     assert_eq!(result, 1.0);
     assert_eq!(*eval_count.borrow(), 0, "Right side of OR should not be evaluated when left is true");
     
     // Verify non-short-circuit cases
     *eval_count.borrow_mut() = 0;
-    let result = interp("1 && increment_and_return_true()", Some(ctx_rc.clone())).unwrap();
+    let result = interp("1 && inc_true()", Some(ctx_rc.clone())).unwrap();
     assert_eq!(result, 1.0);
     assert_eq!(*eval_count.borrow(), 1, "Right side of AND should be evaluated when left is true");
     
     *eval_count.borrow_mut() = 0;
-    let result = interp("0 || increment_and_return_false()", Some(ctx_rc.clone())).unwrap();
+    let result = interp("0 || inc_false()", Some(ctx_rc.clone())).unwrap();
     assert_eq!(result, 0.0);
     assert_eq!(*eval_count.borrow(), 1, "Right side of OR should be evaluated when left is false");
 }

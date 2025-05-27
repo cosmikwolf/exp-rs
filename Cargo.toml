@@ -14,13 +14,7 @@ license = "MIT/Apache-2.0"
 crate-type = ["rlib", "staticlib"]
 
 [dependencies]
-hashbrown = { version = "0.15.3", default-features = false, features = [
-  "default-hasher",
-  "inline-more",
-  # "allocator-api2",
-  "equivalent",
-  "raw-entry",
-] }
+heapless = { version = "0.8", default-features = false }
 
 bitflags = "2.9.0"
 libm = { version = "0.2", optional = true }

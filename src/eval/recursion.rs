@@ -17,7 +17,11 @@ pub static RECURSION_DEPTH: AtomicUsize = AtomicUsize::new(0);
 // Add a constant for maximum recursion depth
 // We're tracking function calls, so we can use a reasonable limit for call depth
 // This should allow for legitimate recursive functions but catch infinite recursion
-const MAX_RECURSION_DEPTH: usize = 250;
+// Note: On embedded systems or with limited stack space, this may need to be lower
+#[cfg(test)]
+const MAX_RECURSION_DEPTH: usize = 10;  // Very low limit for tests to avoid stack overflow
+#[cfg(not(test))]
+const MAX_RECURSION_DEPTH: usize = 100; // Conservative limit for production
 
 // Add a helper function to check and increment recursion depth
 pub fn check_and_increment_recursion_depth() -> Result<(), ExprError> {

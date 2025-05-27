@@ -24,7 +24,7 @@ use alloc::string::{String, ToString};
 #[allow(dead_code)]
 type MathFunc = fn(Real, Real) -> Real;
 
-pub fn eval_ast<'a>(ast: &AstExpr, ctx: Option<Rc<EvalContext<'a>>>) -> Result<Real, ExprError> {
+pub fn eval_ast<'a>(ast: &AstExpr, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
     // Reset recursion depth counter at the start of a new expression evaluation
     // This ensures each top-level evaluation starts with a fresh recursion budget
     RECURSION_DEPTH.store(0, Ordering::Relaxed);
@@ -59,7 +59,7 @@ pub fn eval_ast<'a>(ast: &AstExpr, ctx: Option<Rc<EvalContext<'a>>>) -> Result<R
 
 pub fn eval_ast_inner<'a>(
     ast: &AstExpr,
-    ctx: Option<Rc<EvalContext<'a>>>,
+    ctx: Option<Rc<EvalContext>>,
     func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
     var_cache: &mut BTreeMap<String, Real>,
 ) -> Result<Real, ExprError> {

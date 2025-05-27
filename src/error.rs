@@ -119,6 +119,18 @@ pub enum ExprError {
     /// This usually happens with deeply nested expressions or recursive function calls.
     /// To resolve this, simplify the expression or increase the recursion limit if possible.
     RecursionLimit(String),
+    
+    /// Error when capacity is exceeded for a heapless container.
+    ///
+    /// This occurs when trying to insert into a full heapless container.
+    /// The string indicates which container type exceeded capacity.
+    CapacityExceeded(&'static str),
+    
+    /// Error when a string is too long for heapless string buffer.
+    ///
+    /// This occurs when trying to create a heapless string that exceeds
+    /// the maximum string length limit.
+    StringTooLong,
 }
 
 #[cfg(not(test))]
@@ -169,6 +181,10 @@ impl fmt::Display for ExprError {
             ExprError::DivideByZero => write!(f, "Division by zero"),
             ExprError::Other(err) => write!(f, "{}", err),
             ExprError::RecursionLimit(err) => write!(f, "Recursion limit exceeded: {}", err),
+            ExprError::CapacityExceeded(container_type) => {
+                write!(f, "Capacity exceeded for {}", container_type)
+            }
+            ExprError::StringTooLong => write!(f, "String too long for heapless buffer"),
         }
     }
 }

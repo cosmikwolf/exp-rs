@@ -10,7 +10,7 @@ use crate::context::EvalContext;
 use crate::error::ExprError;
 use crate::eval::eval_ast;
 use crate::lexer::{Lexer, Token};
-use crate::types::{AstExpr, TokenKind};
+use crate::types::{AstExpr, TokenKind, TryIntoHeaplessString};
 #[cfg(not(test))]
 use crate::{Box, Vec};
 
@@ -942,7 +942,7 @@ pub fn parse_expression_with_context(
 /// ```
 pub fn interp<'a>(
     expression: &str,
-    ctx: Option<Rc<EvalContext<'a>>>,
+    ctx: Option<Rc<EvalContext>>,
 ) -> crate::error::Result<Real> {
     use alloc::rc::Rc;
 
@@ -965,20 +965,26 @@ pub fn interp<'a>(
         // Only hold the borrow for the minimum time needed
         let ast_rc_opt = {
             let cache_borrow = cache.borrow();
-            cache_borrow.get(expr_key.as_ref()).cloned()
+            if let Ok(key) = expr_key.as_ref().try_into_heapless() {
+                cache_borrow.get(&key).cloned()
+            } else {
+                None
+            }
         };
         if let Some(ast_rc) = ast_rc_opt {
             eval_ast(&ast_rc, Some(Rc::clone(&eval_ctx)))
         } else {
             let mut context_vars: Vec<String> =
-                eval_ctx.variables.keys().map(String::clone).collect();
-            context_vars.extend(eval_ctx.constants.keys().map(String::clone));
+                eval_ctx.variables.keys().map(|k| k.to_string()).collect();
+            context_vars.extend(eval_ctx.constants.keys().map(|k| k.to_string()));
             match parse_expression_with_context(expression, None, Some(&context_vars)) {
                 Ok(ast) => {
                     let ast_rc = Rc::new(ast);
                     {
                         let mut cache_borrow = cache.borrow_mut();
-                        cache_borrow.insert(expr_key.to_string(), ast_rc.clone());
+                        if let Ok(key) = expr_key.as_ref().try_into_heapless() {
+                            let _ = cache_borrow.insert(key, ast_rc.clone());
+                        }
                     }
                     eval_ast(&ast_rc, Some(Rc::clone(&eval_ctx)))
                 }
@@ -990,13 +996,13 @@ pub fn interp<'a>(
         let mut context_vars: Vec<String> = eval_ctx
             .variables
             .keys()
-            .map(|k: &String| k.as_str().to_string())
+            .map(|k| k.to_string())
             .collect();
         context_vars.extend(
             eval_ctx
                 .constants
                 .keys()
-                .map(|k: &String| k.as_str().to_string()),
+                .map(|k| k.to_string()),
         );
         match parse_expression_with_context(expression, None, Some(&context_vars)) {
             Ok(ast) => eval_ast(&ast, Some(Rc::clone(&eval_ctx))),

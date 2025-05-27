@@ -8,7 +8,7 @@ use crate::eval::*;
 
 // Import these for the tests
 // Only needed if builtins are enabled
-use crate::types::AstExpr;
+use crate::types::{AstExpr, TryIntoHeaplessString};
 #[cfg(not(test))]
 use alloc::rc::Rc;
 #[cfg(test)]
@@ -53,7 +53,7 @@ impl CustomFunction for crate::types::ExpressionFunction {
 pub fn eval_custom_function<'a, F>(
     name: &str,
     args: &[AstExpr],
-    ctx: Option<Rc<EvalContext<'a>>>,
+    ctx: Option<Rc<EvalContext>>,
     func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
     var_cache: &mut BTreeMap<String, Real>,
     func: &F,
@@ -104,8 +104,8 @@ where
     // variables in this custom function scope
     fn eval_custom_function_ast<'b>(
         ast: &AstExpr,
-        func_ctx: &EvalContext<'b>,
-        global_ctx: Option<&Rc<EvalContext<'b>>>,
+        func_ctx: &EvalContext,
+        global_ctx: Option<&Rc<EvalContext>>,
         func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
         var_cache: &mut BTreeMap<String, Real>,
     ) -> Result<Real, ExprError> {
@@ -141,18 +141,19 @@ where
             },
             AstExpr::Variable(name) => {
                 // First check if the variable is a parameter in the function context
-                if let Some(val) = func_ctx.variables.get(name) {
-                    Ok(*val)
-                } else {
-                    // If not found, delegate to normal variable lookup in global context
-                    if let Some(ctx) = global_ctx {
-                        eval_variable(name, Some(ctx.clone()), var_cache)
-                    } else {
-                        // No contexts available
-                        Err(ExprError::UnknownVariable {
-                            name: name.to_string(),
-                        })
+                if let Ok(key) = name.clone().try_into_heapless() {
+                    if let Some(val) = func_ctx.variables.get(&key) {
+                        return Ok(*val);
                     }
+                }
+                // If not found, delegate to normal variable lookup in global context
+                if let Some(ctx) = global_ctx {
+                    eval_variable(name, Some(ctx.clone()), var_cache)
+                } else {
+                    // No contexts available
+                    Err(ExprError::UnknownVariable {
+                        name: name.to_string(),
+                    })
                 }
             }
             AstExpr::Function { name, args } => {
@@ -347,7 +348,7 @@ where
         name: &str,
         arg_values: &[Real],
         expr_fn: &crate::types::ExpressionFunction,
-        global_ctx: Option<Rc<EvalContext<'b>>>,
+        global_ctx: Option<Rc<EvalContext>>,
         func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
         var_cache: &mut BTreeMap<String, Real>,
     ) -> Result<Real, ExprError> {
@@ -434,7 +435,7 @@ where
             }
 
             // Check if x is correctly set in the function context
-            if let Some(x_val) = func_ctx.variables.get("x") {
+            if let Some(x_val) = func_ctx.variables.get(&"x".try_into_heapless().unwrap()) {
                 eprintln!("Value of 'x' in function context: {}", x_val);
             } else {
                 eprintln!("ERROR: 'x' not found in function context!");

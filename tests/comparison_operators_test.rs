@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 // Helper function to create a context with comparison operators registered
 // This is needed when running with --no-default-features (no libm)
-fn create_test_context() -> EvalContext<'static> {
+fn create_test_context() -> EvalContext {
     let mut ctx = EvalContext::new();
     
     // Register comparison operators when libm is not available

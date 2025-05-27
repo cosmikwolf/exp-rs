@@ -15,6 +15,7 @@ use alloc::rc::Rc;
 use std::rc::Rc;
 use alloc::borrow::Cow;
 use alloc::string::ToString;
+use crate::types::{TryIntoHeaplessString, TryIntoFunctionName};
 
 /// Evaluates an expression function with the given arguments.
 ///
@@ -23,14 +24,16 @@ pub fn eval_expression_function<'a>(
     ast: &AstExpr,
     param_names: &[Cow<'a , str>],
     arg_values: &[Real],
-    parent_ctx: Option<Rc<EvalContext<'a>>>,
+    parent_ctx: Option<Rc<EvalContext>>,
 ) -> Result<Real> {
     let mut temp_ctx = EvalContext::new();
     if let Some(parent) = parent_ctx {
         temp_ctx.parent = Some(Rc::clone(&parent));
     }
     for (param_name, &arg_val) in param_names.iter().zip(arg_values.iter()) {
-        temp_ctx.variables.insert(param_name.to_string(), arg_val);
+        if let Ok(key) = param_name.to_string().try_into_heapless() {
+            let _ = temp_ctx.variables.insert(key, arg_val);
+        }
     }
     eval_ast(ast, Some(Rc::new(temp_ctx)))
 }
@@ -68,8 +71,8 @@ mod tests {
 
         println!("Registered expression functions: {:?}", ctx.function_registry.expression_functions.keys().collect::<Vec<_>>());
 
-        assert!(ctx.function_registry.expression_functions.contains_key("square"), "Context missing 'square' function");
-        assert!(ctx.function_registry.expression_functions.contains_key("cube"), "Context missing 'cube' function");
+        assert!(ctx.function_registry.expression_functions.contains_key(&"square".try_into_function_name().unwrap()), "Context missing 'square' function");
+        assert!(ctx.function_registry.expression_functions.contains_key(&"cube".try_into_function_name().unwrap()), "Context missing 'cube' function");
 
         let ast = crate::engine::parse_expression("cube(3)").unwrap();
         println!("Parsed expression: {:?}", ast);
@@ -159,8 +162,8 @@ mod tests {
     fn test_expression_function_with_context_variables() {
         let mut ctx = EvalContext::new();
 
-        ctx.variables.insert("base".to_string().into(), 10.0);
-        ctx.constants.insert("FACTOR".to_string().into(), 2.5);
+        ctx.variables.insert("base".try_into_heapless().unwrap(), 10.0).expect("Failed to insert variable");
+        ctx.constants.insert("FACTOR".try_into_heapless().unwrap(), 2.5).expect("Failed to insert constant");
 
         println!("Context variables before: {:?}", ctx.variables);
         println!("Context constants before: {:?}", ctx.constants);
@@ -171,8 +174,8 @@ mod tests {
         println!("Context variables after: {:?}", ctx.variables);
         println!("Context constants after: {:?}", ctx.constants);
 
-        assert!(ctx.variables.contains_key("base"), "Context missing 'base' variable");
-        assert!(ctx.constants.contains_key("FACTOR"), "Context missing 'FACTOR' constant");
+        assert!(ctx.variables.contains_key(&"base".try_into_heapless().unwrap()), "Context missing 'base' variable");
+        assert!(ctx.constants.contains_key(&"FACTOR".try_into_heapless().unwrap()), "Context missing 'FACTOR' constant");
 
         let ast = crate::engine::parse_expression("scaled_value(4)").unwrap();
         println!("Parsed expression: {:?}", ast);

@@ -6,10 +6,8 @@ use crate::Real;
 use crate::{Real, String, ToString, Vec};
 #[cfg(not(test))]
 use alloc::rc::Rc;
-#[cfg(not(test))]
-use hashbrown::HashMap;
-#[cfg(test)]
-use std::collections::HashMap;
+// Import heapless types and helper traits
+use crate::types::{TryIntoHeaplessString, TryIntoFunctionName};
 #[cfg(test)]
 use std::rc::Rc;
 #[cfg(test)]
@@ -27,13 +25,13 @@ use std::vec::Vec;
 /// This is an internal implementation detail and users typically don't interact with it directly.
 #[allow(dead_code)]
 #[derive(Default, Clone)]
-pub struct FunctionRegistry<'a> {
+pub struct FunctionRegistry {
     /// Native functions implemented in Rust code
-    pub native_functions: HashMap<String, crate::types::NativeFunction<'a>>,
+    pub native_functions: crate::types::NativeFunctionMap,
     /// Functions defined using expression strings
-    pub expression_functions: HashMap<String, crate::types::ExpressionFunction>,
+    pub expression_functions: crate::types::ExpressionFunctionMap,
     /// User-defined functions with custom behavior
-    pub user_functions: HashMap<String, UserFunction>,
+    pub user_functions: crate::types::UserFunctionMap,
 }
 
 use core::cell::RefCell;
@@ -85,26 +83,26 @@ use core::cell::RefCell;
 ///
 /// // The child context can access both its own variables and the parent's
 /// ```
-pub struct EvalContext<'a> {
+pub struct EvalContext {
     /// Variables that can be modified during evaluation
-    pub variables: HashMap<String, Real>,
+    pub variables: crate::types::VariableMap,
     /// Constants that cannot be modified during evaluation
-    pub constants: HashMap<String, Real>,
+    pub constants: crate::types::ConstantMap,
     /// Arrays of values that can be accessed using array[index] syntax
-    pub arrays: HashMap<String, Vec<Real>>,
+    pub arrays: crate::types::ArrayMap,
     /// Object attributes that can be accessed using object.attribute syntax
-    pub attributes: HashMap<String, HashMap<String, Real>>,
+    pub attributes: crate::types::AttributeMap,
     /// Multi-dimensional arrays (not yet fully supported)
-    pub nested_arrays: HashMap<String, HashMap<usize, Vec<Real>>>,
+    pub nested_arrays: crate::types::NestedArrayMap,
     /// Registry of functions available in this context
-    pub function_registry: Rc<FunctionRegistry<'a>>,
+    pub function_registry: Rc<FunctionRegistry>,
     /// Optional parent context for variable/function inheritance
-    pub parent: Option<Rc<EvalContext<'a>>>,
+    pub parent: Option<Rc<EvalContext>>,
     /// Optional cache for parsed ASTs to speed up repeated evaluations
-    pub ast_cache: Option<RefCell<HashMap<String, Rc<crate::types::AstExpr>>>>,
+    pub ast_cache: Option<RefCell<crate::types::AstCacheMap>>,
 }
 
-impl<'a> EvalContext<'a> {
+impl EvalContext {
     /// Creates a new empty evaluation context.
     ///
     /// The context starts with no variables, constants, arrays, or functions.
@@ -120,11 +118,11 @@ impl<'a> EvalContext<'a> {
     /// ```
     pub fn new() -> Self {
         let mut ctx = Self {
-            variables: HashMap::new(),
-            constants: HashMap::new(),
-            arrays: HashMap::new(),
-            attributes: HashMap::new(),
-            nested_arrays: HashMap::new(),
+            variables: crate::types::VariableMap::new(),
+            constants: crate::types::ConstantMap::new(),
+            arrays: crate::types::ArrayMap::new(),
+            attributes: crate::types::AttributeMap::new(),
+            nested_arrays: crate::types::NestedArrayMap::new(),
             function_registry: Rc::new(FunctionRegistry::default()),
             parent: None,
             ast_cache: None,
@@ -133,7 +131,7 @@ impl<'a> EvalContext<'a> {
         // Always register default math functions
         // This now includes basic operators and core functions regardless of features,
         // while advanced math functions are guarded by feature flags within the function
-        ctx.register_default_math_functions();
+        let _ = ctx.register_default_math_functions();
 
         ctx
     }
@@ -178,8 +176,12 @@ impl<'a> EvalContext<'a> {
     /// let result = interp("x * 2", Some(Rc::new(ctx))).unwrap();
     /// assert_eq!(result, 84.0);
     /// ```
-    pub fn set_parameter(&mut self, name: &str, value: Real) -> Option<Real> {
-        self.variables.insert(name.to_string(), value)
+    pub fn set_parameter(&mut self, name: &str, value: Real) -> Result<Option<Real>, crate::error::ExprError> {
+        let key = name.try_into_heapless()?;
+        match self.variables.insert(key, value) {
+            Ok(old_value) => Ok(old_value),
+            Err(_) => Err(crate::error::ExprError::CapacityExceeded("variables"))
+        }
     }
 
     /// Registers a native function in the context.
@@ -230,21 +232,24 @@ impl<'a> EvalContext<'a> {
     /// let result = interp("mean(1, 2, 3, 4, 5)", Some(Rc::new(ctx))).unwrap();
     /// assert_eq!(result, 3.0);
     /// ```
-    pub fn register_native_function<F>(&mut self, name: &str, arity: usize, implementation: F)
+    pub fn register_native_function<F>(&mut self, name: &str, arity: usize, implementation: F) -> Result<(), crate::error::ExprError>
     where
         F: Fn(&[Real]) -> Real + 'static,
     {
-        Rc::make_mut(&mut self.function_registry)
+        let key = name.try_into_function_name()?;
+        let function = crate::types::NativeFunction {
+            arity,
+            implementation: Rc::new(implementation),
+            name: key.clone(),
+            description: None,
+        };
+        
+        match Rc::make_mut(&mut self.function_registry)
             .native_functions
-            .insert(
-                name.to_string(),
-                crate::types::NativeFunction {
-                    arity,
-                    implementation: Rc::new(implementation),
-                    name: name.to_string().into(),
-                    description: None,
-                },
-            );
+            .insert(key, function) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(crate::error::ExprError::CapacityExceeded("native_functions"))
+        }
     }
 
     /// Registers a function defined by an expression.
@@ -316,20 +321,21 @@ impl<'a> EvalContext<'a> {
         let ast = crate::engine::parse_expression_with_reserved(expression, Some(&param_names))?;
 
         // Store the expression function
-        Rc::make_mut(&mut self.function_registry)
+        let key = name.try_into_function_name()?;
+        let function = crate::types::ExpressionFunction {
+            name: key.clone(),
+            params: param_names,
+            expression: expression.to_string(),
+            compiled_ast: ast,
+            description: None,
+        };
+        
+        match Rc::make_mut(&mut self.function_registry)
             .expression_functions
-            .insert(
-                name.to_string(),
-                crate::types::ExpressionFunction {
-                    name: name.to_string(),
-                    params: param_names,
-                    expression: expression.to_string(),
-                    compiled_ast: ast,
-                    description: None,
-                },
-            );
-
-        Ok(())
+            .insert(key, function) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(crate::error::ExprError::CapacityExceeded("expression_functions"))
+        }
     }
 
     /// Enables AST caching for this context to improve performance.
@@ -364,7 +370,7 @@ impl<'a> EvalContext<'a> {
     pub fn enable_ast_cache(&self) {
         if self.ast_cache.is_none() {
             // Use interior mutability to set ast_cache
-            let cache = RefCell::new(HashMap::new());
+            let cache = RefCell::new(crate::types::AstCacheMap::new());
             // SAFETY: We use unsafe to mutate a field in an immutable reference.
             // This is safe because ast_cache is an Option<RefCell<_>> and we only set it once.
             unsafe {
@@ -580,9 +586,13 @@ impl<'a> EvalContext<'a> {
     /// ```
 
     pub fn get_variable(&self, name: &str) -> Option<Real> {
-        if let Some(val) = self.variables.get(name) {
-            Some(*val)
-        } else if let Some(parent) = &self.parent {
+        if let Ok(key) = name.try_into_heapless() {
+            if let Some(val) = self.variables.get(&key) {
+                return Some(*val);
+            }
+        }
+        
+        if let Some(parent) = &self.parent {
             parent.get_variable(name)
         } else {
             None
@@ -590,29 +600,62 @@ impl<'a> EvalContext<'a> {
     }
 
     pub fn get_constant(&self, name: &str) -> Option<Real> {
-        if let Some(val) = self.constants.get(name) {
-            Some(*val)
-        } else if let Some(parent) = &self.parent {
+        if let Ok(key) = name.try_into_heapless() {
+            if let Some(val) = self.constants.get(&key) {
+                return Some(*val);
+            }
+        }
+        
+        if let Some(parent) = &self.parent {
             parent.get_constant(name)
         } else {
             None
         }
     }
 
-    pub fn get_array(&self, name: &str) -> Option<&Vec<Real>> {
-        if let Some(arr) = self.arrays.get(name) {
-            Some(arr)
-        } else if let Some(parent) = &self.parent {
+    pub fn get_array(&self, name: &str) -> Option<&alloc::vec::Vec<crate::Real>> {
+        if let Ok(key) = name.try_into_heapless() {
+            if let Some(arr) = self.arrays.get(&key) {
+                return Some(arr);
+            }
+        }
+        
+        if let Some(parent) = &self.parent {
             parent.get_array(name)
         } else {
             None
         }
     }
 
-    pub fn get_attribute_map(&self, base: &str) -> Option<&HashMap<String, Real>> {
-        if let Some(attr_map) = self.attributes.get(base) {
-            Some(attr_map)
-        } else if let Some(parent) = &self.parent {
+    /// Helper method to set an attribute value on an object
+    pub fn set_attribute(&mut self, object_name: &str, attr_name: &str, value: Real) -> Result<Option<Real>, crate::error::ExprError> {
+        let obj_key = object_name.try_into_heapless()?;
+        let attr_key = attr_name.try_into_heapless()?;
+        
+        // Get or create the object's attribute map
+        if !self.attributes.contains_key(&obj_key) {
+            let attr_map = heapless::FnvIndexMap::<crate::types::HString, Real, {crate::types::MAX_ATTR_KEYS}>::new();
+            self.attributes.insert(obj_key.clone(), attr_map)
+                .map_err(|_| crate::error::ExprError::CapacityExceeded("attributes"))?;
+        }
+        
+        // Get mutable reference to the attribute map and insert the value
+        if let Some(attr_map) = self.attributes.get_mut(&obj_key) {
+            attr_map.insert(attr_key, value)
+                .map_err(|_| crate::error::ExprError::CapacityExceeded("object attributes"))
+        } else {
+            unreachable!("Just inserted the object")
+        }
+    }
+
+    pub fn get_attribute_map(&self, base: &str) -> Option<&heapless::FnvIndexMap<crate::types::HString, Real, {crate::types::MAX_ATTR_KEYS}>> {
+        if let Ok(key) = base.try_into_heapless() {
+            if let Some(attr_map) = self.attributes.get(&key) {
+                return Some(attr_map);
+            }
+        }
+        
+        if let Some(parent) = &self.parent {
             parent.get_attribute_map(base)
         } else {
             None
@@ -620,9 +663,13 @@ impl<'a> EvalContext<'a> {
     }
 
     pub fn get_native_function(&self, name: &str) -> Option<&crate::types::NativeFunction> {
-        if let Some(f) = self.function_registry.native_functions.get(name) {
-            Some(f)
-        } else if let Some(parent) = &self.parent {
+        if let Ok(key) = name.try_into_function_name() {
+            if let Some(f) = self.function_registry.native_functions.get(&key) {
+                return Some(f);
+            }
+        }
+        
+        if let Some(parent) = &self.parent {
             parent.get_native_function(name)
         } else {
             None
@@ -630,9 +677,13 @@ impl<'a> EvalContext<'a> {
     }
 
     pub fn get_user_function(&self, name: &str) -> Option<&crate::context::UserFunction> {
-        if let Some(f) = self.function_registry.user_functions.get(name) {
-            Some(f)
-        } else if let Some(parent) = &self.parent {
+        if let Ok(key) = name.try_into_function_name() {
+            if let Some(f) = self.function_registry.user_functions.get(&key) {
+                return Some(f);
+            }
+        }
+        
+        if let Some(parent) = &self.parent {
             parent.get_user_function(name)
         } else {
             None
@@ -640,9 +691,13 @@ impl<'a> EvalContext<'a> {
     }
 
     pub fn get_expression_function(&self, name: &str) -> Option<&crate::types::ExpressionFunction> {
-        if let Some(f) = self.function_registry.expression_functions.get(name) {
-            Some(f)
-        } else if let Some(parent) = &self.parent {
+        if let Ok(key) = name.try_into_function_name() {
+            if let Some(f) = self.function_registry.expression_functions.get(&key) {
+                return Some(f);
+            }
+        }
+        
+        if let Some(parent) = &self.parent {
             parent.get_expression_function(name)
         } else {
             None
@@ -650,7 +705,7 @@ impl<'a> EvalContext<'a> {
     }
 }
 
-impl<'a> Clone for EvalContext<'a> {
+impl Clone for EvalContext {
     fn clone(&self) -> Self {
         Self {
             variables: self.variables.clone(),
@@ -665,7 +720,7 @@ impl<'a> Clone for EvalContext<'a> {
     }
 }
 
-impl<'a> Default for EvalContext<'a> {
+impl Default for EvalContext {
     /// Creates a new EvalContext with default values and math functions registered.
     /// This ensures that EvalContext::default() behaves the same as
     fn default() -> Self {
@@ -688,34 +743,7 @@ impl<'a> Default for EvalContext<'a> {
     }
 }
 
-/// Helper trait to allow shallow cloning of HashMap<String, NativeFunction>
-pub trait CloneShallowNativeFunctions<'a> {
-    fn clone_shallow(&self) -> HashMap<Cow<'a, str>, crate::types::NativeFunction<'a>>;
-}
-
-// For test and non-test, implement shallow clone as just copying the references (not the closures)
-impl<'a> CloneShallowNativeFunctions<'a>
-    for HashMap<Cow<'a, str>, crate::types::NativeFunction<'a>>
-{
-    fn clone_shallow(&self) -> HashMap<Cow<'a, str>, crate::types::NativeFunction<'a>> {
-        // This is a shallow clone: just copy the map, but do not clone the NativeFunction (which would panic)
-        // Instead, just copy the references to the same NativeFunction objects.
-        // This is safe as long as the closures are not mutated.
-        self.iter()
-            .map(|(k, v)| {
-                (
-                    k.clone(),
-                    crate::types::NativeFunction {
-                        arity: v.arity,
-                        implementation: v.implementation.clone(), // just clone the Rc pointer (shallow)
-                        name: v.name.clone(),
-                        description: v.description.clone(),
-                    },
-                )
-            })
-            .collect()
-    }
-}
+// Helper trait removed - heapless containers support Clone directly
 
 use alloc::borrow::Cow;
 
@@ -731,6 +759,7 @@ pub struct UserFunction {
 mod tests {
     use super::*;
     use crate::engine;
+    use crate::types::TryIntoHeaplessString;
     use crate::types::AstExpr;
     use std::rc::Rc;
 
@@ -973,7 +1002,7 @@ mod tests {
         ctx.register_expression_function("double", &["x"], "x * 2")
             .unwrap();
 
-        ctx.variables.insert("value".to_string().into(), 5.0);
+        ctx.variables.insert("value".try_into_heapless().unwrap(), 5.0).expect("Failed to insert");
 
         let val = engine::interp("double(value)", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 10.0);
@@ -986,9 +1015,9 @@ mod tests {
     fn test_array_access() {
         let mut ctx = EvalContext::new();
         ctx.arrays.insert(
-            "climb_wave_wait_time".to_string().into(),
+            "climb_wave_wait_time".try_into_heapless().unwrap(),
             vec![10.0, 20.0, 30.0],
-        );
+        ).expect("Failed to insert array");
         let val = engine::interp("climb_wave_wait_time[1]", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 20.0);
     }
@@ -997,9 +1026,9 @@ mod tests {
     fn test_array_access_ast_structure() {
         let mut ctx = EvalContext::new();
         ctx.arrays.insert(
-            "climb_wave_wait_time".to_string().into(),
+            "climb_wave_wait_time".try_into_heapless().unwrap(),
             vec![10.0, 20.0, 30.0],
-        );
+        ).expect("Failed to insert array");
         let ast = engine::parse_expression("climb_wave_wait_time[1]").unwrap();
         match ast {
             AstExpr::Array { name, index } => {
@@ -1016,9 +1045,9 @@ mod tests {
     #[test]
     fn test_attribute_access() {
         let mut ctx = EvalContext::new();
-        let mut foo_map = HashMap::new();
-        foo_map.insert("bar".to_string().into(), 42.0);
-        ctx.attributes.insert("foo".to_string().into(), foo_map);
+        let mut foo_map = heapless::FnvIndexMap::<crate::types::HString, crate::Real, {crate::types::MAX_ATTR_KEYS}>::new();
+        foo_map.insert("bar".try_into_heapless().unwrap(), 42.0).unwrap();
+        ctx.attributes.insert("foo".try_into_heapless().unwrap(), foo_map).unwrap();
 
         let ast = engine::parse_expression("foo.bar").unwrap();
         println!("AST for foo.bar: {:?}", ast);
@@ -1048,13 +1077,13 @@ mod tests {
         let mut ctx = EvalContext::new();
 
         let prev = ctx.set_parameter("x", 10.0);
-        assert_eq!(prev, None);
+        assert_eq!(prev.unwrap(), None);
 
         let val = engine::interp("x", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 10.0);
 
         let prev = ctx.set_parameter("x", 20.0);
-        assert_eq!(prev, Some(10.0));
+        assert_eq!(prev.unwrap(), Some(10.0));
 
         let val = engine::interp("x", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 20.0);

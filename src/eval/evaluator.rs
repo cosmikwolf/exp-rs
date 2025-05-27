@@ -33,12 +33,13 @@ use std::vec::Vec;
 
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
+use crate::types::TryIntoHeaplessString;
 
 use super::*;
 
 pub fn eval_variable(
     name: &str,
-    ctx: Option<Rc<EvalContext<'_>>>,
+    ctx: Option<Rc<EvalContext>>,
     var_cache: &mut BTreeMap<String, Real>,
 ) -> Result<Real, ExprError> {
     // Handle built-in constants first (pi, e) - these don't need context
@@ -63,16 +64,20 @@ pub fn eval_variable(
     if let Some(ctx_ref) = ctx.as_deref() {
         // For expression functions, we need to check the immediate variables first
         // before checking parent contexts to avoid shadowing issues
-        if let Some(val) = ctx_ref.variables.get(name) {
-            // Found in immediate context, return it
-            var_cache.insert(name.to_string(), *val);
-            return Ok(*val);
+        if let Ok(key) = name.try_into_heapless() {
+            if let Some(val) = ctx_ref.variables.get(&key) {
+                // Found in immediate context, return it
+                var_cache.insert(name.to_string(), *val);
+                return Ok(*val);
+            }
         }
 
         // Then check constants in the immediate context
-        if let Some(val) = ctx_ref.constants.get(name) {
-            var_cache.insert(name.to_string(), *val);
-            return Ok(*val);
+        if let Ok(key) = name.try_into_heapless() {
+            if let Some(val) = ctx_ref.constants.get(&key) {
+                var_cache.insert(name.to_string(), *val);
+                return Ok(*val);
+            }
         }
 
         // Now check the parent chain using the helper methods
@@ -109,7 +114,7 @@ pub fn eval_variable(
 pub fn eval_function<'a>(
     name: &str,
     args: &[AstExpr],
-    ctx: Option<Rc<EvalContext<'a>>>,
+    ctx: Option<Rc<EvalContext>>,
     func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
     var_cache: &mut BTreeMap<String, Real>,
 ) -> Result<Real, ExprError> {
@@ -428,7 +433,7 @@ pub fn eval_function<'a>(
 pub fn eval_native_function<'a>(
     name: &str,
     args: &[AstExpr],
-    ctx: Option<Rc<EvalContext<'a>>>,
+    ctx: Option<Rc<EvalContext>>,
     func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
     var_cache: &mut BTreeMap<String, Real>,
     native_fn: &OwnedNativeFunction,
@@ -451,7 +456,7 @@ pub fn eval_native_function<'a>(
 pub fn eval_array<'a>(
     name: &str,
     index: &AstExpr,
-    ctx: Option<Rc<EvalContext<'a>>>,
+    ctx: Option<Rc<EvalContext>>,
     func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
     var_cache: &mut BTreeMap<String, Real>,
 ) -> Result<Real, ExprError> {
@@ -478,17 +483,14 @@ pub fn eval_array<'a>(
 pub fn eval_attribute(
     base: &str,
     attr: &str,
-    ctx: Option<Rc<EvalContext<'_>>>,
+    ctx: Option<Rc<EvalContext>>,
 ) -> Result<Real, ExprError> {
     if let Some(ctx_ref) = ctx.as_ref() {
         if let Some(attr_map) = ctx_ref.get_attribute_map(base) {
-            if let Some(val) = attr_map.get(attr) {
-                return Ok(*val);
-            } else {
-                return Err(ExprError::AttributeNotFound {
-                    base: base.to_string(),
-                    attr: attr.to_string(),
-                });
+            if let Ok(attr_key) = attr.try_into_heapless() {
+                if let Some(val) = attr_map.get(&attr_key) {
+                    return Ok(*val);
+                }
             }
         }
     }

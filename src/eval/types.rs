@@ -15,8 +15,8 @@ pub struct OwnedNativeFunction {
 }
 
 // Convert from NativeFunction<'a> to OwnedNativeFunction
-impl<'a> From<&crate::types::NativeFunction<'a>> for OwnedNativeFunction {
-    fn from(nf: &crate::types::NativeFunction<'a>) -> Self {
+impl From<&crate::types::NativeFunction> for OwnedNativeFunction {
+    fn from(nf: &crate::types::NativeFunction) -> Self {
         OwnedNativeFunction {
             arity: nf.arity,
             implementation: nf.implementation.clone(),
