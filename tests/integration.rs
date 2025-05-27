@@ -18,7 +18,9 @@ use alloc::rc::Rc;
 
 // Use the shared test helper functions
 mod test_helpers;
-use test_helpers::{create_context, create_context_rc, hstr, set_attr, set_const, set_var};
+use test_helpers::create_context;
+use test_helpers::create_context_rc;
+use test_helpers::{hstr, set_attr, set_const, set_var};
 
 // The helper function implementation is now in test_helpers.rs
 

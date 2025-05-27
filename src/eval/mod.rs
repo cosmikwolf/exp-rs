@@ -5,13 +5,13 @@
 //! and recursion depth tracking.
 
 pub mod ast;
+pub mod context_stack;
 pub mod custom_function;
 pub mod evaluator;
-pub mod recursion;
-pub mod types;
-pub mod stack_ops;
-pub mod context_stack;
 pub mod iterative;
+pub mod recursion;
+pub mod stack_ops;
+pub mod types;
 
 // Re-export the main evaluation functions for backward compatibility
 pub use ast::*;
@@ -28,8 +28,8 @@ pub use recursion::{
 
 #[cfg(test)]
 mod tests {
+    use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
     use alloc::collections::BTreeMap;
-    use crate::types::{TryIntoHeaplessString, TryIntoFunctionName};
 
     use super::*;
     use crate::AstExpr;
@@ -38,7 +38,7 @@ mod tests {
     use crate::context::FunctionRegistry;
     use crate::engine::{interp, parse_expression};
     use crate::error::ExprError;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::Ordering;
     // Use std HashMap for tests
     use crate::abs;
     use crate::cos;
@@ -179,7 +179,7 @@ mod tests {
     // Helper to create a context and register defaults IF builtins are enabled
     fn create_test_context<'a>() -> EvalContext {
         let mut ctx = EvalContext::new();
-        
+
         // In tests, we can use stdlib functions even when libm is disabled
         #[cfg(all(test, not(feature = "libm")))]
         {
@@ -210,10 +210,16 @@ mod tests {
             let _ = ctx.register_native_function("max", 2, |args| args[0].max(args[1]));
             let _ = ctx.register_native_function("neg", 1, |args| -args[0]);
             let _ = ctx.register_native_function("sign", 1, |args| {
-                if args[0] > 0.0 { 1.0 } else if args[0] < 0.0 { -1.0 } else { 0.0 }
+                if args[0] > 0.0 {
+                    1.0
+                } else if args[0] < 0.0 {
+                    -1.0
+                } else {
+                    0.0
+                }
             });
         }
-        
+
         // Register defaults only if the feature allows it
         #[cfg(feature = "libm")]
         {
@@ -251,7 +257,9 @@ mod tests {
     fn test_eval_variable_context_lookup() {
         let mut ctx = EvalContext::new();
         ctx.set_parameter("x", 42.0);
-        ctx.constants.insert("y".try_into_heapless().unwrap(), crate::constants::PI).expect("Failed to insert constant");
+        ctx.constants
+            .insert("y".try_into_heapless().unwrap(), crate::constants::PI)
+            .expect("Failed to insert constant");
         assert_eq!(
             test_eval_variable("x", Some(Rc::new(ctx.clone()))).unwrap(),
             42.0
@@ -342,7 +350,9 @@ mod tests {
     #[test]
     fn test_eval_array_success_and_out_of_bounds() {
         let mut ctx = EvalContext::new();
-        ctx.arrays.insert("arr".try_into_heapless().unwrap(), vec![1.0, 2.0, 3.0]).expect("Failed to insert array");
+        ctx.arrays
+            .insert("arr".try_into_heapless().unwrap(), vec![1.0, 2.0, 3.0])
+            .expect("Failed to insert array");
 
         // Create separate caches for each call to avoid borrowing issues
         let mut func_cache1 = std::collections::BTreeMap::new();
@@ -389,7 +399,8 @@ mod tests {
     fn test_eval_attribute_success_and_not_found() {
         let mut ctx = EvalContext::new();
         // Use the helper method to set attributes
-        ctx.set_attribute("bar", "foo", 123.0).expect("Failed to set attribute");
+        ctx.set_attribute("bar", "foo", 123.0)
+            .expect("Failed to set attribute");
         let val = super::eval_attribute("bar", "foo", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 123.0);
         let err = super::eval_attribute("bar", "baz", Some(Rc::new(ctx.clone()))).unwrap_err();
@@ -760,7 +771,12 @@ mod tests {
             let ctx_rc = Rc::new(ctx.clone());
         }
         // If cos wasn't registered by create_test_context and libm is enabled, this might fail
-        if ctx.function_registry.native_functions.contains_key(&"cos".try_into_function_name().unwrap()) || cfg!(feature = "libm") {
+        if ctx
+            .function_registry
+            .native_functions
+            .contains_key(&"cos".try_into_function_name().unwrap())
+            || cfg!(feature = "libm")
+        {
             let val_cos = interp("cos(0)", Some(ctx_rc.clone())).unwrap();
             // Use approx eq for floating point results
             let expected_cos = 1.0;
@@ -796,7 +812,12 @@ mod tests {
             ctx_rc = Rc::new(ctx.clone());
         }
         // If min wasn't registered by create_test_context and libm is enabled, this might fail
-        if ctx.function_registry.native_functions.contains_key(&"min".try_into_function_name().unwrap()) || cfg!(feature = "libm") {
+        if ctx
+            .function_registry
+            .native_functions
+            .contains_key(&"min".try_into_function_name().unwrap())
+            || cfg!(feature = "libm")
+        {
             ctx.register_expression_function("max", &["a", "b"], "min(a, b)")
                 .unwrap();
             // Update Rc after modifying ctx
@@ -829,7 +850,12 @@ mod tests {
             // Update Rc after modifying ctx
             ctx_rc = Rc::new(ctx.clone());
         }
-        if ctx.function_registry.native_functions.contains_key(&"sin".try_into_function_name().unwrap()) || cfg!(feature = "libm") {
+        if ctx
+            .function_registry
+            .native_functions
+            .contains_key(&"sin".try_into_function_name().unwrap())
+            || cfg!(feature = "libm")
+        {
             let val_sin = interp("sin(0)", Some(ctx_rc.clone())).unwrap();
             assert!(
                 (val_sin - 0.0).abs() < 1e-9,
@@ -844,8 +870,11 @@ mod tests {
     #[test]
     fn test_expression_function_uses_correct_context() {
         let mut ctx = create_test_context(); // Start with defaults (if enabled)
-        ctx.set_parameter("a", 10.0).expect("Failed to set parameter"); // Variable in outer context
-        ctx.constants.insert("my_const".try_into_heapless().unwrap(), 100.0).expect("Failed to insert constant"); // Constant in outer context
+        ctx.set_parameter("a", 10.0)
+            .expect("Failed to set parameter"); // Variable in outer context
+        ctx.constants
+            .insert("my_const".try_into_heapless().unwrap(), 100.0)
+            .expect("Failed to insert constant"); // Constant in outer context
 
         // Define func1_const(x) = x + my_const
         // Expression functions inherit constants.
@@ -1080,14 +1109,14 @@ mod tests {
         // This test is no longer relevant with the iterative evaluator
         // The iterative evaluator doesn't use a global recursion counter
         // Instead, it uses a context stack with a fixed capacity
-        
+
         // We'll test that simple expressions evaluate correctly
         let ast = AstExpr::Constant(42.0);
         let result = eval_ast(&ast, None);
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42.0);
-        
+
         // The iterative evaluator automatically cleans up its stack after evaluation
         // so there's no need to check for reset behavior
     }
@@ -1096,7 +1125,7 @@ mod tests {
     fn test_infinite_recursion_detection() {
         // Reset recursion depth to ensure clean test state
         crate::eval::recursion::reset_recursion_depth();
-        
+
         // Test that infinite recursion is properly detected and halted
         let mut ctx = EvalContext::new();
 
@@ -1119,7 +1148,7 @@ mod tests {
             }
             other => panic!("Expected CapacityExceeded error, got: {:?}", other),
         }
-        
+
         // The iterative evaluator automatically cleans up on error,
         // so there's no global state to check
     }
@@ -1206,14 +1235,14 @@ mod tests {
 
         // Create a context with the necessary operators
         let mut ctx = EvalContext::new();
-        
+
         // Register the necessary operators if libm is not enabled
         #[cfg(not(feature = "libm"))]
         {
             ctx.register_native_function("+", 2, |args| args[0] + args[1]);
             ctx.register_native_function("*", 2, |args| args[0] * args[1]);
         }
-        
+
         // Evaluate it with the context
         let result = interp(expr, Some(Rc::new(ctx)));
 
@@ -1232,13 +1261,16 @@ mod tests {
                 depth
             );
         }
-        
+
         // When not using libm, the test can't be as strict because the operators
         // are implemented as explicit function calls
         #[cfg(not(feature = "libm"))]
         {
             let depth = RECURSION_DEPTH.load(Ordering::Relaxed);
-            println!("Without libm, recursion depth is higher due to operator functions: {}", depth);
+            println!(
+                "Without libm, recursion depth is higher due to operator functions: {}",
+                depth
+            );
         }
     }
 
@@ -1249,9 +1281,7 @@ mod tests {
         use std::rc::Rc;
 
         let mut ctx = EvalContext::new();
-        ctx.ast_cache = Some(RefCell::new(
-            crate::types::AstCacheMap::new(),
-        ));
+        ctx.ast_cache = Some(RefCell::new(crate::types::AstCacheMap::new()));
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
 

@@ -90,8 +90,8 @@ fn test_factorial_recursion_depth() {
     ).unwrap();
     
     // Create a different way to track exact recursion depth
-    let mut exact_depth = 0;
-    let mut max_recorded_depth = 0;
+    let exact_depth = 0;
+    let max_recorded_depth = 0;
     
     // Create a struct to hold our mutable state
     struct DepthTracker {

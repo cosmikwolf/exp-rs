@@ -7,12 +7,11 @@ extern crate alloc;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
 use exp_rs::Real;
-use exp_rs::types::TryIntoHeaplessString;
 use std::rc::Rc;
 
 #[path = "test_helpers.rs"]
 mod test_helpers;
-use test_helpers::{hstr, set_var, set_attr};
+use test_helpers::{hstr, set_attr};
 
 /// Test safe recursion with manual depth tracking
 /// This demonstrates implementing factorial and fibonacci using a safe

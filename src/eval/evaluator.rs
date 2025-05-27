@@ -6,20 +6,6 @@ use crate::context::EvalContext;
 use crate::error::ExprError;
 
 // Import these for the tests
-#[cfg(test)]
-use crate::abs;
-#[cfg(test)]
-use crate::cos;
-#[cfg(test)]
-use crate::max;
-#[cfg(test)]
-use crate::min;
-#[cfg(test)]
-use crate::neg;
-#[cfg(test)]
-use crate::pow;
-#[cfg(test)]
-use crate::sin;
 // Only needed if builtins are enabled
 use crate::types::AstExpr;
 #[cfg(not(test))]

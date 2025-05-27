@@ -287,4 +287,3 @@ fn test_registered_comparison_function() {
     // assert_eq!(interp("is_between(5, 1, 10)", Some(ctx_rc.clone())).unwrap(), 1.0);
     // assert_eq!(interp("is_between(0, 1, 10)", Some(ctx_rc.clone())).unwrap(), 0.0);
 }
-

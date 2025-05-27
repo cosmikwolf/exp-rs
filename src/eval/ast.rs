@@ -10,10 +10,6 @@ use crate::types::AstExpr;
 use alloc::rc::Rc;
 #[cfg(test)]
 use std::rc::Rc;
-#[cfg(test)]
-use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(test)]
-use std::vec::Vec;
 
 use alloc::collections::BTreeMap;
 use alloc::string::String;

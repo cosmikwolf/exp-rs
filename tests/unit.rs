@@ -13,10 +13,10 @@ mod unit {
     use exp_rs::types::{AstExpr, TokenKind};
     use std::rc::Rc;
 
-    use std::collections::HashMap;
+    
 
-    use crate::test_helpers::{create_context, hstr, set_var, set_attr};
-    use exp_rs::types::TryIntoHeaplessString;
+    use crate::test_helpers::{create_context, hstr, set_attr};
+    
 
     /// Helper function to create an eval context with all math functions registered
     fn create_math_context() -> Rc<EvalContext> {

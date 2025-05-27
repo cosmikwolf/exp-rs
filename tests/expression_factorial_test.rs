@@ -6,7 +6,6 @@
 #[cfg(test)]
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
-use exp_rs::error::ExprError;
 use exp_rs::eval::{get_recursion_depth, reset_recursion_depth};
 use std::rc::Rc;
 

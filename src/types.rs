@@ -262,8 +262,8 @@ mod tests {
     use super::*;
     use crate::error::ExprError;
     use crate::eval::eval_ast;
-    use crate::context::{EvalContext, FunctionRegistry};
-    use std::collections::HashMap;
+    use crate::context::EvalContext;
+    
     use std::rc::Rc;
 
     #[test]

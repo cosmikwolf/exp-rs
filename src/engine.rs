@@ -940,10 +940,7 @@ pub fn parse_expression_with_context(
 ///     Err(e) => panic!("Unexpected error: {:?}", e),
 /// }
 /// ```
-pub fn interp<'a>(
-    expression: &str,
-    ctx: Option<Rc<EvalContext>>,
-) -> crate::error::Result<Real> {
+pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::error::Result<Real> {
     use alloc::rc::Rc;
 
     // Create a new context if none provided
@@ -993,17 +990,9 @@ pub fn interp<'a>(
         }
     } else {
         // No cache: behave as before
-        let mut context_vars: Vec<String> = eval_ctx
-            .variables
-            .keys()
-            .map(|k| k.to_string())
-            .collect();
-        context_vars.extend(
-            eval_ctx
-                .constants
-                .keys()
-                .map(|k| k.to_string()),
-        );
+        let mut context_vars: Vec<String> =
+            eval_ctx.variables.keys().map(|k| k.to_string()).collect();
+        context_vars.extend(eval_ctx.constants.keys().map(|k| k.to_string()));
         match parse_expression_with_context(expression, None, Some(&context_vars)) {
             Ok(ast) => eval_ast(&ast, Some(Rc::clone(&eval_ctx))),
             Err(err) => Err(err),
@@ -1021,9 +1010,9 @@ use std::vec::Vec;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::{EvalContext, FunctionRegistry};
+    use crate::context::EvalContext;
     use crate::functions::{log, sin};
-    use std::collections::HashMap;
+
     use std::vec; // Import functions from our own module
 
     // Tests for the ternary operator
@@ -1069,7 +1058,7 @@ mod tests {
     fn test_ternary_operator_evaluation() {
         // Create a context with the necessary operators for the test
         let mut ctx = EvalContext::new();
-        
+
         // Make sure the context has the ">" operator registered
         #[cfg(not(feature = "libm"))]
         {
@@ -1077,14 +1066,14 @@ mod tests {
             ctx.register_native_function("*", 2, |args| args[0] * args[1]);
             ctx.register_native_function("+", 2, |args| args[0] + args[1]);
         }
-        
+
         ctx.set_parameter("x", 5.0);
         let result = interp("x > 0 ? 10 : 20", Some(Rc::new(ctx))).unwrap();
         assert_eq!(result, 10.0);
 
         // Test with false condition
         let mut ctx = EvalContext::new();
-        
+
         // Make sure the context has the ">" operator registered
         #[cfg(not(feature = "libm"))]
         {
@@ -1092,14 +1081,14 @@ mod tests {
             ctx.register_native_function("*", 2, |args| args[0] * args[1]);
             ctx.register_native_function("+", 2, |args| args[0] + args[1]);
         }
-        
+
         ctx.set_parameter("x", -5.0);
         let result = interp("x > 0 ? 10 : 20", Some(Rc::new(ctx))).unwrap();
         assert_eq!(result, 20.0);
 
         // Create a context for the rest of the tests
         let mut ctx = EvalContext::new();
-        
+
         // Make sure the context has all the necessary operators registered
         #[cfg(not(feature = "libm"))]
         {
@@ -1107,9 +1096,9 @@ mod tests {
             ctx.register_native_function("*", 2, |args| args[0] * args[1]);
             ctx.register_native_function("+", 2, |args| args[0] + args[1]);
         }
-        
+
         let ctx_rc = Rc::new(ctx);
-        
+
         // Test with nested ternary
         let result = interp("1 ? 2 ? 3 : 4 : 5", Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 3.0);
@@ -1127,13 +1116,13 @@ mod tests {
     fn test_ternary_operator_short_circuit() {
         // Context with a variable that will cause division by zero in the false branch
         let mut ctx = EvalContext::new();
-        
+
         // Make sure the context has all the necessary operators registered
         #[cfg(not(feature = "libm"))]
         {
             ctx.register_native_function("/", 2, |args| args[0] / args[1]);
         }
-        
+
         ctx.set_parameter("x", 0.0);
 
         // This should not cause a division by zero error because the condition is true,
@@ -1144,28 +1133,40 @@ mod tests {
         // This should return infinity because the condition is false,
         // so the false branch (1/0) is evaluated
         let result = interp("0 ? 42 : 1/x", Some(Rc::new(ctx))).unwrap();
-        
+
         #[cfg(feature = "f32")]
-        assert!(result.is_infinite() && result.is_sign_positive(), "1/0 should be positive infinity");
+        assert!(
+            result.is_infinite() && result.is_sign_positive(),
+            "1/0 should be positive infinity"
+        );
         #[cfg(not(feature = "f32"))]
-        assert!(result.is_infinite() && result.is_sign_positive(), "1/0 should be positive infinity");
+        assert!(
+            result.is_infinite() && result.is_sign_positive(),
+            "1/0 should be positive infinity"
+        );
     }
 
     #[test]
     fn test_ternary_operator_precedence() {
         // Create a context with the necessary operators for the test
         let mut ctx = EvalContext::new();
-        
+
         // Make sure the context has all the necessary operators registered
         #[cfg(not(feature = "libm"))]
         {
             ctx.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
             ctx.register_native_function("+", 2, |args| args[0] + args[1]);
-            ctx.register_native_function("&&", 2, |args| if args[0] != 0.0 && args[1] != 0.0 { 1.0 } else { 0.0 });
+            ctx.register_native_function("&&", 2, |args| {
+                if args[0] != 0.0 && args[1] != 0.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            });
         }
-        
+
         let ctx_rc = Rc::new(ctx);
-        
+
         // Test that ternary has lower precedence than comparison
         let result = interp("2 > 1 ? 3 : 4", Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 3.0);
