@@ -9,7 +9,5 @@ rustflags = [
   "target-feature=+strict-align",
   "-C",
   "target-cpu=cortex-m7",
-  "-C",
-  "llvm-args=--strict-align",
 ]
 

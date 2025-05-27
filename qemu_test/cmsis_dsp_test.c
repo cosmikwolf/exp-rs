@@ -11,7 +11,7 @@
 
 // Define necessary types and macros based on compilation mode
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))
-typedef float real_t;
+
 #define SIN sinf
 #define COS cosf
 #define SQRT sqrtf
@@ -42,7 +42,7 @@ static inline void custom_arm_sqrt_f32(float in, float *out) {
 #define ARM_SQRT(x, result) custom_arm_sqrt_f32(x, result)
 
 #elif defined(DEF_USE_F64) || defined(USE_F64)
-typedef double real_t;
+
 #define SIN sin
 #define COS cos
 #define SQRT sqrt
@@ -79,7 +79,7 @@ static inline void custom_arm_sqrt_f64(double in, double *out) {
 // Using the EvalResult struct directly
 
 // Debug helper to print values with description
-void debug_print_value(const char* desc, real_t value) {
+void debug_print_value(const char* desc, Real value) {
 #if defined(USE_F32)
     qemu_printf("%s: %f (0x%08X)\n", desc, value, *(uint32_t*)&value);
 #else
@@ -97,7 +97,7 @@ test_result_t test_cmsis_dsp_functions() {
     qemu_printf("Testing CMSIS-DSP %s Functions\n", TEST_NAME);
     
     // Test values
-    real_t test_values[] = {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0};
+    Real test_values[] = {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0};
     int num_values = sizeof(test_values) / sizeof(test_values[0]);
     int passed = 0;
     int total_tests = 0;
@@ -105,10 +105,10 @@ test_result_t test_cmsis_dsp_functions() {
     // Test sin function
     qemu_printf("\nTesting sin function (%s):\n", TEST_NAME);
     for (int i = 0; i < num_values; i++) {
-        real_t x = test_values[i];
-        real_t cmsis_result = ARM_SIN(x);
-        real_t math_result = SIN(x);
-        real_t diff = FABS(cmsis_result - math_result);
+        Real x = test_values[i];
+        Real cmsis_result = ARM_SIN(x);
+        Real math_result = SIN(x);
+        Real diff = FABS(cmsis_result - math_result);
         
         qemu_printf("  sin(" FORMAT_SPEC "): CMSIS=" FORMAT_SPEC ", libm=" FORMAT_SPEC ", diff=" FORMAT_SPEC "\n", 
                     x, cmsis_result, math_result, diff);
@@ -122,10 +122,10 @@ test_result_t test_cmsis_dsp_functions() {
     // Test cos function
     qemu_printf("\nTesting cos function (%s):\n", TEST_NAME);
     for (int i = 0; i < num_values; i++) {
-        real_t x = test_values[i];
-        real_t cmsis_result = ARM_COS(x);
-        real_t math_result = COS(x);
-        real_t diff = FABS(cmsis_result - math_result);
+        Real x = test_values[i];
+        Real cmsis_result = ARM_COS(x);
+        Real math_result = COS(x);
+        Real diff = FABS(cmsis_result - math_result);
         
         qemu_printf("  cos(" FORMAT_SPEC "): CMSIS=" FORMAT_SPEC ", libm=" FORMAT_SPEC ", diff=" FORMAT_SPEC "\n", 
                     x, cmsis_result, math_result, diff);
@@ -139,13 +139,13 @@ test_result_t test_cmsis_dsp_functions() {
     // Test sqrt function
     qemu_printf("\nTesting sqrt function (%s):\n", TEST_NAME);
     for (int i = 0; i < num_values; i++) {
-        real_t x = test_values[i];
+        Real x = test_values[i];
         if (x < 0.0) continue; // Skip negative values for sqrt
         
-        real_t cmsis_result;
+        Real cmsis_result;
         ARM_SQRT(x, &cmsis_result);
-        real_t math_result = SQRT(x);
-        real_t diff = FABS(cmsis_result - math_result);
+        Real math_result = SQRT(x);
+        Real diff = FABS(cmsis_result - math_result);
         
         qemu_printf("  sqrt(" FORMAT_SPEC "): CMSIS=" FORMAT_SPEC ", libm=" FORMAT_SPEC ", diff=" FORMAT_SPEC "\n", 
                     x, cmsis_result, math_result, diff);
@@ -165,12 +165,12 @@ test_result_t benchmark_cmsis_dsp() {
     qemu_printf("\n=== CMSIS-DSP %s Performance Benchmark ===\n", TEST_NAME);
     
     const int ITERATIONS = 1000;
-    real_t test_value = 1.5;
+    Real test_value = 1.5;
     
     // ===== Benchmark sin function =====
     // Benchmark CMSIS-DSP sin
     uint32_t start = qemu_get_tick_count();
-    volatile real_t cmsis_sin_sum = 0.0;
+    volatile Real cmsis_sin_sum = 0.0;
     for (int i = 0; i < ITERATIONS; i++) {
         cmsis_sin_sum += ARM_SIN(test_value);
     }
@@ -188,7 +188,7 @@ test_result_t benchmark_cmsis_dsp() {
     // ===== Benchmark cos function =====
     // Benchmark CMSIS-DSP cos
     start = qemu_get_tick_count();
-    volatile real_t cmsis_cos_sum = 0.0;
+    volatile Real cmsis_cos_sum = 0.0;
     for (int i = 0; i < ITERATIONS; i++) {
         cmsis_cos_sum += ARM_COS(test_value);
     }
@@ -206,8 +206,8 @@ test_result_t benchmark_cmsis_dsp() {
     // ===== Benchmark sqrt function =====
     // Benchmark CMSIS-DSP sqrt
     start = qemu_get_tick_count();
-    volatile real_t cmsis_sqrt_sum = 0.0;
-    real_t sqrt_result;
+    volatile Real cmsis_sqrt_sum = 0.0;
+    Real sqrt_result;
     for (int i = 0; i < ITERATIONS; i++) {
         ARM_SQRT(test_value, &sqrt_result);
         cmsis_sqrt_sum += sqrt_result;

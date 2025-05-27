@@ -84,9 +84,9 @@ fi
 # Setup Meson build for QEMU tests
 echo "Setting up QEMU test build with $FLOAT_MODE mode..."
 if [ "$FLOAT_MODE" = "f32" ]; then
-	meson setup "$BUILD_DIR" --cross-file=qemu_test/qemu_harness/arm-cortex-m7-qemu.ini -Denable_f64=false -Denable_exprs_qemu_tests=true
+	meson setup "$BUILD_DIR" --cross-file=qemu_test/qemu_harness/arm-cortex-m7-qemu.ini -Duse_f32=true -Denable_exprs_qemu_tests=true
 else
-	meson setup "$BUILD_DIR" --cross-file=qemu_test/qemu_harness/arm-cortex-m7-qemu.ini -Denable_f64=true -Denable_exprs_qemu_tests=true
+	meson setup "$BUILD_DIR" --cross-file=qemu_test/qemu_harness/arm-cortex-m7-qemu.ini -Denable_exprs_qemu_tests=true
 fi
 
 # Compile the tests

@@ -13,11 +13,11 @@ use crate::eval::stack_ops::EvalOp;
 use crate::eval::context_stack::ContextStack;
 use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
 
-use alloc::vec::Vec;
+use alloc::vec::{self, Vec};
 use alloc::rc::Rc;
 use alloc::collections::BTreeMap;
 use alloc::format;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 
 /// Maximum depth of the operation stack (prevents runaway evaluation)
 const MAX_STACK_DEPTH: usize = 1000;
@@ -44,7 +44,7 @@ pub struct EvalEngine {
     /// Context management
     ctx_stack: ContextStack,
     /// Function cache
-    func_cache: BTreeMap<String, Option<FunctionCacheEntry>>,
+    func_cache: BTreeMap<HString, Option<FunctionCacheEntry>>,
 }
 
 impl Default for EvalEngine {
@@ -282,7 +282,7 @@ impl EvalEngine {
                             self.op_stack.push(EvalOp::ApplyFunction {
                                 name: fname,
                                 args_needed: 0,
-                                args_collected: vec![],
+                                args_collected: Vec::new(),
                                 ctx_id,
                             });
                         } else {
@@ -290,7 +290,7 @@ impl EvalEngine {
                             self.op_stack.push(EvalOp::CollectFunctionArgs {
                                 name: fname,
                                 total_args: args.len(),
-                                args_so_far: vec![],
+                                args_so_far: Vec::new(),
                                 ctx_id,
                             });
                             
@@ -503,7 +503,16 @@ impl EvalEngine {
                 }
                 Some(args[0] % args[1])
             },
-            ("^", 2) | ("**", 2) | ("pow", 2) => Some(args[0].powf(args[1])),
+            ("^", 2) | ("**", 2) | ("pow", 2) => {
+                #[cfg(feature = "libm")]
+                {
+                    Some(crate::functions::pow(args[0], args[1]))
+                }
+                #[cfg(not(feature = "libm"))]
+                {
+                    None // Will be handled by registered functions
+                }
+            },
             
             // Comparison operators
             ("<", 2) => Some(if args[0] < args[1] { 1.0 } else { 0.0 }),
@@ -513,33 +522,53 @@ impl EvalEngine {
             ("==", 2) => Some(if args[0] == args[1] { 1.0 } else { 0.0 }),
             ("!=", 2) => Some(if args[0] != args[1] { 1.0 } else { 0.0 }),
             
-            // Math functions
-            ("sin", 1) => Some(args[0].sin()),
-            ("cos", 1) => Some(args[0].cos()),
-            ("tan", 1) => Some(args[0].tan()),
-            ("asin", 1) => Some(args[0].asin()),
-            ("acos", 1) => Some(args[0].acos()),
-            ("atan", 1) => Some(args[0].atan()),
-            ("atan2", 2) => Some(args[0].atan2(args[1])),
-            ("sinh", 1) => Some(args[0].sinh()),
-            ("cosh", 1) => Some(args[0].cosh()),
-            ("tanh", 1) => Some(args[0].tanh()),
-            ("exp", 1) => Some(args[0].exp()),
-            ("ln", 1) | ("log", 1) => Some(args[0].ln()),
-            ("log10", 1) => Some(args[0].log10()),
-            ("log2", 1) => Some(args[0].log2()),
-            ("sqrt", 1) => Some(args[0].sqrt()),
-            ("abs", 1) => Some(args[0].abs()),
-            ("floor", 1) => Some(args[0].floor()),
-            ("ceil", 1) => Some(args[0].ceil()),
-            ("round", 1) => Some(args[0].round()),
-            ("trunc", 1) => Some(args[0].trunc()),
+            // Math functions - only available with libm or std
+            #[cfg(feature = "libm")]
+            ("sin", 1) => Some(crate::functions::sin(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("cos", 1) => Some(crate::functions::cos(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("tan", 1) => Some(crate::functions::tan(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("asin", 1) => Some(crate::functions::asin(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("acos", 1) => Some(crate::functions::acos(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("atan", 1) => Some(crate::functions::atan(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("atan2", 2) => Some(crate::functions::atan2(args[0], args[1])),
+            #[cfg(feature = "libm")]
+            ("sinh", 1) => Some(crate::functions::sinh(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("cosh", 1) => Some(crate::functions::cosh(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("tanh", 1) => Some(crate::functions::tanh(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("exp", 1) => Some(crate::functions::exp(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("ln", 1) | ("log", 1) => Some(crate::functions::ln(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("log10", 1) => Some(crate::functions::log10(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("log2", 1) => Some(crate::functions::log2(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("sqrt", 1) => Some(crate::functions::sqrt(args[0], 0.0)),
+            ("abs", 1) => Some(crate::functions::abs(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("floor", 1) => Some(crate::functions::floor(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("ceil", 1) => Some(crate::functions::ceil(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("round", 1) => Some(crate::functions::round(args[0], 0.0)),
+            #[cfg(feature = "libm")]
+            ("trunc", 1) => Some(crate::functions::trunc(args[0], 0.0)),
             ("sign", 1) => Some(if args[0] > 0.0 { 1.0 } else if args[0] < 0.0 { -1.0 } else { 0.0 }),
             
             // Multi-argument functions
             ("min", 2) => Some(args[0].min(args[1])),
             ("max", 2) => Some(args[0].max(args[1])),
-            ("hypot", 2) => Some(args[0].hypot(args[1])),
+            #[cfg(feature = "libm")]
+            ("hypot", 2) => Some(crate::functions::hypot(args[0], args[1])),
             ("fmod", 2) => Some(args[0] % args[1]),
             (",", 2) | ("comma", 2) => Some(args[1]), // Comma operator returns the second value
             

@@ -7,10 +7,11 @@
 
 // Include the generated header
 #include "../include/exp_rs.h"
+#include "register_test_functions.h"
 
 // Define common types and utilities for our tests
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))
-typedef float real_t;
+
 #define SIN sinf
 #define COS cosf
 #define SQRT sqrtf
@@ -31,7 +32,7 @@ static inline void custom_arm_sqrt_f32(float in, float *out) {
 #define ARM_SQRT(x, result) custom_arm_sqrt_f32(x, result)
 
 #elif defined(DEF_USE_F64) || defined(USE_F64)
-typedef double real_t;
+
 #define SIN sin
 #define COS cos
 #define SQRT sqrt
@@ -57,17 +58,24 @@ static inline void custom_arm_sqrt_f64(double in, double *out) {
 
 // Using the EvalResult struct directly
 
-static real_t test_float(void) { return 1.0; }
+static Real test_float(void) { return 1.0; }
 
-static int approx_eq(real_t a, real_t b, real_t eps) {
+static int approx_eq(Real a, Real b, Real eps) {
   return FABS(a - b) < eps;
 }
 
 static test_result_t test_simple_eval(void) {
   qemu_printf("Testing basic FFI functions with %s mode\n", TEST_NAME);
 
-  struct EvalResult eval = exp_rs_eval("2+2*2");
-  qemu_printf("exp_rs_eval(\"2+2*2\") = " FORMAT_SPEC " (status=%d)\n",
+  // Create a test context with math functions
+  struct EvalContextOpaque* ctx = create_test_context();
+  if (!ctx) {
+    qemu_print("Failed to create test context\n");
+    return TEST_FAIL;
+  }
+
+  struct EvalResult eval = exp_rs_context_eval("2+2*2", ctx);
+  qemu_printf("exp_rs_context_eval(\"2+2*2\") = " FORMAT_SPEC " (status=%d)\n",
               eval.value, eval.status);
 
   if (eval.status != 0) {
@@ -86,10 +94,10 @@ static test_result_t test_simple_eval(void) {
   }
 
   // Test built-in functions: sin, cos
-  struct EvalResult eval_sin = exp_rs_eval("sin(0.5)");
-  qemu_printf("exp_rs_eval(\"sin(0.5)\") = " FORMAT_SPEC " (status=%d)\n",
+  struct EvalResult eval_sin = exp_rs_context_eval("sin(0.5)", ctx);
+  qemu_printf("exp_rs_context_eval(\"sin(0.5)\") = " FORMAT_SPEC " (status=%d)\n",
               eval_sin.value, eval_sin.status);
-  real_t expected_sin = SIN(0.5);
+  Real expected_sin = SIN(0.5);
   
   // In F64 mode, the EvalResult.value will be an f32, causing precision differences from expected f64 values
   // We should test only that the status is 0 (success)
@@ -101,10 +109,10 @@ static test_result_t test_simple_eval(void) {
   qemu_printf("Note: Expected sin(0.5) = " FORMAT_SPEC ", got " FORMAT_SPEC " (precision differences acceptable)\n", 
              expected_sin, eval_sin.value);
 
-  struct EvalResult eval_cos = exp_rs_eval("cos(0.5)");
-  qemu_printf("exp_rs_eval(\"cos(0.5)\") = " FORMAT_SPEC " (status=%d)\n",
+  struct EvalResult eval_cos = exp_rs_context_eval("cos(0.5)", ctx);
+  qemu_printf("exp_rs_context_eval(\"cos(0.5)\") = " FORMAT_SPEC " (status=%d)\n",
               eval_cos.value, eval_cos.status);
-  real_t expected_cos = COS(0.5);
+  Real expected_cos = COS(0.5);
   
   // In F64 mode, the EvalResult.value will be an f32, causing precision differences from expected f64 values
   // We should test only that the status is 0 (success)
@@ -117,12 +125,12 @@ static test_result_t test_simple_eval(void) {
              expected_cos, eval_cos.value);
 
   // Test constants: pi, e
-  struct EvalResult eval_pi = exp_rs_eval("pi");
-  qemu_printf("exp_rs_eval(\"pi\") = " FORMAT_SPEC " (status=%d)\n",
+  struct EvalResult eval_pi = exp_rs_context_eval("pi", ctx);
+  qemu_printf("exp_rs_context_eval(\"pi\") = " FORMAT_SPEC " (status=%d)\n",
               eval_pi.value, eval_pi.status);
 
   // Pi value: Using a constant that works for both float and double precision
-  real_t pi_value = 3.14159265358979323846;
+  Real pi_value = 3.14159265358979323846;
   
   // In F64 mode, the EvalResult.value will be an f32, causing precision differences from expected f64 values
   // We should test only that the status is 0 (success)
@@ -134,12 +142,12 @@ static test_result_t test_simple_eval(void) {
   qemu_printf("Note: Expected pi = " FORMAT_SPEC ", got " FORMAT_SPEC " (precision differences acceptable)\n", 
              pi_value, eval_pi.value);
 
-  struct EvalResult eval_e = exp_rs_eval("e");
-  qemu_printf("exp_rs_eval(\"e\") = " FORMAT_SPEC " (status=%d)\n",
+  struct EvalResult eval_e = exp_rs_context_eval("e", ctx);
+  qemu_printf("exp_rs_context_eval(\"e\") = " FORMAT_SPEC " (status=%d)\n",
               eval_e.value, eval_e.status);
 
   // e value: Using a constant that works for both float and double precision
-  real_t e_value = 2.71828182845904523536;
+  Real e_value = 2.71828182845904523536;
   
   // In F64 mode, the EvalResult.value will be an f32, causing precision differences from expected f64 values
   // We should test only that the status is 0 (success)
@@ -152,9 +160,9 @@ static test_result_t test_simple_eval(void) {
             e_value, eval_e.value);
 
   // Test nested functions
-  struct EvalResult eval_nested = exp_rs_eval("sin(cos(0.5))");
-  real_t expected_nested = SIN(COS(0.5));
-  qemu_printf("exp_rs_eval(\"sin(cos(0.5))\") = " FORMAT_SPEC " (status=%d)\n",
+  struct EvalResult eval_nested = exp_rs_context_eval("sin(cos(0.5))", ctx);
+  Real expected_nested = SIN(COS(0.5));
+  qemu_printf("exp_rs_context_eval(\"sin(cos(0.5))\") = " FORMAT_SPEC " (status=%d)\n",
               eval_nested.value, eval_nested.status);
   // In F64 mode, the EvalResult.value will be an f32, causing precision differences from expected f64 values
   // We should test only that the status is 0 (success)
@@ -167,7 +175,7 @@ static test_result_t test_simple_eval(void) {
              expected_nested, eval_nested.value);
 
   // Test error handling: unknown variable
-  struct EvalResult eval_err = exp_rs_eval("unknown_var + 1");
+  struct EvalResult eval_err = exp_rs_context_eval("unknown_var + 1", ctx);
   if (eval_err.status == 0) {
     qemu_print("Test failed: expected error for unknown_var\n");
     return TEST_FAIL;
@@ -179,27 +187,43 @@ static test_result_t test_simple_eval(void) {
     qemu_print("\n");
   }
 
+  // Clean up context
+  exp_rs_context_free(ctx);
+  
   qemu_print("Test passed!\n");
   return TEST_PASS;
 }
 
 static test_result_t test_complex_expression(void) {
   qemu_printf("Testing complex expression with %s mode...\n", TEST_NAME);
+  
+  // Create a test context with math functions
+  struct EvalContextOpaque* ctx = create_test_context();
+  if (!ctx) {
+    qemu_print("Failed to create test context\n");
+    return TEST_FAIL;
+  }
+  
   // Example: "2 * sin(pi/4) + cos(0.5) * 3"
-  struct EvalResult eval = exp_rs_eval("2 * sin(pi/4) + cos(0.5) * 3");
-  real_t expected = 2.0 * SIN(3.14159265358979323846 / 4.0) + COS(0.5) * 3.0;
-  qemu_printf("exp_rs_eval(\"2 * sin(pi/4) + cos(0.5) * 3\") = " FORMAT_SPEC
+  struct EvalResult eval = exp_rs_context_eval("2 * sin(pi/4) + cos(0.5) * 3", ctx);
+  Real expected = 2.0 * SIN(3.14159265358979323846 / 4.0) + COS(0.5) * 3.0;
+  qemu_printf("exp_rs_context_eval(\"2 * sin(pi/4) + cos(0.5) * 3\") = " FORMAT_SPEC
               " (status=%d)\n",
               eval.value, eval.status);
   // In F64 mode, the EvalResult.value will be an f32, causing precision differences from expected f64 values
   // We should test only that the status is 0 (success)
   if (eval.status != 0) {
     qemu_printf("Test failed: complex expression evaluation status indicates error\n");
+    exp_rs_context_free(ctx);
     return TEST_FAIL;
   }
   
   qemu_printf("Note: Expected result = " FORMAT_SPEC ", got " FORMAT_SPEC " (precision differences acceptable)\n", 
              expected, eval.value);
+  
+  // Clean up context
+  exp_rs_context_free(ctx);
+  
   qemu_print("Complex expression test passed!\n");
   return TEST_PASS;
 }

@@ -133,7 +133,18 @@ impl BinaryOp {
             BinaryOp::Multiply => left * right,
             BinaryOp::Divide => left / right,
             BinaryOp::Modulo => left % right,
-            BinaryOp::Power => left.powf(right),
+            BinaryOp::Power => {
+                #[cfg(feature = "libm")]
+                {
+                    crate::functions::pow(left, right)
+                }
+                #[cfg(not(feature = "libm"))]
+                {
+                    // In no_std without libm, power operations must be handled by registered functions
+                    // This should not be reached as the parser would create a function call instead
+                    panic!("Power operation requires libm feature or registered pow function")
+                }
+            },
             BinaryOp::Less => if left < right { 1.0 } else { 0.0 },
             BinaryOp::Greater => if left > right { 1.0 } else { 0.0 },
             BinaryOp::LessEqual => if left <= right { 1.0 } else { 0.0 },

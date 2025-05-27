@@ -1,8 +1,8 @@
 subdir('qemu_harness')
 
 # Get options from the main project or set defaults
-enable_f64 = get_option('enable_f64')
-
+use_f32 = get_option('use_f32')
+enable_f64 = not use_f32
 # Use the real CMSIS-DSP library from a subproject using the wrap system
 cmsis_dsp_proj = subproject('cmsis-dsp', default_options: ['enable_f64=' + enable_f64.to_string()])
 cmsis_dsp_dep = cmsis_dsp_proj.get_variable('cmsis_dsp_dep')
@@ -23,22 +23,32 @@ common_test_args = [
   '-serial', 'stdio',
 ]
 
+if use_f32
 # C test program for FFI - F32 version
 test_ffi_f32_exe = executable(
   'test_ffi_f32',
-  ['test_ffi.c', 'qemu_harness/vector_table_m7.c'],
+  ['test_ffi.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: include_directories('.', '../include'),
   dependencies: [qemu_harness_dep, exp_rs_dep],
   link_args: common_link_args,
   c_args: ['-DDEF_USE_F32'],
   install: false,
 )
-
+# C test program for EvalContext - F32 version
+test_eval_context_f32_exe = executable(
+  'test_eval_context_f32',
+  ['eval_context.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
+  include_directories: include_directories('.', '../include'),
+  dependencies: [qemu_harness_dep, exp_rs_dep],
+  link_args: common_link_args,
+  c_args: ['-DDEF_USE_F32'],
+  install: false,
+)
+else
 # C test program for FFI - F64 version (built when F64 is enabled)
-if enable_f64
   test_ffi_f64_exe = executable(
     'test_ffi_f64',
-    ['test_ffi.c', 'qemu_harness/vector_table_m7.c'],
+    ['test_ffi.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
     include_directories: include_directories('.', '../include'),
     dependencies: [qemu_harness_dep, exp_rs_dep],
     link_args: common_link_args,
@@ -47,22 +57,12 @@ if enable_f64
   )
 endif
 
-# C test program for EvalContext - F32 version
-test_eval_context_f32_exe = executable(
-  'test_eval_context_f32',
-  ['eval_context.c', 'qemu_harness/vector_table_m7.c'],
-  include_directories: include_directories('.', '../include'),
-  dependencies: [qemu_harness_dep, exp_rs_dep],
-  link_args: common_link_args,
-  c_args: ['-DDEF_USE_F32'],
-  install: false,
-)
 
 # C test program for EvalContext - F64 version (built when F64 is enabled)
 if enable_f64
   test_eval_context_f64_exe = executable(
     'test_eval_context_f64',
-    ['eval_context.c', 'qemu_harness/vector_table_m7.c'],
+    ['eval_context.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
     include_directories: include_directories('.', '../include'),
     dependencies: [qemu_harness_dep, exp_rs_dep],
     link_args: common_link_args,
@@ -98,7 +98,7 @@ endif
 # C test for benchmark - F32 version
 test_benchmark_f32_exe = executable(
   'test_benchmark_f32',
-  ['benchmark.c', 'qemu_harness/vector_table_m7.c'],
+  ['benchmark.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: include_directories('.', '../include'),
   dependencies: [qemu_harness_dep, exp_rs_dep],
   link_args: common_link_args,
@@ -110,7 +110,7 @@ test_benchmark_f32_exe = executable(
 if enable_f64
   test_benchmark_f64_exe = executable(
     'test_benchmark_f64',
-    ['benchmark.c', 'qemu_harness/vector_table_m7.c'],
+    ['benchmark.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
     include_directories: include_directories('.', '../include'),
     dependencies: [qemu_harness_dep, exp_rs_dep],
     link_args: common_link_args,
@@ -289,7 +289,7 @@ endif
 # exp-rs Integration test - F32 mode
 test_exp_rs_integration_f32_exe = executable(
   'test_exp_rs_integration_f32',
-  ['exp_rs_integration_test.c', 'qemu_harness/vector_table_m7.c'],
+  ['exp_rs_integration_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: [include_directories('.', '../include')],
   dependencies: [qemu_harness_dep, exp_rs_dep],
   link_args: common_link_args,
@@ -310,7 +310,7 @@ test(
 if enable_f64
   test_exp_rs_integration_f64_exe = executable(
     'test_exp_rs_integration_f64',
-    ['exp_rs_integration_test.c', 'qemu_harness/vector_table_m7.c'],
+    ['exp_rs_integration_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
     include_directories: [include_directories('.', '../include')],
     dependencies: [qemu_harness_dep, exp_rs_dep],
     link_args: common_link_args,
@@ -332,7 +332,7 @@ endif
 # exp-rs CMSIS Integration Benchmark (F32 mode)
 test_exp_rs_cmsis_benchmark_f32_exe = executable(
   'test_exp_rs_cmsis_benchmark_f32',
-  ['exp_rs_cmsis_benchmark.c', 'qemu_harness/vector_table_m7.c'],
+  ['exp_rs_cmsis_benchmark.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: [include_directories('.', '../include')],
   dependencies: [qemu_harness_dep, exp_rs_dep, cmsis_dsp_dep],
   link_args: common_link_args,
@@ -354,7 +354,7 @@ test(
 if enable_f64
   test_exp_rs_cmsis_benchmark_f64_exe = executable(
     'test_exp_rs_cmsis_benchmark_f64',
-    ['exp_rs_cmsis_benchmark.c', 'qemu_harness/vector_table_m7.c'],
+    ['exp_rs_cmsis_benchmark.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
     include_directories: [include_directories('.', '../include')],
     dependencies: [qemu_harness_dep, exp_rs_dep, cmsis_dsp_dep],
     link_args: common_link_args,

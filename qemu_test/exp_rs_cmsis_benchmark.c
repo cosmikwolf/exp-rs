@@ -8,6 +8,7 @@
 
 // Include the generated header
 #include "../include/exp_rs.h"
+#include "register_test_functions.h"
 
 // Access the timer state from the harness
 extern int timer_initialized;
@@ -16,9 +17,7 @@ extern int timer_initialized;
 // Note: DWT and SysTick are not reliable in the mps2-an500 QEMU machine
 
 // Define common types and utilities for our tests
-typedef Real real_t;
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))
-// typedef float real_t;
 #define SIN sinf
 #define COS cosf
 #define SQRT sqrtf
@@ -27,19 +26,18 @@ typedef Real real_t;
 #define FORMAT_SPEC "%.6f"
 
 // Custom CMSIS-DSP function implementations
-static inline float custom_arm_sin_f32(float x) { return sinf(x); }
+static inline Real custom_arm_sin_f32(Real x) { return sinf(x); }
 #define ARM_SIN custom_arm_sin_f32
 
-static inline float custom_arm_cos_f32(float x) { return cosf(x); }
+static inline Real custom_arm_cos_f32(Real x) { return cosf(x); }
 #define ARM_COS custom_arm_cos_f32
 
-static inline void custom_arm_sqrt_f32(float in, float *out) {
+static inline void custom_arm_sqrt_f32(Real in, Real *out) {
   *out = sqrtf(in);
 }
 #define ARM_SQRT(x, result) custom_arm_sqrt_f32(x, result)
 
 #elif defined(DEF_USE_F64) || defined(USE_F64)
-// typedef double real_t;
 #define SIN sin
 #define COS cos
 #define SQRT sqrt
@@ -48,13 +46,13 @@ static inline void custom_arm_sqrt_f32(float in, float *out) {
 #define FORMAT_SPEC "%.12f"
 
 // Custom CMSIS-DSP function implementations
-static inline double custom_arm_sin_f64(double x) { return sin(x); }
+static inline Real custom_arm_sin_f64(Real x) { return sin(x); }
 #define ARM_SIN custom_arm_sin_f64
 
-static inline double custom_arm_cos_f64(double x) { return cos(x); }
+static inline Real custom_arm_cos_f64(Real x) { return cos(x); }
 #define ARM_COS custom_arm_cos_f64
 
-static inline void custom_arm_sqrt_f64(double in, double *out) {
+static inline void custom_arm_sqrt_f64(Real in, Real *out) {
   *out = sqrt(in);
 }
 #define ARM_SQRT(x, result) custom_arm_sqrt_f64(x, result)
@@ -69,7 +67,7 @@ static inline void custom_arm_sqrt_f64(double in, double *out) {
 #define BENCHMARK_ITERATIONS 10000
 
 // Helper to check approximate equality
-static int approx_eq(real_t a, real_t b, real_t eps) {
+static int approx_eq(Real a, Real b, Real eps) {
 // Check if both values are NaN (special case)
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))
   if (isnanf(a) && isnanf(b)) {
@@ -88,260 +86,260 @@ static int approx_eq(real_t a, real_t b, real_t eps) {
 // Benchmark expressions and parameters
 typedef struct {
   const char *expression;
-  real_t (*direct_func)(real_t, real_t);
+  Real (*direct_func)(Real, Real);
 } benchmark_expr_t;
 
 // Add volatile to prevent compiler from optimizing away loops
 // 1. a * sin(b) + cos(a+b)
-static real_t __attribute__((noinline)) eval_expr_1(real_t a, real_t b) {
-  volatile real_t sin_b = ARM_SIN(b);
-  volatile real_t cos_ab = ARM_COS(a + b);
+static Real __attribute__((noinline)) eval_expr_1(Real a, Real b) {
+  volatile Real sin_b = ARM_SIN(b);
+  volatile Real cos_ab = ARM_COS(a + b);
   return a * sin_b + cos_ab;
 }
 
 // 2. a * cos(b) + sin(a*b)
-static real_t __attribute__((noinline)) eval_expr_2(real_t a, real_t b) {
-  volatile real_t cos_b = ARM_COS(b);
-  volatile real_t sin_ab = ARM_SIN(a * b);
+static Real __attribute__((noinline)) eval_expr_2(Real a, Real b) {
+  volatile Real cos_b = ARM_COS(b);
+  volatile Real sin_ab = ARM_SIN(a * b);
   return a * cos_b + sin_ab;
 }
 
 // 3. sqrt(a*a + b*b) * sin(a+b)
-static real_t __attribute__((noinline)) eval_expr_3(real_t a, real_t b) {
-  real_t sum_squares = a * a + b * b;
-  real_t hypot_result;
+static Real __attribute__((noinline)) eval_expr_3(Real a, Real b) {
+  Real sum_squares = a * a + b * b;
+  Real hypot_result;
   ARM_SQRT(sum_squares, &hypot_result);
-  volatile real_t sin_ab = ARM_SIN(a + b);
+  volatile Real sin_ab = ARM_SIN(a + b);
   return hypot_result * sin_ab;
 }
 
 // 4. sin(a) * cos(b) + tan(a*b)
-static real_t __attribute__((noinline)) eval_expr_4(real_t a, real_t b) {
-  volatile real_t sin_a = ARM_SIN(a);
-  volatile real_t cos_b = ARM_COS(b);
-  volatile real_t tan_ab = ARM_SIN(a * b) / ARM_COS(a * b);
+static Real __attribute__((noinline)) eval_expr_4(Real a, Real b) {
+  volatile Real sin_a = ARM_SIN(a);
+  volatile Real cos_b = ARM_COS(b);
+  volatile Real tan_ab = ARM_SIN(a * b) / ARM_COS(a * b);
   return sin_a * cos_b + tan_ab;
 }
 
 // 5. a^2 + b^2 - 2*a*b*cos(pi/4)
-static real_t __attribute__((noinline)) eval_expr_5(real_t a, real_t b) {
-  volatile real_t a_squared = a * a;
-  volatile real_t b_squared = b * b;
-  volatile real_t cos_pi_4 = ARM_COS(0.785398163397448); // π/4
+static Real __attribute__((noinline)) eval_expr_5(Real a, Real b) {
+  volatile Real a_squared = a * a;
+  volatile Real b_squared = b * b;
+  volatile Real cos_pi_4 = ARM_COS(0.785398163397448); // π/4
   return a_squared + b_squared - 2 * a * b * cos_pi_4;
 }
 
 // 6. (a+b)^3 - (a^3 + 3*a^2*b + 3*a*b^2 + b^3)
-static real_t __attribute__((noinline)) eval_expr_6(real_t a, real_t b) {
-  volatile real_t sum = a + b;
-  volatile real_t sum_cubed = sum * sum * sum;
-  volatile real_t a_squared = a * a;
-  volatile real_t b_squared = b * b;
-  volatile real_t a_cubed = a_squared * a;
-  volatile real_t b_cubed = b_squared * b;
-  volatile real_t expanded =
+static Real __attribute__((noinline)) eval_expr_6(Real a, Real b) {
+  volatile Real sum = a + b;
+  volatile Real sum_cubed = sum * sum * sum;
+  volatile Real a_squared = a * a;
+  volatile Real b_squared = b * b;
+  volatile Real a_cubed = a_squared * a;
+  volatile Real b_cubed = b_squared * b;
+  volatile Real expanded =
       a_cubed + 3 * a_squared * b + 3 * a * b_squared + b_cubed;
   return sum_cubed - expanded;
 }
 
 // 7. exp(a*b) / (1 + exp(a*b))
-static real_t __attribute__((noinline)) eval_expr_7(real_t a, real_t b) {
-  volatile real_t exp_ab = exp(a * b);
+static Real __attribute__((noinline)) eval_expr_7(Real a, Real b) {
+  volatile Real exp_ab = exp(a * b);
   return exp_ab / (1 + exp_ab);
 }
 
 // 8. log(a+1) * sqrt(b+1)
-static real_t __attribute__((noinline)) eval_expr_8(real_t a, real_t b) {
-  volatile real_t log_a_plus_1 = log(a + 1);
-  volatile real_t sqrt_b_plus_1_result;
+static Real __attribute__((noinline)) eval_expr_8(Real a, Real b) {
+  volatile Real log_a_plus_1 = log(a + 1);
+  volatile Real sqrt_b_plus_1_result;
   ARM_SQRT(b + 1, &sqrt_b_plus_1_result);
   return log_a_plus_1 * sqrt_b_plus_1_result;
 }
 
 // 9. pow(a, b) + pow(b, a)
-static real_t __attribute__((noinline)) eval_expr_9(real_t a, real_t b) {
-  volatile real_t pow_a_b = pow(a, b);
-  volatile real_t pow_b_a = pow(b, a);
+static Real __attribute__((noinline)) eval_expr_9(Real a, Real b) {
+  volatile Real pow_a_b = pow(a, b);
+  volatile Real pow_b_a = pow(b, a);
   return pow_a_b + pow_b_a;
 }
 
 // 10. sin(a)^2 + cos(a)^2
-static real_t __attribute__((noinline)) eval_expr_10(real_t a, real_t b) {
-  volatile real_t sin_a = ARM_SIN(a);
-  volatile real_t cos_a = ARM_COS(a);
+static Real __attribute__((noinline)) eval_expr_10(Real a, Real b) {
+  volatile Real sin_a = ARM_SIN(a);
+  volatile Real cos_a = ARM_COS(a);
   return sin_a * sin_a + cos_a * cos_a;
 }
 
 // 11. floor(a+0.5) * ceil(b-0.3)
-static real_t __attribute__((noinline)) eval_expr_11(real_t a, real_t b) {
-  volatile real_t floor_a = floor(a + 0.5);
-  volatile real_t ceil_b = ceil(b - 0.3);
+static Real __attribute__((noinline)) eval_expr_11(Real a, Real b) {
+  volatile Real floor_a = floor(a + 0.5);
+  volatile Real ceil_b = ceil(b - 0.3);
   return floor_a * ceil_b;
 }
 
 // 12. max(a, b) + min(a*2, b/2)
-static real_t __attribute__((noinline)) eval_expr_12(real_t a, real_t b) {
-  volatile real_t max_val = a > b ? a : b;
-  volatile real_t min_val = a * 2 < b / 2 ? a * 2 : b / 2;
+static Real __attribute__((noinline)) eval_expr_12(Real a, Real b) {
+  volatile Real max_val = a > b ? a : b;
+  volatile Real min_val = a * 2 < b / 2 ? a * 2 : b / 2;
   return max_val + min_val;
 }
 
 // 13. abs(a-b) * sin(a*b)
-static real_t __attribute__((noinline)) eval_expr_13(real_t a, real_t b) {
-  volatile real_t abs_diff = FABS(a - b);
-  volatile real_t sin_prod = ARM_SIN(a * b);
+static Real __attribute__((noinline)) eval_expr_13(Real a, Real b) {
+  volatile Real abs_diff = FABS(a - b);
+  volatile Real sin_prod = ARM_SIN(a * b);
   return abs_diff * sin_prod;
 }
 
 // 14. (a+b) * (a-b) / (a*a + b*b)
-static real_t __attribute__((noinline)) eval_expr_14(real_t a, real_t b) {
-  volatile real_t sum = a + b;
-  volatile real_t diff = a - b;
-  volatile real_t denom = a * a + b * b;
+static Real __attribute__((noinline)) eval_expr_14(Real a, Real b) {
+  volatile Real sum = a + b;
+  volatile Real diff = a - b;
+  volatile Real denom = a * a + b * b;
   if (denom == 0)
     return 0;
   return sum * diff / denom;
 }
 
 // 15. sin(pi*a) * cos(pi*b)
-static real_t __attribute__((noinline)) eval_expr_15(real_t a, real_t b) {
+static Real __attribute__((noinline)) eval_expr_15(Real a, Real b) {
 #define PI 3.14159265358979323846
-  volatile real_t sin_pi_a = ARM_SIN(PI * a);
-  volatile real_t cos_pi_b = ARM_COS(PI * b);
+  volatile Real sin_pi_a = ARM_SIN(PI * a);
+  volatile Real cos_pi_b = ARM_COS(PI * b);
   return sin_pi_a * cos_pi_b;
 }
 
 // 16. sqrt(1 - (a*a + b*b))
-static real_t __attribute__((noinline)) eval_expr_16(real_t a, real_t b) {
-  volatile real_t sum_squares = a * a + b * b;
+static Real __attribute__((noinline)) eval_expr_16(Real a, Real b) {
+  volatile Real sum_squares = a * a + b * b;
   // Removed the check to match Rust behavior
   // The Rust sqrt function will return NaN for negative inputs
-  volatile real_t sqrt_result;
+  volatile Real sqrt_result;
   ARM_SQRT(1 - sum_squares, &sqrt_result);
   return sqrt_result;
 }
 
 // 17. a * exp(-b*b/2) / sqrt(2*pi)
-static real_t __attribute__((noinline)) eval_expr_17(real_t a, real_t b) {
+static Real __attribute__((noinline)) eval_expr_17(Real a, Real b) {
   // PI already defined above
-  volatile real_t exp_term = exp(-b * b / 2);
-  volatile real_t sqrt_2pi;
+  volatile Real exp_term = exp(-b * b / 2);
+  volatile Real sqrt_2pi;
   ARM_SQRT(2 * PI, &sqrt_2pi);
   return a * exp_term / sqrt_2pi;
 }
 
 // 18. 1 / (1 + exp(-a*b))
-static real_t __attribute__((noinline)) eval_expr_18(real_t a, real_t b) {
-  volatile real_t exp_neg_ab = exp(-a * b);
+static Real __attribute__((noinline)) eval_expr_18(Real a, Real b) {
+  volatile Real exp_neg_ab = exp(-a * b);
   return 1 / (1 + exp_neg_ab);
 }
 
 // 19. a*a*a + b*b*b + 3*a*b*(a+b)
-static real_t __attribute__((noinline)) eval_expr_19(real_t a, real_t b) {
-  volatile real_t a_cubed = a * a * a;
-  volatile real_t b_cubed = b * b * b;
-  volatile real_t sum = a + b;
-  volatile real_t product_term = 3 * a * b * sum;
+static Real __attribute__((noinline)) eval_expr_19(Real a, Real b) {
+  volatile Real a_cubed = a * a * a;
+  volatile Real b_cubed = b * b * b;
+  volatile Real sum = a + b;
+  volatile Real product_term = 3 * a * b * sum;
   return a_cubed + b_cubed + product_term;
 }
 
 // 20. a * sin(b) + b * sin(a)
-static real_t __attribute__((noinline)) eval_expr_20(real_t a, real_t b) {
-  volatile real_t sin_b = ARM_SIN(b);
-  volatile real_t sin_a = ARM_SIN(a);
+static Real __attribute__((noinline)) eval_expr_20(Real a, Real b) {
+  volatile Real sin_b = ARM_SIN(b);
+  volatile Real sin_a = ARM_SIN(a);
   return a * sin_b + b * sin_a;
 }
 
 // 21. log10(a+10) * log10(b+10)
-static real_t __attribute__((noinline)) eval_expr_21(real_t a, real_t b) {
-  volatile real_t log10_a = log10(a + 10);
-  volatile real_t log10_b = log10(b + 10);
+static Real __attribute__((noinline)) eval_expr_21(Real a, Real b) {
+  volatile Real log10_a = log10(a + 10);
+  volatile Real log10_b = log10(b + 10);
   return log10_a * log10_b;
 }
 
 // 22. atan2(a, b) + atan2(b, a)
-static real_t __attribute__((noinline)) eval_expr_22(real_t a, real_t b) {
-  volatile real_t atan2_ab = atan2(a, b);
-  volatile real_t atan2_ba = atan2(b, a);
+static Real __attribute__((noinline)) eval_expr_22(Real a, Real b) {
+  volatile Real atan2_ab = atan2(a, b);
+  volatile Real atan2_ba = atan2(b, a);
   return atan2_ab + atan2_ba;
 }
 
 // 23. a*exp(b) + b*exp(a)
-static real_t __attribute__((noinline)) eval_expr_23(real_t a, real_t b) {
-  volatile real_t exp_b = exp(b);
-  volatile real_t exp_a = exp(a);
+static Real __attribute__((noinline)) eval_expr_23(Real a, Real b) {
+  volatile Real exp_b = exp(b);
+  volatile Real exp_a = exp(a);
   return a * exp_b + b * exp_a;
 }
 
 // 24. a/(1+a) + b/(1+b)
-static real_t __attribute__((noinline)) eval_expr_24(real_t a, real_t b) {
-  volatile real_t a_term = a / (1 + a);
-  volatile real_t b_term = b / (1 + b);
+static Real __attribute__((noinline)) eval_expr_24(Real a, Real b) {
+  volatile Real a_term = a / (1 + a);
+  volatile Real b_term = b / (1 + b);
   return a_term + b_term;
 }
 
 // 25. sqrt(a)*log(b) + sqrt(b)*log(a)
-static real_t __attribute__((noinline)) eval_expr_25(real_t a, real_t b) {
+static Real __attribute__((noinline)) eval_expr_25(Real a, Real b) {
   if (a <= 0 || b <= 0)
     return 0;
-  volatile real_t sqrt_a;
-  volatile real_t sqrt_b;
+  volatile Real sqrt_a;
+  volatile Real sqrt_b;
   ARM_SQRT(a, &sqrt_a);
   ARM_SQRT(b, &sqrt_b);
-  volatile real_t log_a = log(a);
-  volatile real_t log_b = log(b);
+  volatile Real log_a = log(a);
+  volatile Real log_b = log(b);
   return sqrt_a * log_b + sqrt_b * log_a;
 }
 
 // 26. sin(a+b) * cos(a-b)
-static real_t __attribute__((noinline)) eval_expr_26(real_t a, real_t b) {
-  volatile real_t sin_sum = ARM_SIN(a + b);
-  volatile real_t cos_diff = ARM_COS(a - b);
+static Real __attribute__((noinline)) eval_expr_26(Real a, Real b) {
+  volatile Real sin_sum = ARM_SIN(a + b);
+  volatile Real cos_diff = ARM_COS(a - b);
   return sin_sum * cos_diff;
 }
 
 // 27. (a*a + b*b)^1.5
-static real_t __attribute__((noinline)) eval_expr_27(real_t a, real_t b) {
-  volatile real_t sum_squares = a * a + b * b;
+static Real __attribute__((noinline)) eval_expr_27(Real a, Real b) {
+  volatile Real sum_squares = a * a + b * b;
   return pow(sum_squares, 1.5);
 }
 
 // 28. exp(-(a*a + b*b))
-static real_t __attribute__((noinline)) eval_expr_28(real_t a, real_t b) {
-  volatile real_t sum_squares = a * a + b * b;
+static Real __attribute__((noinline)) eval_expr_28(Real a, Real b) {
+  volatile Real sum_squares = a * a + b * b;
   return exp(-sum_squares);
 }
 
 // 29. a*a / (a*a + b*b) * sin(a*b)
-static real_t __attribute__((noinline)) eval_expr_29(real_t a, real_t b) {
-  volatile real_t a_squared = a * a;
-  volatile real_t sum_squares = a_squared + b * b;
+static Real __attribute__((noinline)) eval_expr_29(Real a, Real b) {
+  volatile Real a_squared = a * a;
+  volatile Real sum_squares = a_squared + b * b;
   if (sum_squares == 0)
     return 0;
-  volatile real_t sin_ab = ARM_SIN(a * b);
+  volatile Real sin_ab = ARM_SIN(a * b);
   return a_squared / sum_squares * sin_ab;
 }
 
 // 30. tanh(a*b) * sinh(a+b)
-static real_t __attribute__((noinline)) eval_expr_30(real_t a, real_t b) {
-  volatile real_t ab = a * b;
-  volatile real_t tanh_ab = (exp(ab) - exp(-ab)) / (exp(ab) + exp(-ab));
-  volatile real_t ab_sum = a + b;
-  volatile real_t sinh_sum = (exp(ab_sum) - exp(-ab_sum)) / 2;
+static Real __attribute__((noinline)) eval_expr_30(Real a, Real b) {
+  volatile Real ab = a * b;
+  volatile Real tanh_ab = (exp(ab) - exp(-ab)) / (exp(ab) + exp(-ab));
+  volatile Real ab_sum = a + b;
+  volatile Real sinh_sum = (exp(ab_sum) - exp(-ab_sum)) / 2;
   return tanh_ab * sinh_sum;
 }
 
 // 31. a * asin(b/2) + b * acos(a/2)
-static real_t __attribute__((noinline)) eval_expr_31(real_t a, real_t b) {
+static Real __attribute__((noinline)) eval_expr_31(Real a, Real b) {
   if (FABS(b / 2) > 1 || FABS(a / 2) > 1)
     return 0;
-  volatile real_t asin_term = asin(b / 2);
-  volatile real_t acos_term = acos(a / 2);
+  volatile Real asin_term = asin(b / 2);
+  volatile Real acos_term = acos(a / 2);
   return a * asin_term + b * acos_term;
 }
 
 // 32. log(a*b) / (log(a) + log(b))
-static real_t __attribute__((noinline)) eval_expr_32(real_t a, real_t b) {
+static Real __attribute__((noinline)) eval_expr_32(Real a, Real b) {
   // Similar behavior as Rust - return NaN for negative or zero inputs
   if (a <= 0 || b <= 0) {
 // Return NaN to match Rust's behavior
@@ -352,9 +350,9 @@ static real_t __attribute__((noinline)) eval_expr_32(real_t a, real_t b) {
 #endif
   }
 
-  volatile real_t log_a = log(a);
-  volatile real_t log_b = log(b);
-  volatile real_t denom = log_a + log_b;
+  volatile Real log_a = log(a);
+  volatile Real log_b = log(b);
+  volatile Real denom = log_a + log_b;
 
   if (denom == 0) {
 // Return NaN for zero denominator to match Rust
@@ -365,14 +363,14 @@ static real_t __attribute__((noinline)) eval_expr_32(real_t a, real_t b) {
 #endif
   }
 
-  volatile real_t log_product = log(a * b);
+  volatile Real log_product = log(a * b);
   return log_product / denom;
 }
 
 // 33. (a+b) / (1 + a*b)
-static real_t __attribute__((noinline)) eval_expr_33(real_t a, real_t b) {
-  volatile real_t sum = a + b;
-  volatile real_t denom = 1 + a * b;
+static Real __attribute__((noinline)) eval_expr_33(Real a, Real b) {
+  volatile Real sum = a + b;
+  volatile Real denom = 1 + a * b;
   if (denom == 0)
     return 0;
   return sum / denom;
@@ -652,10 +650,10 @@ test_result_t benchmark_exp_rs_vs_direct() {
   // Balance between accuracy and runtime with 60s timeout
   // With 33 expressions, we need to reduce iterations to stay within timeout
   int iterations = 1000;
-  real_t param_values[] = {2.0, 0.5};
+  Real param_values[] = {2.0, 0.5};
 
-  // Create evaluation context
-  struct EvalContextOpaque *ctx = exp_rs_context_new();
+  // Create test context with math functions
+  struct EvalContextOpaque *ctx = create_test_context();
   if (!ctx) {
     qemu_print("Failed to create context\n");
     return TEST_FAIL;
@@ -731,8 +729,8 @@ test_result_t benchmark_exp_rs_vs_direct() {
     // Benchmark both implementations multiple times and take the best time
     uint32_t exp_rs_best_time = UINT32_MAX;
     uint32_t direct_best_time = UINT32_MAX;
-    volatile real_t exprs_sum = 0.0;
-    volatile real_t c_sum = 0.0;
+    volatile Real exprs_sum = 0.0;
+    volatile Real c_sum = 0.0;
 
     // We no longer need to manually check the timer as this is handled by the
     // timer interface
@@ -744,7 +742,7 @@ test_result_t benchmark_exp_rs_vs_direct() {
       }
 
       // 1. Benchmark exp_rs
-      volatile real_t run_sum = 0.0;
+      volatile Real run_sum = 0.0;
 
       // Force a compile barrier to make sure things are initialized
       __asm__ volatile("" ::: "memory");
@@ -853,7 +851,7 @@ test_result_t benchmark_exp_rs_vs_direct() {
     // Verify results match
     struct EvalResult single_result =
         exp_rs_context_eval(expr->expression, ctx);
-    real_t direct_result = expr->direct_func(param_values[0], param_values[1]);
+    Real direct_result = expr->direct_func(param_values[0], param_values[1]);
 
     if (!approx_eq(single_result.value, direct_result, TEST_PRECISION)) {
       qemu_printf("FAIL: Result mismatch for '%s'\n", expr->expression);

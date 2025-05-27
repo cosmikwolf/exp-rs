@@ -7,10 +7,11 @@
 
 // Include the generated header
 #include "../include/exp_rs.h"
+#include "register_test_functions.h"
 
 // Define common types and utilities for our tests
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))
-typedef float real_t;
+
 #define SIN sinf
 #define COS cosf
 #define SQRT sqrtf
@@ -35,7 +36,7 @@ static inline void custom_arm_sqrt_f32(float in, float *out) {
 #define ARM_SQRT(x, result) custom_arm_sqrt_f32(x, result)
 
 #elif defined(DEF_USE_F64) || defined(USE_F64)
-typedef double real_t;
+
 #define SIN sin
 #define COS cos
 #define SQRT sqrt
@@ -66,7 +67,7 @@ static inline void custom_arm_sqrt_f64(double in, double *out) {
 // Using the EvalResult struct directly
 
 // Helper to check approximate equality
-static int approx_eq(real_t a, real_t b, real_t eps) {
+static int approx_eq(Real a, Real b, Real eps) {
     return FABS(a - b) < eps;
 }
 
@@ -76,10 +77,17 @@ static int approx_eq(real_t a, real_t b, real_t eps) {
 test_result_t test_expression_eval() {
     qemu_printf("Testing basic expression evaluation with %s mode\n", TEST_NAME);
     
+    // Create a test context with math functions
+    struct EvalContextOpaque* ctx = create_test_context();
+    if (!ctx) {
+        qemu_print("Failed to create test context\n");
+        return TEST_FAIL;
+    }
+    
     // Test various expressions with our math functions
     struct {
         const char* expr;
-        real_t expected_result;
+        Real expected_result;
     } test_cases[] = {
         {"sin(0.5)", ARM_SIN(0.5)},
         {"cos(0.5)", ARM_COS(0.5)},
@@ -91,7 +99,7 @@ test_result_t test_expression_eval() {
     
     for (size_t i = 0; i < sizeof(test_cases) / sizeof(test_cases[0]); i++) {
         qemu_printf("Testing expression: %s\n", test_cases[i].expr);
-        struct EvalResult result = exp_rs_eval(test_cases[i].expr);
+        struct EvalResult result = exp_rs_context_eval(test_cases[i].expr, ctx);
         
         if (result.status != 0) {
             qemu_printf("Error evaluating expression '%s'\n", test_cases[i].expr);
@@ -99,21 +107,26 @@ test_result_t test_expression_eval() {
                 qemu_printf("Error: %s\n", result.error);
                 exp_rs_free_error((char*)result.error);
             }
+            exp_rs_context_free(ctx);
             return TEST_FAIL;
         }
         
-        qemu_printf("exp_rs_eval('%s') = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", 
+        qemu_printf("exp_rs_context_eval('%s') = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", 
                    test_cases[i].expr, result.value, test_cases[i].expected_result);
                    
         if (!approx_eq(result.value, test_cases[i].expected_result, TEST_PRECISION)) {
             qemu_printf("Test failed: expression mismatch. Expected " FORMAT_SPEC ", got " FORMAT_SPEC "\n", 
                       test_cases[i].expected_result, result.value);
+            exp_rs_context_free(ctx);
             return TEST_FAIL;
         }
         
         // Even if the values match within tolerance, show the difference for debugging
         qemu_printf("Precision difference: %e\n", FABS(result.value - test_cases[i].expected_result));
     }
+    
+    // Clean up context
+    exp_rs_context_free(ctx);
     
     qemu_print("Expression evaluation tests passed!\n");
     return TEST_PASS;
@@ -123,8 +136,8 @@ test_result_t test_expression_eval() {
 test_result_t test_context_integration() {
     qemu_printf("Testing context integration with %s mode\n", TEST_NAME);
     
-    // Create a new context
-    struct EvalContextOpaque* ctx = exp_rs_context_new();
+    // Create a test context with math functions
+    struct EvalContextOpaque* ctx = create_test_context();
     if (!ctx) {
         qemu_print("Failed to create context\n");
         return TEST_FAIL;
@@ -186,11 +199,11 @@ test_result_t test_context_integration() {
     }
     
     // Calculate expected result manually
-    real_t a = 0.5;
-    real_t b = 2.0;
-    real_t sqrt_result;
+    Real a = 0.5;
+    Real b = 2.0;
+    Real sqrt_result;
     ARM_SQRT(a*b, &sqrt_result);
-    real_t expected = ARM_SIN(a) + ARM_COS(b) + sqrt_result;
+    Real expected = ARM_SIN(a) + ARM_COS(b) + sqrt_result;
     
     qemu_printf("my_math_func(0.5, 2.0) = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", 
                result.value, expected);

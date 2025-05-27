@@ -7,10 +7,11 @@
 
 // Include the generated header
 #include "../include/exp_rs.h"
+#include "register_test_functions.h"
 
 // Define common types and utilities for our tests
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))
-typedef float real_t;
+
 #define SIN sinf
 #define COS cosf
 #define SQRT sqrtf
@@ -19,7 +20,7 @@ typedef float real_t;
 #define FORMAT_SPEC "%.6f"
 
 #elif defined(DEF_USE_F64) || defined(USE_F64)
-typedef double real_t;
+
 #define SIN sin
 #define COS cos
 #define SQRT sqrt
@@ -34,7 +35,7 @@ typedef double real_t;
 // Using the EvalResult struct directly
 
 // Helper to check approximate equality
-static int approx_eq(real_t a, real_t b, real_t eps) {
+static int approx_eq(Real a, Real b, Real eps) {
     return FABS(a - b) < eps;
 }
 
@@ -42,16 +43,16 @@ static int approx_eq(real_t a, real_t b, real_t eps) {
 test_result_t test_param_set_get() {
     qemu_printf("Testing parameter set/get in %s mode...\n", TEST_NAME);
     
-    // Create a new context
-    struct EvalContextOpaque* ctx = exp_rs_context_new();
+    // Create a test context with math functions
+    struct EvalContextOpaque* ctx = create_test_context();
     if (!ctx) {
         qemu_print("Failed to create context\n");
         return TEST_FAIL;
     }
     
     // Set parameters
-    real_t a_val = 42.0;
-    real_t b_val = 123.5;
+    Real a_val = 42.0;
+    Real b_val = 123.5;
     
     struct EvalResult set_result_a = exp_rs_context_set_parameter(ctx, "a", a_val);
     if (set_result_a.status != 0) {
@@ -112,8 +113,8 @@ test_result_t test_param_set_get() {
 test_result_t test_expression_function() {
     qemu_printf("Testing expression function in %s mode...\n", TEST_NAME);
     
-    // Create a new context
-    struct EvalContextOpaque* ctx = exp_rs_context_new();
+    // Create a test context with math functions
+    struct EvalContextOpaque* ctx = create_test_context();
     if (!ctx) {
         qemu_print("Failed to create context\n");
         return TEST_FAIL;
@@ -175,7 +176,7 @@ test_result_t test_expression_function() {
     }
     
     // Expected result: (a^2 + b^2 + 2*a*b) = (3^2 + 4^2 + 2*3*4) = 9 + 16 + 24 = 49
-    real_t expected = 49.0;
+    Real expected = 49.0;
     
     qemu_printf("my_func(3, 4) = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", 
                 result.value, expected);
@@ -197,8 +198,8 @@ test_result_t test_expression_function() {
 test_result_t test_nested_functions() {
     qemu_printf("Testing nested functions in %s mode...\n", TEST_NAME);
     
-    // Create a new context
-    struct EvalContextOpaque* ctx = exp_rs_context_new();
+    // Create a test context with math functions
+    struct EvalContextOpaque* ctx = create_test_context();
     if (!ctx) {
         qemu_print("Failed to create context\n");
         return TEST_FAIL;
@@ -279,7 +280,7 @@ test_result_t test_nested_functions() {
     }
     
     // Expected result: x^2 + y^2 = 3^2 + 4^2 = 9 + 16 = 25
-    real_t expected = 25.0;
+    Real expected = 25.0;
     
     qemu_printf("sum_of_squares(3, 4) = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", 
                 result.value, expected);

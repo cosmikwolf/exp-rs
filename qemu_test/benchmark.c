@@ -7,10 +7,11 @@
 
 // Include the generated header
 #include "../include/exp_rs.h"
+#include "register_test_functions.h"
 
 // Define common types and utilities for our tests
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))
-typedef float real_t;
+
 #define SIN sinf
 #define COS cosf
 #define SQRT sqrtf
@@ -19,7 +20,7 @@ typedef float real_t;
 #define FORMAT_SPEC "%.6f"
 
 #elif defined(DEF_USE_F64) || defined(USE_F64)
-typedef double real_t;
+
 #define SIN sin
 #define COS cos
 #define SQRT sqrt
@@ -37,7 +38,7 @@ typedef double real_t;
 #define BENCHMARK_ITERATIONS 10000
 
 // Helper to check approximate equality
-static int approx_eq(real_t a, real_t b, real_t eps) {
+static int approx_eq(Real a, Real b, Real eps) {
     return FABS(a - b) < eps;
 }
 
@@ -53,17 +54,24 @@ static const char* expressions[] = {
 test_result_t test_benchmark() {
     qemu_printf("Running basic expression benchmark with %s mode...\n", TEST_NAME);
     
+    // Create a test context with math functions
+    struct EvalContextOpaque* ctx = create_test_context();
+    if (!ctx) {
+        qemu_print("Failed to create test context\n");
+        return TEST_FAIL;
+    }
+    
     for (size_t i = 0; i < sizeof(expressions) / sizeof(expressions[0]); i++) {
         const char* expr = expressions[i];
         qemu_printf("Benchmarking expression: %s\n", expr);
         
         // Start timer
         uint32_t start = qemu_get_tick_count();
-        volatile real_t sum = 0.0; // Use volatile to prevent optimization
+        volatile Real sum = 0.0; // Use volatile to prevent optimization
         
         // Run benchmark
         for (int j = 0; j < BENCHMARK_ITERATIONS; j++) {
-            struct EvalResult result = exp_rs_eval(expr);
+            struct EvalResult result = exp_rs_context_eval(expr, ctx);
             
             if (result.status != 0) {
                 qemu_printf("Error evaluating expression '%s'\n", expr);
@@ -71,6 +79,7 @@ test_result_t test_benchmark() {
                     qemu_printf("Error: %s\n", result.error);
                     exp_rs_free_error((char*)result.error);
                 }
+                exp_rs_context_free(ctx);
                 return TEST_FAIL;
             }
             
@@ -84,6 +93,9 @@ test_result_t test_benchmark() {
         qemu_printf("Completed %d iterations of '%s' in %u ms (sum = %f)\n", 
                   BENCHMARK_ITERATIONS, expr, duration, sum);
     }
+    
+    // Clean up context
+    exp_rs_context_free(ctx);
     
     qemu_print("Benchmark test completed successfully\n");
     return TEST_PASS;

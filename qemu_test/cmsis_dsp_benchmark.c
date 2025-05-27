@@ -10,7 +10,7 @@
 
 // Define common types and utilities for our tests
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))
-typedef float real_t;
+
 #define SIN sinf
 #define COS cosf
 #define SQRT sqrtf
@@ -35,7 +35,7 @@ static inline void custom_arm_sqrt_f32(float in, float *out) {
 #define ARM_SQRT(x, result) custom_arm_sqrt_f32(x, result)
 
 #elif defined(DEF_USE_F64) || defined(USE_F64)
-typedef double real_t;
+
 #define SIN sin
 #define COS cos
 #define SQRT sqrt
@@ -69,7 +69,7 @@ static inline void custom_arm_sqrt_f64(double in, double *out) {
 #define BENCHMARK_ITERATIONS 10000
 
 // Helper to check approximate equality
-static int approx_eq(real_t a, real_t b, real_t eps) {
+static int approx_eq(Real a, Real b, Real eps) {
     return FABS(a - b) < eps;
 }
 
@@ -79,12 +79,12 @@ test_result_t test_cmsis_dsp_benchmark() {
     
     // Test values
     const int num_values = 5;
-    real_t values[] = {0.0, 0.5, 1.0, 1.5, 2.0};
+    Real values[] = {0.0, 0.5, 1.0, 1.5, 2.0};
     
     // Benchmark sin
     qemu_print("Benchmarking sin function...\n");
     uint32_t start = qemu_get_tick_count();
-    volatile real_t sin_sum = 0.0; // Use volatile to prevent optimization
+    volatile Real sin_sum = 0.0; // Use volatile to prevent optimization
     
     for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
         for (int j = 0; j < num_values; j++) {
@@ -100,7 +100,7 @@ test_result_t test_cmsis_dsp_benchmark() {
     // Benchmark cos
     qemu_print("Benchmarking cos function...\n");
     start = qemu_get_tick_count();
-    volatile real_t cos_sum = 0.0;
+    volatile Real cos_sum = 0.0;
     
     for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
         for (int j = 0; j < num_values; j++) {
@@ -116,8 +116,8 @@ test_result_t test_cmsis_dsp_benchmark() {
     // Benchmark sqrt
     qemu_print("Benchmarking sqrt function...\n");
     start = qemu_get_tick_count();
-    volatile real_t sqrt_sum = 0.0;
-    real_t sqrt_result;
+    volatile Real sqrt_sum = 0.0;
+    Real sqrt_result;
     
     for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
         for (int j = 0; j < num_values; j++) {
