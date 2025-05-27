@@ -14,11 +14,17 @@ license = "MIT/Apache-2.0"
 crate-type = ["rlib", "staticlib"]
 
 [dependencies]
+hashbrown = { version = "0.15.3", default-features = false, features = [
+  "default-hasher",
+  "inline-more",
+  # "allocator-api2",
+  "equivalent",
+  "raw-entry",
+] }
+
 bitflags = "2.9.0"
 libm = { version = "0.2", optional = true }
 serde = { version = "1.0", features = ["derive"], default-features = false }
-hashbrown = "0.15.2"
-
 [features]
 default = ["libm"]
 f32 = []
@@ -39,6 +45,10 @@ debug = false     # Disable debug info to reduce binary size
 
 [profile.dev]
 panic = "abort"
+opt-level = 2     # Optimize for size on embedded systems
+lto = true        # Enable link-time optimization
+codegen-units = 1 # Use single codegen unit for better optimization
+debug = true
 
 [build-dependencies]
-cbindgen = "0.28"
+cbindgen = "0.29"

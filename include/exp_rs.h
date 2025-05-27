@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define USE_F32
+#define EXP_RS_CUSTOM_ALLOC
 
 #if defined(USE_F32)
 /**

@@ -1,5 +1,5 @@
 option(
-  'enable_f64',
+  'use_f32',
   type: 'boolean',
   value: false,
   description: 'Enable 64-bit floating point (double precision) support in CMSIS-DSP',

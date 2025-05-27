@@ -441,7 +441,7 @@ impl<'a> EvalContext<'a> {
         self.register_native_function("*", 2, |args| args[0] * args[1]);
         self.register_native_function("/", 2, |args| args[0] / args[1]);
         self.register_native_function("%", 2, |args| args[0] % args[1]);
-        self.register_native_function("^", 2, |args| args[0].powf(args[1]));
+        // self.register_native_function("^", 2, |args| args[0].powf(args[1]));
 
         // Comparison operators
         self.register_native_function("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
@@ -452,8 +452,20 @@ impl<'a> EvalContext<'a> {
         self.register_native_function("!=", 2, |args| if args[0] != args[1] { 1.0 } else { 0.0 });
 
         // Logical operators
-        self.register_native_function("&&", 2, |args| if args[0] != 0.0 && args[1] != 0.0 { 1.0 } else { 0.0 });
-        self.register_native_function("||", 2, |args| if args[0] != 0.0 || args[1] != 0.0 { 1.0 } else { 0.0 });
+        self.register_native_function("&&", 2, |args| {
+            if args[0] != 0.0 && args[1] != 0.0 {
+                1.0
+            } else {
+                0.0
+            }
+        });
+        self.register_native_function("||", 2, |args| {
+            if args[0] != 0.0 || args[1] != 0.0 {
+                1.0
+            } else {
+                0.0
+            }
+        });
 
         // Function aliases for the operators
         self.register_native_function("add", 2, |args| args[0] + args[1]);
@@ -461,7 +473,7 @@ impl<'a> EvalContext<'a> {
         self.register_native_function("mul", 2, |args| args[0] * args[1]);
         self.register_native_function("div", 2, |args| args[0] / args[1]);
         self.register_native_function("fmod", 2, |args| args[0] % args[1]);
-        self.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+        // self.register_native_function("pow", 2, |args| args[0].powf(args[1]));
         self.register_native_function("neg", 1, |args| -args[0]);
 
         // Sequence operators
@@ -1051,4 +1063,3 @@ mod tests {
         assert_eq!(val, 40.0);
     }
 }
-
