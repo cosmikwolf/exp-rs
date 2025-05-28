@@ -525,7 +525,7 @@ impl EvalContext {
             self.register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
             self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
             self.register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
-            self.register_native_function("round", 1, |args| args[0].round()); // Use built-in round
+            // self.register_native_function("round", 1, |args| crate::functions::round(args[0], 0.0));
             self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
             self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
             self.register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));

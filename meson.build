@@ -17,16 +17,18 @@ if get_option('custom_cbindgen_alloc')
 endif
 
 # Determine build profile based on build type
-build_type = get_option('buildtype')
-if build_type == 'debug' or build_type == 'debugoptimized'
-  message('Building in debug mode')
-  cargo_profile = 'debug'
-  cargo_profile_flag = []
-else
-  message('Building in release mode')
-  cargo_profile = 'release'
-  cargo_profile_flag = ['--release']
-endif
+# build_type = get_option('buildtype')
+# if build_type == 'debug' or build_type == 'debugoptimized'
+#   message('Building in debug mode')
+#   cargo_profile = 'debug'
+#   cargo_profile_flag = []
+# else
+#   message('Building in release mode')
+#   cargo_profile = 'release'
+#   cargo_profile_flag = ['--release']
+# endif
+cargo_profile = 'release'
+cargo_profile_flag = ['--release']
 
 # Build Rust static library using cargo build
 exp_rs_build = custom_target(
@@ -38,7 +40,9 @@ exp_rs_build = custom_target(
   command: [
     'cargo',
     'build',
-    '--target', 'thumbv7em-none-eabihf',
+    '-Zbuild-std=core,alloc,compiler_builtins',
+    # '--target', 'thumbv7em-none-eabihf',
+    '--target', meson.current_source_dir() + '/targets/cortex-m7-strict.json',
     cargo_profile_flag,
     '--no-default-features',
     '--features', ','.join(rust_features),
@@ -52,7 +56,7 @@ exp_rs_build = custom_target(
     '&&',
     'cp',
     meson.current_build_dir()
-    + '/thumbv7em-none-eabihf/'
+    + '/cortex-m7-strict/'
     + cargo_profile
     + '/libexp_rs.a',
     # meson.current_source_dir()

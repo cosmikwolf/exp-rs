@@ -9,31 +9,31 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define EXP_RS_CUSTOM_ALLOC
 
-#define MAX_VARIABLES 64
 
-#define MAX_CONSTANTS 32
+#define MAX_VARIABLES 16
 
-#define MAX_ARRAYS 16
+#define MAX_CONSTANTS 8
 
-#define MAX_ATTRIBUTES 16
+#define MAX_ARRAYS 4
 
-#define MAX_NESTED_ARRAYS 8
+#define MAX_ATTRIBUTES 4
 
-#define MAX_AST_CACHE 128
+#define MAX_NESTED_ARRAYS 2
 
-#define MAX_NATIVE_FUNCTIONS 64
+#define MAX_AST_CACHE 16
 
-#define MAX_EXPRESSION_FUNCTIONS 32
+#define MAX_NATIVE_FUNCTIONS 32
 
-#define MAX_USER_FUNCTIONS 16
+#define MAX_EXPRESSION_FUNCTIONS 8
 
-#define MAX_ATTR_KEYS 8
+#define MAX_USER_FUNCTIONS 4
+
+#define MAX_ATTR_KEYS 4
 
 #define MAX_KEY_LENGTH 32
 
-#define MAX_FUNCTION_NAME_LENGTH 24
+#define MAX_FUNCTION_NAME_LENGTH 32
 
 #if defined(USE_F32)
 /**
@@ -95,7 +95,9 @@ extern int32_t *EXP_RS_PANIC_FLAG;
 
 extern const void *EXP_RS_LOG_FUNCTION;
 
-void exp_rs_register_panic_handler(int32_t *flag_ptr, const void *log_func);
+__attribute__((aligned(8)))
+void exp_rs_register_panic_handler(int32_t *flag_ptr,
+                                   const void *log_func);
 
 /**
  * Frees a string allocated by exp_rs FFI functions.
@@ -114,7 +116,7 @@ void exp_rs_register_panic_handler(int32_t *flag_ptr, const void *log_func);
  * 2. The pointer is not used after calling this function
  * 3. The pointer is not freed more than once
  */
-void exp_rs_free_error(char *ptr);
+__attribute__((aligned(8))) void exp_rs_free_error(char *ptr);
 
 /**
  * Evaluates a mathematical expression without a context.
@@ -136,7 +138,7 @@ void exp_rs_free_error(char *ptr);
  * 1. The pointer is valid and points to a null-terminated string
  * 2. The string contains valid UTF-8 data
  */
-struct EvalResult exp_rs_eval(const char *expr);
+__attribute__((aligned(8))) struct EvalResult exp_rs_eval(const char *expr);
 
 /**
  * Creates a new evaluation context.
@@ -154,7 +156,7 @@ struct EvalResult exp_rs_eval(const char *expr);
  * This function is safe to call from C code. The returned pointer must be
  * passed to exp_rs_context_free when no longer needed to avoid memory leaks.
  */
-struct EvalContextOpaque *exp_rs_context_new(void);
+__attribute__((aligned(8))) struct EvalContextOpaque *exp_rs_context_new(void);
 
 /**
  * Frees an evaluation context previously created by exp_rs_context_new.
@@ -174,7 +176,7 @@ struct EvalContextOpaque *exp_rs_context_new(void);
  * 2. The pointer has not already been freed
  * 3. The pointer is not used after calling this function
  */
-void exp_rs_context_free(struct EvalContextOpaque *ctx);
+__attribute__((aligned(8))) void exp_rs_context_free(struct EvalContextOpaque *ctx);
 
 /**
  * Register an expression function with the given context.
@@ -198,6 +200,7 @@ void exp_rs_context_free(struct EvalContextOpaque *ctx);
  *
  * When status is non-zero, the error message must be freed with exp_rs_free_error.
  */
+__attribute__((aligned(8)))
 struct EvalResult exp_rs_context_register_expression_function(struct EvalContextOpaque *ctx,
                                                               const char *name,
                                                               const char *const *params,
@@ -225,6 +228,7 @@ struct EvalResult exp_rs_context_register_expression_function(struct EvalContext
  *
  * When status is non-zero, the error message must be freed with exp_rs_free_error.
  */
+__attribute__((aligned(8)))
 struct EvalResult exp_rs_context_register_native_function(struct EvalContextOpaque *ctx,
                                                           const char *name,
                                                           uintptr_t arity,
@@ -250,6 +254,7 @@ struct EvalResult exp_rs_context_register_native_function(struct EvalContextOpaq
  *
  * When status is non-zero, the error message must be freed with exp_rs_free_error.
  */
+__attribute__((aligned(8)))
 struct EvalResult exp_rs_context_set_parameter(struct EvalContextOpaque *ctx,
                                                const char *name,
                                                Real value);
@@ -276,7 +281,9 @@ struct EvalResult exp_rs_context_set_parameter(struct EvalContextOpaque *ctx,
  * 2. The string contains valid UTF-8 data
  * 3. The context pointer was returned by exp_rs_context_new and has not been freed
  */
-struct EvalResult exp_rs_context_eval(const char *expr, struct EvalContextOpaque *ctx);
+__attribute__((aligned(8)))
+struct EvalResult exp_rs_context_eval(const char *expr,
+                                      struct EvalContextOpaque *ctx);
 
 #if defined(EXP_RS_CUSTOM_ALLOC)
 extern void *exp_rs_malloc(uintptr_t size);

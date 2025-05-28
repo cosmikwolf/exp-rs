@@ -23,3 +23,5 @@ pragma_once = true
 [fn]
 must_use = "__attribute__((warn_unused_result))"
 no_return = "__attribute__((noreturn))"
+# Force 8-byte stack alignment for ARM targets
+prefix = "__attribute__((aligned(8)))"

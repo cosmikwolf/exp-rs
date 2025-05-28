@@ -13,11 +13,11 @@ use crate::eval::stack_ops::EvalOp;
 use crate::eval::context_stack::ContextStack;
 use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
 
-use alloc::vec::{self, Vec};
+use alloc::vec::Vec;
 use alloc::rc::Rc;
 use alloc::collections::BTreeMap;
 use alloc::format;
-use alloc::string::{String, ToString};
+use alloc::string::ToString;
 
 /// Maximum depth of the operation stack (prevents runaway evaluation)
 const MAX_STACK_DEPTH: usize = 1000;
@@ -550,7 +550,7 @@ impl EvalEngine {
             #[cfg(feature = "libm")]
             ("log10", 1) => Some(crate::functions::log10(args[0], 0.0)),
             #[cfg(feature = "libm")]
-            ("log2", 1) => Some(crate::functions::log2(args[0], 0.0)),
+            ("log2", 1) => Some(libm::log2(args[0])),
             #[cfg(feature = "libm")]
             ("sqrt", 1) => Some(crate::functions::sqrt(args[0], 0.0)),
             ("abs", 1) => Some(crate::functions::abs(args[0], 0.0)),
@@ -559,16 +559,16 @@ impl EvalEngine {
             #[cfg(feature = "libm")]
             ("ceil", 1) => Some(crate::functions::ceil(args[0], 0.0)),
             #[cfg(feature = "libm")]
-            ("round", 1) => Some(crate::functions::round(args[0], 0.0)),
+            ("round", 1) => Some(libm::round(args[0])),
             #[cfg(feature = "libm")]
-            ("trunc", 1) => Some(crate::functions::trunc(args[0], 0.0)),
+            ("trunc", 1) => Some(libm::trunc(args[0])),
             ("sign", 1) => Some(if args[0] > 0.0 { 1.0 } else if args[0] < 0.0 { -1.0 } else { 0.0 }),
             
             // Multi-argument functions
             ("min", 2) => Some(args[0].min(args[1])),
             ("max", 2) => Some(args[0].max(args[1])),
             #[cfg(feature = "libm")]
-            ("hypot", 2) => Some(crate::functions::hypot(args[0], args[1])),
+            ("hypot", 2) => Some(libm::hypot(args[0], args[1])),
             ("fmod", 2) => Some(args[0] % args[1]),
             (",", 2) | ("comma", 2) => Some(args[1]), // Comma operator returns the second value
             

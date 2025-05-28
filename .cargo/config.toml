@@ -1,13 +1,50 @@
 [build]
 rustflags = ["-A", "unused-doc-comments"]
+build-std = ["core", "alloc", "compiler_builtins"]
+build-std-features = ["compiler-builtins-mem"]
 
-[target.thumbv7em-none-eabihf]
+[target.cortex-m7-strict]
 rustflags = [
   "-A",
   "unused-doc-comments",
-  "-C",
-  "target-feature=+strict-align",
-  "-C",
-  "target-cpu=cortex-m7",
+  # "-C",
+  # "llvm-args=-mattr=+strict-align",
+  # "-C",
+  # "llvm-args=-align-all-functions=1",
+  # "-C",
+  # "target-cpu=cortex-m7",
+  # "-C",
+  # "target-feature=+strict-align",
+  # "-Z",
+  # "unstable-options"
+  # "-Z",
+  # "build-std=core",
+  # Force frame pointers for better stack alignment
+  # "-C",
+  # "force-frame-pointers=yes",
+  # Ensure no unaligned access
+  # "-C",
+  # "link-arg=-mno-unaligned-access",
+  # "-C",
+  # "link-arg=-mstrict-align",
+  # Force better alignment
+  # "-C",
+  # "link-arg=-falign-functions=8",
+  # "-C",
+  # "link-arg=-falign-loops=4",
+  # "-C",
+  # "link-arg=-falign-jumps=4",
+  # Optimize but maintain alignment
+  # Use hardware FPU
+  # "-C",
+  # "target-feature=+vfp4",
+  # "-C",
+  # "target-feature=+d16",
 ]
+build-std = ["core", "alloc", "compiler_builtins"]
+build-std-features = ["compiler-builtins-mem"]
 
+
+[unstable]
+build-std = ["core", "alloc", "compiler_builtins"]
+build-std-features = ["compiler-builtins-mem"]

@@ -25,6 +25,7 @@ pub type Result<T> = result::Result<T, ExprError>;
 /// This enum represents all possible errors that can occur during expression parsing,
 /// tokenization, and evaluation. It provides specific error variants with detailed
 /// information to help diagnose and fix issues.
+#[repr(C, align(4))]
 #[derive(Debug, Clone)]
 pub enum ExprError {
     /// Error when parsing a floating point number.

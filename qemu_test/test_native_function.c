@@ -7,7 +7,6 @@
 
 // Include the generated header
 #include "../include/exp_rs.h"
-#include "register_test_functions.h"
 
 // Define common types and utilities for our tests
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))
@@ -83,8 +82,8 @@ Real custom_power(const Real* args, uintptr_t argc) {
 static test_result_t test_native_functions(void) {
     qemu_printf("Testing exp_rs native function registration with %s mode\n", TEST_NAME);
     
-    // Create a test context with math functions
-    struct EvalContextOpaque* ctx = create_test_context();
+    // Create a new evaluation context
+    struct EvalContextOpaque* ctx = exp_rs_context_new();
     if (ctx == NULL) {
         qemu_print("Failed to create evaluation context\n");
         return TEST_FAIL;
