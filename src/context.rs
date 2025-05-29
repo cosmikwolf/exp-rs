@@ -7,7 +7,7 @@ use crate::{Real, String, ToString, Vec};
 #[cfg(not(test))]
 use alloc::rc::Rc;
 // Import heapless types and helper traits
-use crate::types::{TryIntoHeaplessString, TryIntoFunctionName};
+use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
 #[cfg(test)]
 use std::rc::Rc;
 #[cfg(test)]
@@ -176,11 +176,15 @@ impl EvalContext {
     /// let result = interp("x * 2", Some(Rc::new(ctx))).unwrap();
     /// assert_eq!(result, 84.0);
     /// ```
-    pub fn set_parameter(&mut self, name: &str, value: Real) -> Result<Option<Real>, crate::error::ExprError> {
+    pub fn set_parameter(
+        &mut self,
+        name: &str,
+        value: Real,
+    ) -> Result<Option<Real>, crate::error::ExprError> {
         let key = name.try_into_heapless()?;
         match self.variables.insert(key, value) {
             Ok(old_value) => Ok(old_value),
-            Err(_) => Err(crate::error::ExprError::CapacityExceeded("variables"))
+            Err(_) => Err(crate::error::ExprError::CapacityExceeded("variables")),
         }
     }
 
@@ -232,7 +236,12 @@ impl EvalContext {
     /// let result = interp("mean(1, 2, 3, 4, 5)", Some(Rc::new(ctx))).unwrap();
     /// assert_eq!(result, 3.0);
     /// ```
-    pub fn register_native_function<F>(&mut self, name: &str, arity: usize, implementation: F) -> Result<(), crate::error::ExprError>
+    pub fn register_native_function<F>(
+        &mut self,
+        name: &str,
+        arity: usize,
+        implementation: F,
+    ) -> Result<(), crate::error::ExprError>
     where
         F: Fn(&[Real]) -> Real + 'static,
     {
@@ -243,12 +252,15 @@ impl EvalContext {
             name: key.clone(),
             description: None,
         };
-        
+
         match Rc::make_mut(&mut self.function_registry)
             .native_functions
-            .insert(key, function) {
+            .insert(key, function)
+        {
             Ok(_) => Ok(()),
-            Err(_) => Err(crate::error::ExprError::CapacityExceeded("native_functions"))
+            Err(_) => Err(crate::error::ExprError::CapacityExceeded(
+                "native_functions",
+            )),
         }
     }
 
@@ -329,12 +341,15 @@ impl EvalContext {
             compiled_ast: ast,
             description: None,
         };
-        
+
         match Rc::make_mut(&mut self.function_registry)
             .expression_functions
-            .insert(key, function) {
+            .insert(key, function)
+        {
             Ok(_) => Ok(()),
-            Err(_) => Err(crate::error::ExprError::CapacityExceeded("expression_functions"))
+            Err(_) => Err(crate::error::ExprError::CapacityExceeded(
+                "expression_functions",
+            )),
         }
     }
 
@@ -591,7 +606,7 @@ impl EvalContext {
                 return Some(*val);
             }
         }
-        
+
         if let Some(parent) = &self.parent {
             parent.get_variable(name)
         } else {
@@ -605,7 +620,7 @@ impl EvalContext {
                 return Some(*val);
             }
         }
-        
+
         if let Some(parent) = &self.parent {
             parent.get_constant(name)
         } else {
@@ -619,7 +634,7 @@ impl EvalContext {
                 return Some(arr);
             }
         }
-        
+
         if let Some(parent) = &self.parent {
             parent.get_array(name)
         } else {
@@ -628,33 +643,49 @@ impl EvalContext {
     }
 
     /// Helper method to set an attribute value on an object
-    pub fn set_attribute(&mut self, object_name: &str, attr_name: &str, value: Real) -> Result<Option<Real>, crate::error::ExprError> {
+    pub fn set_attribute(
+        &mut self,
+        object_name: &str,
+        attr_name: &str,
+        value: Real,
+    ) -> Result<Option<Real>, crate::error::ExprError> {
         let obj_key = object_name.try_into_heapless()?;
         let attr_key = attr_name.try_into_heapless()?;
-        
+
         // Get or create the object's attribute map
         if !self.attributes.contains_key(&obj_key) {
-            let attr_map = heapless::FnvIndexMap::<crate::types::HString, Real, {crate::types::MAX_ATTR_KEYS}>::new();
-            self.attributes.insert(obj_key.clone(), attr_map)
+            let attr_map = heapless::FnvIndexMap::<
+                crate::types::HString,
+                Real,
+                { crate::types::EXP_RS_MAX_ATTR_KEYS },
+            >::new();
+            self.attributes
+                .insert(obj_key.clone(), attr_map)
                 .map_err(|_| crate::error::ExprError::CapacityExceeded("attributes"))?;
         }
-        
+
         // Get mutable reference to the attribute map and insert the value
         if let Some(attr_map) = self.attributes.get_mut(&obj_key) {
-            attr_map.insert(attr_key, value)
+            attr_map
+                .insert(attr_key, value)
                 .map_err(|_| crate::error::ExprError::CapacityExceeded("object attributes"))
         } else {
             unreachable!("Just inserted the object")
         }
     }
 
-    pub fn get_attribute_map(&self, base: &str) -> Option<&heapless::FnvIndexMap<crate::types::HString, Real, {crate::types::MAX_ATTR_KEYS}>> {
+    pub fn get_attribute_map(
+        &self,
+        base: &str,
+    ) -> Option<
+        &heapless::FnvIndexMap<crate::types::HString, Real, { crate::types::EXP_RS_MAX_ATTR_KEYS }>,
+    > {
         if let Ok(key) = base.try_into_heapless() {
             if let Some(attr_map) = self.attributes.get(&key) {
                 return Some(attr_map);
             }
         }
-        
+
         if let Some(parent) = &self.parent {
             parent.get_attribute_map(base)
         } else {
@@ -668,7 +699,7 @@ impl EvalContext {
                 return Some(f);
             }
         }
-        
+
         if let Some(parent) = &self.parent {
             parent.get_native_function(name)
         } else {
@@ -682,7 +713,7 @@ impl EvalContext {
                 return Some(f);
             }
         }
-        
+
         if let Some(parent) = &self.parent {
             parent.get_user_function(name)
         } else {
@@ -696,7 +727,7 @@ impl EvalContext {
                 return Some(f);
             }
         }
-        
+
         if let Some(parent) = &self.parent {
             parent.get_expression_function(name)
         } else {
@@ -745,7 +776,6 @@ impl Default for EvalContext {
 
 // Helper trait removed - heapless containers support Clone directly
 
-
 /// User-defined function.
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -758,8 +788,8 @@ pub struct UserFunction {
 mod tests {
     use super::*;
     use crate::engine;
-    use crate::types::TryIntoHeaplessString;
     use crate::types::AstExpr;
+    use crate::types::TryIntoHeaplessString;
     use std::rc::Rc;
 
     #[test]
@@ -1001,7 +1031,9 @@ mod tests {
         ctx.register_expression_function("double", &["x"], "x * 2")
             .unwrap();
 
-        ctx.variables.insert("value".try_into_heapless().unwrap(), 5.0).expect("Failed to insert");
+        ctx.variables
+            .insert("value".try_into_heapless().unwrap(), 5.0)
+            .expect("Failed to insert");
 
         let val = engine::interp("double(value)", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 10.0);
@@ -1013,10 +1045,12 @@ mod tests {
     #[test]
     fn test_array_access() {
         let mut ctx = EvalContext::new();
-        ctx.arrays.insert(
-            "climb_wave_wait_time".try_into_heapless().unwrap(),
-            vec![10.0, 20.0, 30.0],
-        ).expect("Failed to insert array");
+        ctx.arrays
+            .insert(
+                "climb_wave_wait_time".try_into_heapless().unwrap(),
+                vec![10.0, 20.0, 30.0],
+            )
+            .expect("Failed to insert array");
         let val = engine::interp("climb_wave_wait_time[1]", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 20.0);
     }
@@ -1024,10 +1058,12 @@ mod tests {
     #[test]
     fn test_array_access_ast_structure() {
         let mut ctx = EvalContext::new();
-        ctx.arrays.insert(
-            "climb_wave_wait_time".try_into_heapless().unwrap(),
-            vec![10.0, 20.0, 30.0],
-        ).expect("Failed to insert array");
+        ctx.arrays
+            .insert(
+                "climb_wave_wait_time".try_into_heapless().unwrap(),
+                vec![10.0, 20.0, 30.0],
+            )
+            .expect("Failed to insert array");
         let ast = engine::parse_expression("climb_wave_wait_time[1]").unwrap();
         match ast {
             AstExpr::Array { name, index } => {
@@ -1044,9 +1080,17 @@ mod tests {
     #[test]
     fn test_attribute_access() {
         let mut ctx = EvalContext::new();
-        let mut foo_map = heapless::FnvIndexMap::<crate::types::HString, crate::Real, {crate::types::MAX_ATTR_KEYS}>::new();
-        foo_map.insert("bar".try_into_heapless().unwrap(), 42.0).unwrap();
-        ctx.attributes.insert("foo".try_into_heapless().unwrap(), foo_map).unwrap();
+        let mut foo_map = heapless::FnvIndexMap::<
+            crate::types::HString,
+            crate::Real,
+            { crate::types::EXP_RS_MAX_ATTR_KEYS },
+        >::new();
+        foo_map
+            .insert("bar".try_into_heapless().unwrap(), 42.0)
+            .unwrap();
+        ctx.attributes
+            .insert("foo".try_into_heapless().unwrap(), foo_map)
+            .unwrap();
 
         let ast = engine::parse_expression("foo.bar").unwrap();
         println!("AST for foo.bar: {:?}", ast);
