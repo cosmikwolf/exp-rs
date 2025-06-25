@@ -1,7 +1,7 @@
 [build]
 rustflags = ["-A", "unused-doc-comments"]
-build-std = ["core", "alloc", "compiler_builtins"]
-build-std-features = ["compiler-builtins-mem"]
+# build-std = ["core", "alloc", "compiler_builtins"]
+# build-std-features = ["compiler-builtins-mem"]
 
 [target.cortex-m7-strict]
 rustflags = [
@@ -41,10 +41,10 @@ rustflags = [
   # "-C",
   # "target-feature=+d16",
 ]
-build-std = ["core", "alloc", "compiler_builtins"]
-build-std-features = ["compiler-builtins-mem"]
+# build-std = ["core", "alloc", "compiler_builtins"]
+# build-std-features = ["compiler-builtins-mem"]
 
 
-[unstable]
-build-std = ["core", "alloc", "compiler_builtins"]
-build-std-features = ["compiler-builtins-mem"]
+# [unstable]
+# build-std = ["core", "alloc", "compiler_builtins"]
+# build-std-features = ["compiler-builtins-mem"]

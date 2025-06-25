@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-
+#define EXP_RS_CUSTOM_ALLOC
 
 #define EXP_RS_MAX_VARIABLES 16
 
@@ -23,7 +23,7 @@
 
 #define EXP_RS_MAX_AST_CACHE 16
 
-#define EXP_RS_MAX_NATIVE_FUNCTIONS 32
+#define EXP_RS_MAX_NATIVE_FUNCTIONS 128
 
 #define EXP_RS_MAX_EXPRESSION_FUNCTIONS 8
 
@@ -206,6 +206,37 @@ struct EvalResult exp_rs_context_register_expression_function(struct EvalContext
                                                               const char *const *params,
                                                               uintptr_t param_count,
                                                               const char *expression);
+
+/**
+ * Unregister an expression function from the given context.
+ *
+ * This function removes an expression function that was previously registered
+ * with exp_rs_context_register_expression_function. It only affects the current
+ * context and does not modify parent contexts.
+ *
+ * # Warning
+ *
+ * Unregistering a function that is used by other expression functions may cause
+ * runtime errors when those expressions are evaluated later. The AST cache is
+ * cleared when a function is unregistered to prevent some issues.
+ *
+ * # Parameters
+ *
+ * * `ctx` - Pointer to the context, as returned by exp_rs_context_new
+ * * `name` - The name of the expression function to unregister
+ *
+ * # Returns
+ *
+ * An EvalResult structure with:
+ * - status=0 and value=1.0 if the function was found and removed
+ * - status=0 and value=0.0 if the function was not found in this context
+ * - non-zero status with an error message on failure
+ *
+ * When status is non-zero, the error message must be freed with exp_rs_free_error.
+ */
+__attribute__((aligned(8)))
+struct EvalResult exp_rs_context_unregister_expression_function(struct EvalContextOpaque *ctx,
+                                                                const char *name);
 
 /**
  * Register a native function with the given context.

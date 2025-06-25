@@ -539,6 +539,80 @@ pub extern "C" fn exp_rs_context_register_expression_function(
     }
 }
 
+/// Unregister an expression function from the given context.
+///
+/// This function removes an expression function that was previously registered
+/// with exp_rs_context_register_expression_function. It only affects the current
+/// context and does not modify parent contexts.
+///
+/// # Warning
+///
+/// Unregistering a function that is used by other expression functions may cause
+/// runtime errors when those expressions are evaluated later. The AST cache is
+/// cleared when a function is unregistered to prevent some issues.
+///
+/// # Parameters
+///
+/// * `ctx` - Pointer to the context, as returned by exp_rs_context_new
+/// * `name` - The name of the expression function to unregister
+///
+/// # Returns
+///
+/// An EvalResult structure with:
+/// - status=0 and value=1.0 if the function was found and removed
+/// - status=0 and value=0.0 if the function was not found in this context
+/// - non-zero status with an error message on failure
+///
+/// When status is non-zero, the error message must be freed with exp_rs_free_error.
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_context_unregister_expression_function(
+    ctx: *mut EvalContextOpaque,
+    name: *const c_char,
+) -> EvalResult {
+    if ctx.is_null() || name.is_null() {
+        let msg = CString::new("Null pointer provided for required parameter").unwrap();
+        let ptr = msg.into_raw();
+        return EvalResult {
+            status: 1,
+            value: Real::NAN,
+            error: ptr,
+        };
+    }
+    
+    let ctx = unsafe { &mut *(ctx as *mut EvalContext) };
+
+    let name_cstr = unsafe { CStr::from_ptr(name) };
+    let name_str = match name_cstr.to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = CString::new(format!("Invalid UTF-8 in function name: {}", e)).unwrap();
+            let ptr = msg.into_raw();
+            return EvalResult {
+                status: 2,
+                value: Real::NAN,
+                error: ptr,
+            };
+        }
+    };
+
+    match ctx.unregister_expression_function(name_str) {
+        Ok(was_removed) => EvalResult {
+            status: 0,
+            value: if was_removed { 1.0 } else { 0.0 },
+            error: ptr::null(),
+        },
+        Err(e) => {
+            let msg = CString::new(format!("Failed to unregister expression function: {}", e)).unwrap();
+            let ptr = msg.into_raw();
+            EvalResult {
+                status: 3,
+                value: Real::NAN,
+                error: ptr,
+            }
+        }
+    }
+}
+
 /// Register a native function with the given context.
 ///
 /// This function registers a Rust function to be invoked from C expressions.

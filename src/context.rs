@@ -353,6 +353,71 @@ impl EvalContext {
         }
     }
 
+    /// Unregisters an expression function from this context.
+    ///
+    /// This removes the named expression function from the current context only.
+    /// It does not affect parent contexts or other contexts that may have the same
+    /// function registered.
+    ///
+    /// # Warning
+    ///
+    /// Unregistering a function that is used by other expression functions or
+    /// cached expressions may cause runtime errors when those expressions are
+    /// evaluated later. The AST cache is cleared when a function is unregistered
+    /// to prevent some issues, but dependency checking is not performed.
+    ///
+    /// # Parameters
+    ///
+    /// * `name`: The name of the function to unregister
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(true)` if the function was found and removed
+    /// * `Ok(false)` if the function was not found in this context
+    /// * `Err(...)` if the function name is invalid
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use exp_rs::context::EvalContext;
+    ///
+    /// let mut ctx = EvalContext::new();
+    /// ctx.register_expression_function("double", &["x"], "x * 2").unwrap();
+    ///
+    /// // Function exists
+    /// assert!(ctx.get_expression_function("double").is_some());
+    ///
+    /// // Unregister it
+    /// let removed = ctx.unregister_expression_function("double").unwrap();
+    /// assert!(removed);
+    ///
+    /// // Function no longer exists
+    /// assert!(ctx.get_expression_function("double").is_none());
+    /// ```
+    pub fn unregister_expression_function(
+        &mut self,
+        name: &str,
+    ) -> Result<bool, crate::error::ExprError> {
+        let key = name.try_into_function_name()?;
+
+        // Use Rc::make_mut to get mutable access to the shared registry
+        let registry = Rc::make_mut(&mut self.function_registry);
+
+        // Remove the function and check if it existed
+        let was_removed = registry.expression_functions.remove(&key).is_some();
+
+        // Invalidate AST cache if function was removed and cache exists
+        if was_removed {
+            if let Some(cache) = &self.ast_cache {
+                // Clear entire cache for simplicity
+                // This prevents cached expressions from referencing the unregistered function
+                cache.borrow_mut().clear();
+            }
+        }
+
+        Ok(was_removed)
+    }
+
     /// Enables AST caching for this context to improve performance.
     ///
     /// When enabled, repeated calls to `interp` with the same expression string
@@ -1018,10 +1083,185 @@ mod tests {
     fn test_native_function() {
         let mut ctx = EvalContext::new();
 
-        ctx.register_native_function("add_all", 3, |args| args.iter().sum());
+        ctx.register_native_function("add_all", 3, |args| args.iter().sum())
+            .unwrap();
 
-        let val = engine::interp("add_all(1, 2, 3)", Some(Rc::new(ctx.clone()))).unwrap();
+        let val = engine::interp("add_all(1, 2, 3)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val, 6.0);
+    }
+
+    #[test]
+    fn test_unregister_expression_function_basic() {
+        let mut ctx = EvalContext::new();
+
+        // Register a function
+        ctx.register_expression_function("double", &["x"], "x * 2")
+            .unwrap();
+        assert!(ctx.get_expression_function("double").is_some());
+
+        // Unregister it
+        let was_removed = ctx.unregister_expression_function("double").unwrap();
+        assert!(was_removed);
+        assert!(ctx.get_expression_function("double").is_none());
+
+        // Try to unregister again
+        let was_removed_again = ctx.unregister_expression_function("double").unwrap();
+        assert!(!was_removed_again);
+    }
+
+    #[test]
+    fn test_unregister_expression_function_invalid_name() {
+        let mut ctx = EvalContext::new();
+
+        // Try to unregister with invalid name (too long)
+        let long_name = "a".repeat(100);
+        let result = ctx.unregister_expression_function(&long_name);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unregister_expression_function_with_dependencies() {
+        let mut ctx = EvalContext::new();
+
+        // Register dependent functions
+        ctx.register_expression_function("helper", &["x"], "x + 1")
+            .unwrap();
+        ctx.register_expression_function("main", &["x"], "helper(x) * 2")
+            .unwrap();
+
+        // Both functions should work initially
+        let result1 = engine::interp("helper(5)", Some(Rc::new(ctx.clone()))).unwrap();
+        assert_eq!(result1, 6.0);
+
+        let result2 = engine::interp("main(5)", Some(Rc::new(ctx.clone()))).unwrap();
+        assert_eq!(result2, 12.0); // (5 + 1) * 2 = 12
+
+        // Unregister helper function
+        let was_removed = ctx.unregister_expression_function("helper").unwrap();
+        assert!(was_removed);
+
+        // Using main function should now fail
+        let result = engine::interp("main(5)", Some(Rc::new(ctx)));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unregister_expression_function_cache_invalidation() {
+        let mut ctx = EvalContext::new();
+        ctx.enable_ast_cache();
+
+        // Register a function
+        ctx.register_expression_function("triple", &["x"], "x * 3")
+            .unwrap();
+
+        // Use the function to populate cache
+        let result1 = engine::interp("triple(4)", Some(Rc::new(ctx.clone()))).unwrap();
+        assert_eq!(result1, 12.0);
+
+        // Verify cache has content (indirect verification by checking if cache exists)
+        assert!(ctx.ast_cache.is_some());
+
+        // Unregister the function
+        let was_removed = ctx.unregister_expression_function("triple").unwrap();
+        assert!(was_removed);
+
+        // Cache should be cleared, and using the function should fail
+        let result = engine::interp("triple(4)", Some(Rc::new(ctx)));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unregister_expression_function_parent_context() {
+        // Create parent context with a function
+        let mut parent_ctx = EvalContext::new();
+        parent_ctx
+            .register_expression_function("parent_func", &["x"], "x * 10")
+            .unwrap();
+
+        // Create child context
+        let mut child_ctx = EvalContext::new();
+        child_ctx.parent = Some(Rc::new(parent_ctx));
+        child_ctx
+            .register_expression_function("child_func", &["x"], "x * 5")
+            .unwrap();
+
+        // Child can see both functions
+        assert!(child_ctx.get_expression_function("parent_func").is_some());
+        assert!(child_ctx.get_expression_function("child_func").is_some());
+
+        // Unregister child function
+        let was_removed = child_ctx
+            .unregister_expression_function("child_func")
+            .unwrap();
+        assert!(was_removed);
+        assert!(child_ctx.get_expression_function("child_func").is_none());
+
+        // Parent function should still be visible
+        assert!(child_ctx.get_expression_function("parent_func").is_some());
+
+        // Try to unregister parent function from child (should not exist in child's registry)
+        let was_removed_parent = child_ctx
+            .unregister_expression_function("parent_func")
+            .unwrap();
+        assert!(!was_removed_parent); // Should be false because it's not in child's direct registry
+
+        // Parent function should still be visible through parent chain
+        assert!(child_ctx.get_expression_function("parent_func").is_some());
+    }
+
+    #[test]
+    fn test_unregister_expression_function_multiple_functions() {
+        let mut ctx = EvalContext::new();
+
+        // Register multiple functions
+        ctx.register_expression_function("func1", &["x"], "x + 1")
+            .unwrap();
+        ctx.register_expression_function("func2", &["x"], "x + 2")
+            .unwrap();
+        ctx.register_expression_function("func3", &["x"], "x + 3")
+            .unwrap();
+
+        // All should exist
+        assert!(ctx.get_expression_function("func1").is_some());
+        assert!(ctx.get_expression_function("func2").is_some());
+        assert!(ctx.get_expression_function("func3").is_some());
+
+        // Unregister middle one
+        let was_removed = ctx.unregister_expression_function("func2").unwrap();
+        assert!(was_removed);
+
+        // func1 and func3 should still exist
+        assert!(ctx.get_expression_function("func1").is_some());
+        assert!(ctx.get_expression_function("func2").is_none());
+        assert!(ctx.get_expression_function("func3").is_some());
+
+        // Test the remaining functions still work
+        let result1 = engine::interp("func1(5)", Some(Rc::new(ctx.clone()))).unwrap();
+        assert_eq!(result1, 6.0);
+
+        let result3 = engine::interp("func3(5)", Some(Rc::new(ctx))).unwrap();
+        assert_eq!(result3, 8.0);
+    }
+
+    #[test]
+    fn test_unregister_expression_function_reregister() {
+        let mut ctx = EvalContext::new();
+
+        // Register a function
+        ctx.register_expression_function("changeable", &["x"], "x * 2")
+            .unwrap();
+        let result1 = engine::interp("changeable(5)", Some(Rc::new(ctx.clone()))).unwrap();
+        assert_eq!(result1, 10.0);
+
+        // Unregister it
+        let was_removed = ctx.unregister_expression_function("changeable").unwrap();
+        assert!(was_removed);
+
+        // Re-register with different implementation
+        ctx.register_expression_function("changeable", &["x"], "x * 3")
+            .unwrap();
+        let result2 = engine::interp("changeable(5)", Some(Rc::new(ctx))).unwrap();
+        assert_eq!(result2, 15.0);
     }
 
     #[test]
