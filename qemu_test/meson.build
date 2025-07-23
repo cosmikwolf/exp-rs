@@ -59,7 +59,7 @@ endif
 
 
 # C test program for EvalContext - F64 version (built when F64 is enabled)
-if enable_f64
+if not use_f32
   test_eval_context_f64_exe = executable(
     'test_eval_context_f64',
     ['eval_context.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
@@ -72,7 +72,8 @@ if enable_f64
 endif
 
 # C test program for native function registration - F32 version
-test_native_function_f32_exe = executable(
+if use_f32
+  test_native_function_f32_exe = executable(
   'test_native_function_f32',
   ['test_native_function.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: include_directories('.', '../include'),
@@ -80,10 +81,11 @@ test_native_function_f32_exe = executable(
   link_args: common_link_args,
   c_args: ['-DDEF_USE_F32'],
   install: false,
-)
+  )
+endif
 
 # C test program for native function registration - F64 version (built when F64 is enabled)
-if enable_f64
+if not use_f32
   test_native_function_f64_exe = executable(
     'test_native_function_f64',
     ['test_native_function.c', 'qemu_harness/vector_table_m7.c'],
@@ -96,7 +98,8 @@ if enable_f64
 endif
 
 # C test for benchmark - F32 version
-test_benchmark_f32_exe = executable(
+if use_f32
+  test_benchmark_f32_exe = executable(
   'test_benchmark_f32',
   ['benchmark.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: include_directories('.', '../include'),
@@ -104,10 +107,11 @@ test_benchmark_f32_exe = executable(
   link_args: common_link_args,
   c_args: ['-DDEF_USE_F32'],
   install: false,
-)
+  )
+endif
 
 # C test for benchmark - F64 version (built when F64 is enabled)
-if enable_f64
+if not use_f32
   test_benchmark_f64_exe = executable(
     'test_benchmark_f64',
     ['benchmark.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
@@ -120,7 +124,8 @@ if enable_f64
 endif
 
 # Consolidated CMSIS-DSP test (F32 mode)
-test_cmsis_dsp_f32_exe = executable(
+if use_f32
+  test_cmsis_dsp_f32_exe = executable(
   'test_cmsis_dsp_f32',
   ['cmsis_dsp_test.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: [include_directories('.', '../include')],
@@ -128,10 +133,11 @@ test_cmsis_dsp_f32_exe = executable(
   link_args: common_link_args,
   c_args: ['-DDEF_USE_F32'],
   install: false,
-)
+  )
+endif
 
 # Consolidated CMSIS-DSP test (F64 mode - only built when F64 is enabled)
-if enable_f64
+if not use_f32
   test_cmsis_dsp_f64_exe = executable(
     'test_cmsis_dsp_f64',
     ['cmsis_dsp_test.c', 'qemu_harness/vector_table_m7.c'],
@@ -144,16 +150,18 @@ if enable_f64
 endif
 
 # Add a test target for the FFI test (F32 version)
-test(
-  'test_ffi_f32',
-  find_program('qemu-system-arm'),
-  args: common_test_args + ['-kernel', test_ffi_f32_exe.full_path()],
-  is_parallel: false,
-  timeout: 5,
-)
+if use_f32
+  test(
+    'test_ffi_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_ffi_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 5,
+  )
+endif
 
 # Add a test target for the FFI test (F64 version, when enabled)
-if enable_f64
+if not use_f32
   test(
     'test_ffi_f64',
     find_program('qemu-system-arm'),
@@ -164,16 +172,18 @@ if enable_f64
 endif
 
 # Add a test target for the EvalContext test - F32 version
-test(
-  'test_eval_context_f32',
-  find_program('qemu-system-arm'),
-  args: common_test_args + ['-kernel', test_eval_context_f32_exe.full_path()],
-  is_parallel: false,
-  timeout: 5,
-)
+if use_f32
+  test(
+    'test_eval_context_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_eval_context_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 5,
+  )
+endif
 
 # Add a test target for the EvalContext test - F64 version (when enabled)
-if enable_f64
+if not use_f32
   test(
     'test_eval_context_f64',
     find_program('qemu-system-arm'),
@@ -184,16 +194,18 @@ if enable_f64
 endif
 
 # Add a test target for the native function registration test - F32 version
-test(
-  'test_native_function_f32',
-  find_program('qemu-system-arm'),
-  args: common_test_args + ['-kernel', test_native_function_f32_exe.full_path()],
-  is_parallel: false,
-  timeout: 5,
-)
+if use_f32
+  test(
+    'test_native_function_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_native_function_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 5,
+  )
+endif
 
 # Add a test target for the native function registration test - F64 version (when enabled)
-if enable_f64
+if not use_f32
   test(
     'test_native_function_f64',
     find_program('qemu-system-arm'),
@@ -204,16 +216,18 @@ if enable_f64
 endif
 
 # Add a test target for the Benchmark test - F32 version
-test(
-  'test_benchmark_f32',
-  find_program('qemu-system-arm'),
-  args: common_test_args + ['-kernel', test_benchmark_f32_exe.full_path()],
-  is_parallel: false,
-  timeout: 50, # Longer timeout for benchmark
-)
+if use_f32
+  test(
+    'test_benchmark_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_benchmark_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 50, # Longer timeout for benchmark
+  )
+endif
 
 # Add a test target for the Benchmark test - F64 version (when enabled)
-if enable_f64
+if not use_f32
   test(
     'test_benchmark_f64',
     find_program('qemu-system-arm'),
@@ -224,16 +238,18 @@ if enable_f64
 endif
 
 # Add a test target for the CMSIS-DSP F32 test
-test(
-  'test_cmsis_dsp_f32',
-  find_program('qemu-system-arm'),
-  args: common_test_args + ['-kernel', test_cmsis_dsp_f32_exe.full_path()],
-  is_parallel: false,
-  timeout: 15, # Longer timeout for benchmark
-)
+if use_f32
+  test(
+    'test_cmsis_dsp_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_cmsis_dsp_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 15, # Longer timeout for benchmark
+  )
+endif
 
 # Add a test target for the CMSIS-DSP F64 test
-if enable_f64
+if not use_f32
   test(
     'test_cmsis_dsp_f64',
     find_program('qemu-system-arm'),
@@ -244,7 +260,8 @@ if enable_f64
 endif
 
 # CMSIS-DSP Benchmark (F32 mode)
-test_cmsis_dsp_benchmark_f32_exe = executable(
+if use_f32
+  test_cmsis_dsp_benchmark_f32_exe = executable(
   'test_cmsis_dsp_benchmark_f32',
   ['cmsis_dsp_benchmark.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: [include_directories('.', '../include')],
@@ -252,19 +269,22 @@ test_cmsis_dsp_benchmark_f32_exe = executable(
   link_args: common_link_args,
   c_args: ['-DDEF_USE_F32'],
   install: false,
-)
+  )
+endif
 
 # Add a test target for the CMSIS-DSP benchmark F32 test
-test(
-  'test_cmsis_dsp_benchmark_f32',
-  find_program('qemu-system-arm'),
-  args: common_test_args + ['-kernel', test_cmsis_dsp_benchmark_f32_exe.full_path()],
-  is_parallel: false,
-  timeout: 15, # Longer timeout for benchmark
-)
+if use_f32
+  test(
+    'test_cmsis_dsp_benchmark_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_cmsis_dsp_benchmark_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 15, # Longer timeout for benchmark
+  )
+endif
 
 # CMSIS-DSP Benchmark (F64 mode - only built when F64 is enabled)
-if enable_f64
+if not use_f32
   test_cmsis_dsp_benchmark_f64_exe = executable(
     'test_cmsis_dsp_benchmark_f64',
     ['cmsis_dsp_benchmark.c', 'qemu_harness/vector_table_m7.c'],
@@ -287,7 +307,8 @@ if enable_f64
 endif
 
 # exp-rs Integration test - F32 mode
-test_exp_rs_integration_f32_exe = executable(
+if use_f32
+  test_exp_rs_integration_f32_exe = executable(
   'test_exp_rs_integration_f32',
   ['exp_rs_integration_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: [include_directories('.', '../include')],
@@ -295,19 +316,22 @@ test_exp_rs_integration_f32_exe = executable(
   link_args: common_link_args,
   c_args: ['-DDEF_USE_F32'],
   install: false,
-)
+  )
+endif
 
 # Add a test target for the exp-rs integration F32 test
-test(
-  'test_exp_rs_integration_f32',
-  find_program('qemu-system-arm'),
-  args: common_test_args + ['-kernel', test_exp_rs_integration_f32_exe.full_path()],
-  is_parallel: false,
-  timeout: 5,
-)
+if use_f32
+  test(
+    'test_exp_rs_integration_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_exp_rs_integration_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 5,
+  )
+endif
 
 # exp-rs Integration test - F64 mode (only when F64 is enabled)
-if enable_f64
+if not use_f32
   test_exp_rs_integration_f64_exe = executable(
     'test_exp_rs_integration_f64',
     ['exp_rs_integration_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
@@ -330,7 +354,8 @@ if enable_f64
 endif
 
 # exp-rs CMSIS Integration Benchmark (F32 mode)
-test_exp_rs_cmsis_benchmark_f32_exe = executable(
+if use_f32
+  test_exp_rs_cmsis_benchmark_f32_exe = executable(
   'test_exp_rs_cmsis_benchmark_f32',
   ['exp_rs_cmsis_benchmark.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: [include_directories('.', '../include')],
@@ -338,20 +363,23 @@ test_exp_rs_cmsis_benchmark_f32_exe = executable(
   link_args: common_link_args,
   c_args: ['-DDEF_USE_F32'],
   install: false,
-)
+  )
+endif
 
 # Add a test target for the exp-rs CMSIS Integration Benchmark F32
-test(
-  'test_exp_rs_cmsis_benchmark_f32',
-  find_program('qemu-system-arm'),
-  args: common_test_args
-  + ['-kernel', test_exp_rs_cmsis_benchmark_f32_exe.full_path()],
-  is_parallel: false,
-  timeout: 60, # Longer timeout for benchmark
-)
+if use_f32
+  test(
+    'test_exp_rs_cmsis_benchmark_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args
+    + ['-kernel', test_exp_rs_cmsis_benchmark_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 60, # Longer timeout for benchmark
+  )
+endif
 
 # exp-rs CMSIS Integration Benchmark (F64 mode - only built when F64 is enabled)
-if enable_f64
+if not use_f32
   test_exp_rs_cmsis_benchmark_f64_exe = executable(
     'test_exp_rs_cmsis_benchmark_f64',
     ['exp_rs_cmsis_benchmark.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
@@ -374,7 +402,8 @@ if enable_f64
 endif
 
 # DWT timer test (F32 mode)
-dwt_timer_test_exe = executable(
+if use_f32
+  dwt_timer_test_exe = executable(
   'dwt_timer_test',
   ['dwt_timer_test.c', 'qemu_harness/vector_table_m7.c'],
   include_directories: include_directories('.'),
@@ -382,13 +411,16 @@ dwt_timer_test_exe = executable(
   link_args: common_link_args,
   c_args: ['-DDEF_USE_F32'],
   install: false,
-)
+  )
+endif
 
 # Add a test target for the DWT timer test
-test(
-  'dwt_timer_test',
-  find_program('qemu-system-arm'),
-  args: common_test_args + ['-kernel', dwt_timer_test_exe.full_path()],
-  is_parallel: false,
-  timeout: 5,
-)
+if use_f32
+  test(
+    'dwt_timer_test',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', dwt_timer_test_exe.full_path()],
+    is_parallel: false,
+    timeout: 5,
+  )
+endif
