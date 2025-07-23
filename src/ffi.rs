@@ -389,7 +389,10 @@ pub struct EvalContextOpaque {
 /// passed to exp_rs_context_free when no longer needed to avoid memory leaks.
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_context_new() -> *mut EvalContextOpaque {
-    let ctx = Box::new(alloc::rc::Rc::new(EvalContext::new()));
+    let ctx_rc = alloc::rc::Rc::new(EvalContext::new());
+    // Enable AST caching by default for FFI contexts
+    ctx_rc.enable_ast_cache();
+    let ctx = Box::new(ctx_rc);
     Box::into_raw(ctx) as *mut EvalContextOpaque
 }
 
