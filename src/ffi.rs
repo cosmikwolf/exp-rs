@@ -389,7 +389,7 @@ pub struct EvalContextOpaque {
 /// passed to exp_rs_context_free when no longer needed to avoid memory leaks.
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_context_new() -> *mut EvalContextOpaque {
-    let ctx = Box::new(EvalContext::new());
+    let ctx = Box::new(alloc::rc::Rc::new(EvalContext::new()));
     Box::into_raw(ctx) as *mut EvalContextOpaque
 }
 
@@ -415,8 +415,8 @@ pub extern "C" fn exp_rs_context_free(ctx: *mut EvalContextOpaque) {
         return;
     }
     unsafe {
-        // Need to drop the Box explicitly
-        let _ = Box::from_raw(ctx as *mut EvalContext);
+        // Need to drop the Box<Rc<EvalContext>> explicitly
+        let _ = Box::from_raw(ctx as *mut alloc::rc::Rc<EvalContext>);
     }
 }
 
@@ -458,7 +458,7 @@ pub extern "C" fn exp_rs_context_register_expression_function(
         };
     }
     
-    let ctx = unsafe { &mut *(ctx as *mut EvalContext) };
+    let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
 
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
@@ -517,7 +517,8 @@ pub extern "C" fn exp_rs_context_register_expression_function(
         }
     }
 
-    match ctx.register_expression_function(
+    let ctx_mut = alloc::rc::Rc::make_mut(ctx_handle);
+    match ctx_mut.register_expression_function(
         name_str,
         &param_vec.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
         expr_str,
@@ -579,7 +580,7 @@ pub extern "C" fn exp_rs_context_unregister_expression_function(
         };
     }
     
-    let ctx = unsafe { &mut *(ctx as *mut EvalContext) };
+    let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
 
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
@@ -595,7 +596,8 @@ pub extern "C" fn exp_rs_context_unregister_expression_function(
         }
     };
 
-    match ctx.unregister_expression_function(name_str) {
+    let ctx_mut = alloc::rc::Rc::make_mut(ctx_handle);
+    match ctx_mut.unregister_expression_function(name_str) {
         Ok(was_removed) => EvalResult {
             status: 0,
             value: if was_removed { 1.0 } else { 0.0 },
@@ -649,7 +651,7 @@ pub extern "C" fn exp_rs_context_register_native_function(
         };
     }
     
-    let ctx = unsafe { &mut *(ctx as *mut EvalContext) };
+    let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
 
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
@@ -674,7 +676,8 @@ pub extern "C" fn exp_rs_context_register_native_function(
     };
 
     // Register the native function with the given name and arity
-    ctx.register_native_function(name_str, arity, implementation);
+    let ctx_mut = alloc::rc::Rc::make_mut(ctx_handle);
+    ctx_mut.register_native_function(name_str, arity, implementation);
 
     EvalResult {
         status: 0,
@@ -716,7 +719,7 @@ pub extern "C" fn exp_rs_context_set_parameter(
             error: ptr,
         };
     }
-    let ctx = unsafe { &mut *(ctx as *mut EvalContext) };
+    let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
 
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
@@ -732,7 +735,8 @@ pub extern "C" fn exp_rs_context_set_parameter(
         }
     };
 
-    ctx.set_parameter(name_str, value);
+    let ctx_mut = alloc::rc::Rc::make_mut(ctx_handle);
+    ctx_mut.set_parameter(name_str, value);
     
     EvalResult {
         status: 0,
@@ -773,7 +777,7 @@ pub extern "C" fn exp_rs_context_eval(
             error: ptr::null(),
         };
     }
-    let ctx = unsafe { &mut *(ctx as *mut EvalContext) };
+    let ctx_handle = unsafe { &*(ctx as *const alloc::rc::Rc<EvalContext>) };
     let cstr = unsafe { CStr::from_ptr(expr) };
     let expr_str = match cstr.to_str() {
         Ok(s) => s,
@@ -787,7 +791,7 @@ pub extern "C" fn exp_rs_context_eval(
             };
         }
     };
-    let ctx_rc = alloc::rc::Rc::new(ctx.clone());
+    let ctx_rc = ctx_handle.clone(); // Just increments refcount
     match interp(expr_str, Some(ctx_rc)) {
         Ok(val) => EvalResult {
             status: 0,
