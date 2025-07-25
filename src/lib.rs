@@ -390,6 +390,7 @@ pub use alloc::vec::Vec;
 
 // Ensure core::result::Result, core::result::Result::Ok, and core::result::Result::Err are in scope for no_std/serde
 
+pub mod batch_builder;
 pub mod context;
 pub mod engine;
 pub mod error;
@@ -400,6 +401,7 @@ pub mod functions;
 pub mod lexer;
 pub mod types;
 
+pub use batch_builder::{BatchBuilder, Param};
 pub use context::*;
 pub use engine::*;
 pub use functions::*;
@@ -410,6 +412,9 @@ pub use ffi::*;
 // Re-export recursion depth tracking functions for testing
 #[cfg(test)]
 pub use eval::recursion::{get_recursion_depth, reset_recursion_depth, set_max_recursion_depth};
+
+// Re-export iterative evaluation components for batch processing
+pub use eval::iterative::{eval_with_engine, EvalEngine};
 
 // Compile-time check: only one of f32 or f64 can be enabled
 /// Define the floating-point type based on feature flags

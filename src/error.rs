@@ -132,6 +132,16 @@ pub enum ExprError {
     /// This occurs when trying to create a heapless string that exceeds
     /// the maximum string length limit.
     StringTooLong,
+    
+    /// Error when attempting to add a parameter with a name that already exists.
+    ///
+    /// This occurs when trying to register a parameter that has already been registered.
+    DuplicateParameter(String),
+    
+    /// Error when attempting to access a parameter by an invalid index.
+    ///
+    /// This occurs when the provided index is out of bounds for the parameter list.
+    InvalidParameterIndex(usize),
 }
 
 #[cfg(not(test))]
@@ -186,6 +196,8 @@ impl fmt::Display for ExprError {
                 write!(f, "Capacity exceeded for {}", container_type)
             }
             ExprError::StringTooLong => write!(f, "String too long for heapless buffer"),
+            ExprError::DuplicateParameter(name) => write!(f, "Parameter '{}' already exists", name),
+            ExprError::InvalidParameterIndex(idx) => write!(f, "Invalid parameter index: {}", idx),
         }
     }
 }

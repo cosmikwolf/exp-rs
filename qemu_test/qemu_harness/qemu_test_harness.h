@@ -39,6 +39,7 @@ void test_assert(int condition, const char *message);
 /* Timing functions */
 void init_hardware_timer(void);  /* Primary function - initializes CMSDK Dual Timer */
 void init_dwt_counter(void);     /* Legacy function, calls init_hardware_timer */
+void reset_timer(void);          /* Reset timer counter to maximum value */
 void benchmark_start(void);
 void check_counter_rollover(void);
 uint32_t benchmark_stop(void);

@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define EXP_RS_CUSTOM_ALLOC
+
 
 #define EXP_RS_MAX_VARIABLES 16
 
@@ -78,6 +78,142 @@ typedef struct EvalResult {
 typedef struct EvalContextOpaque {
   uint8_t _private[0];
 } EvalContextOpaque;
+
+/**
+ * Status information for individual batch evaluation results.
+ *
+ * This structure tracks the outcome of each expression evaluation in a batch,
+ * allowing detailed error reporting when processing multiple expressions.
+ */
+typedef struct BatchStatus {
+  /**
+   * Error code: 0 = success, non-zero = error
+   */
+  int32_t code;
+  /**
+   * Index of the expression that produced this result (0-based)
+   */
+  uintptr_t expr_index;
+  /**
+   * Index of the batch item that produced this result (0-based)
+   */
+  uintptr_t batch_index;
+} BatchStatus;
+
+/**
+ * Request structure for batch evaluation of multiple expressions.
+ *
+ * This structure allows efficient evaluation of multiple expressions with
+ * different parameter values, reusing parsed ASTs and evaluation engines
+ * for significant performance improvements.
+ *
+ * # Memory Layout
+ *
+ * - `expressions`: Array of C strings containing the expressions to evaluate
+ * - `param_values`: 2D array where param_values[i] points to an array of values for parameter i
+ * - `results`: 2D array where results[i] points to an array to store results for expression i
+ *
+ * # Example
+ *
+ * ```c
+ * // Evaluate 3 expressions with 2 parameters over 1000 data points
+ * const char* exprs[] = {"a + b", "a * sin(b)", "sqrt(a*a + b*b)"};
+ * const char* params[] = {"a", "b"};
+ * Real a_values[1000] = {...};
+ * Real b_values[1000] = {...};
+ * Real* param_vals[] = {a_values, b_values};
+ * Real results1[1000], results2[1000], results3[1000];
+ * Real* results[] = {results1, results2, results3};
+ *
+ * BatchEvalRequest req = {
+ *     .expressions = exprs,
+ *     .expression_count = 3,
+ *     .param_names = params,
+ *     .param_count = 2,
+ *     .param_values = param_vals,
+ *     .batch_size = 1000,
+ *     .results = results,
+ *     .allocate_results = false,
+ *     .stop_on_error = false,
+ *     .statuses = NULL
+ * };
+ *
+ * int status = exp_rs_batch_eval(&req, ctx);
+ * ```
+ */
+typedef struct BatchEvalRequest {
+  /**
+   * Array of expression strings to evaluate
+   */
+  const char *const *expressions;
+  /**
+   * Number of expressions in the array
+   */
+  uintptr_t expression_count;
+  /**
+   * Array of parameter names (shared across all evaluations)
+   */
+  const char *const *param_names;
+  /**
+   * Number of parameters
+   */
+  uintptr_t param_count;
+  /**
+   * 2D array of parameter values: param_values[param_idx][batch_idx]
+   */
+  const Real *const *param_values;
+  /**
+   * Number of items in each parameter array (batch size)
+   */
+  uintptr_t batch_size;
+  /**
+   * 2D array for results: results[expr_idx][batch_idx]
+   * Must point to pre-allocated buffers
+   */
+  Real **results;
+  /**
+   * If true, stop evaluation on first error
+   */
+  bool stop_on_error;
+  /**
+   * Optional array for detailed error tracking
+   * Size should be expression_count * batch_size
+   * Can be NULL if detailed error tracking is not needed
+   */
+  struct BatchStatus *statuses;
+} BatchEvalRequest;
+
+/**
+ * Result structure for batch evaluation when using library allocation.
+ *
+ * This structure is returned when the library allocates the result arrays,
+ * providing both the results and allocation metadata.
+ */
+typedef struct BatchEvalResult {
+  /**
+   * Allocated 2D result array: results[expr_idx][batch_idx]
+   */
+  Real **results;
+  /**
+   * Number of expressions (rows in results)
+   */
+  uintptr_t expression_count;
+  /**
+   * Number of batch items (columns in results)
+   */
+  uintptr_t batch_size;
+  /**
+   * Overall status: 0 = success, non-zero = error
+   */
+  int32_t status;
+} BatchEvalResult;
+
+/**
+ * Opaque type for BatchBuilder
+ */
+typedef struct BatchBuilderOpaque {
+  uint8_t _data[0];
+} BatchBuilderOpaque;
 
 #if defined(USE_F32)
 #define TEST_PRECISION 1e-6
@@ -315,6 +451,334 @@ struct EvalResult exp_rs_context_set_parameter(struct EvalContextOpaque *ctx,
 __attribute__((aligned(8)))
 struct EvalResult exp_rs_context_eval(const char *expr,
                                       struct EvalContextOpaque *ctx);
+
+/**
+ * Evaluates multiple expressions with multiple parameter sets in a batch.
+ *
+ * This function provides high-performance batch evaluation by:
+ * - Parsing each expression only once
+ * - Reusing a single evaluation engine for all evaluations
+ * - Minimizing FFI overhead
+ *
+ * # Parameters
+ *
+ * * `request` - Pointer to a BatchEvalRequest structure containing:
+ *   - `expressions`: Array of expression strings to evaluate
+ *   - `expression_count`: Number of expressions
+ *   - `param_names`: Array of parameter names
+ *   - `param_count`: Number of parameters
+ *   - `param_values`: 2D array of parameter values [param_idx][batch_idx]
+ *   - `batch_size`: Number of items to evaluate
+ *   - `results`: 2D array to store results [expr_idx][batch_idx]
+ *   - `allocate_results`: Whether to allocate result arrays
+ *   - `stop_on_error`: Whether to stop on first error
+ *   - `statuses`: Optional array for error tracking
+ * * `ctx` - Pointer to the evaluation context
+ *
+ * # Returns
+ *
+ * 0 on success, non-zero error code on failure:
+ * - 1: NULL request or context
+ * - 2: Invalid request (zero expressions or batch size)
+ * - 3: NULL expression pointer
+ * - 4: Invalid UTF-8 in expression
+ * - 5: Expression parsing error
+ * - 6: Evaluation error (when stop_on_error is true)
+ * - 7: Memory allocation error
+ *
+ * # Safety
+ *
+ * This function is unsafe because it:
+ * 1. Dereferences raw pointers
+ * 2. Performs pointer arithmetic for array access
+ * 3. Assumes arrays are properly sized as specified
+ *
+ * The caller must ensure:
+ * - All pointers are valid and properly aligned
+ * - Arrays have the specified dimensions
+ * - The context is valid and not freed during evaluation
+ */
+__attribute__((aligned(8)))
+int32_t exp_rs_batch_eval(const struct BatchEvalRequest *request,
+                          struct EvalContextOpaque *ctx);
+
+/**
+ * Evaluates multiple expressions with batch allocation of results.
+ *
+ * This is a convenience wrapper around exp_rs_batch_eval that handles
+ * result allocation for you. The allocated results must be freed using
+ * exp_rs_batch_free_results.
+ *
+ * # Parameters
+ *
+ * * `request` - Pointer to a BatchEvalRequest structure
+ * * `ctx` - Pointer to the evaluation context
+ * * `result` - Pointer to a BatchEvalResult structure to receive results
+ *
+ * # Returns
+ *
+ * 0 on success, non-zero error code on failure (same as exp_rs_batch_eval)
+ *
+ * # Safety
+ *
+ * This function has the same safety requirements as exp_rs_batch_eval.
+ * Additionally, the caller must ensure that `result` points to valid memory.
+ */
+__attribute__((aligned(8)))
+int32_t exp_rs_batch_eval_alloc(const struct BatchEvalRequest *request,
+                                struct EvalContextOpaque *ctx,
+                                struct BatchEvalResult *result);
+
+/**
+ * Frees results allocated by exp_rs_batch_eval_alloc.
+ *
+ * This function releases memory allocated by the batch evaluation functions
+ * when allocate_results was true or when using exp_rs_batch_eval_alloc.
+ *
+ * # Parameters
+ *
+ * * `result` - Pointer to a BatchEvalResult structure containing allocated results
+ *
+ * # Safety
+ *
+ * This function is unsafe because it:
+ * 1. Dereferences a raw pointer
+ * 2. Assumes the results were allocated by this library
+ *
+ * The caller must ensure:
+ * - The result pointer is valid
+ * - The results were allocated by exp_rs_batch_eval_alloc
+ * - The results have not already been freed
+ */
+__attribute__((aligned(8))) void exp_rs_batch_free_results(struct BatchEvalResult *result);
+
+/**
+ * Batch evaluate multiple expressions with a pre-existing context
+ */
+__attribute__((aligned(8)))
+int32_t exp_rs_batch_eval_with_context(const struct BatchEvalRequest *request,
+                                       const struct EvalContextOpaque *ctx);
+
+/**
+ * Creates a new batch builder for efficient expression evaluation.
+ *
+ * The batch builder allows you to:
+ * - Pre-parse expressions once
+ * - Reuse a single evaluation engine
+ * - Update parameters efficiently
+ * - Evaluate all expressions in one call
+ *
+ * # Returns
+ *
+ * A pointer to the new batch builder, or NULL on allocation failure.
+ *
+ * # Safety
+ *
+ * The returned pointer must be freed with `exp_rs_batch_builder_free`.
+ */
+__attribute__((aligned(8))) struct BatchBuilderOpaque *exp_rs_batch_builder_new(void);
+
+/**
+ * Frees a batch builder.
+ *
+ * # Safety
+ *
+ * This function is unsafe because it:
+ * - Dereferences a raw pointer
+ * - Frees memory allocated by Rust
+ *
+ * The caller must ensure:
+ * - The pointer was allocated by `exp_rs_batch_builder_new`
+ * - The pointer is not used after this call
+ * - The pointer is not freed multiple times
+ */
+__attribute__((aligned(8))) void exp_rs_batch_builder_free(struct BatchBuilderOpaque *builder);
+
+/**
+ * Adds an expression to the batch builder.
+ *
+ * The expression is parsed immediately and cached for efficient evaluation.
+ *
+ * # Parameters
+ *
+ * * `builder` - Pointer to the batch builder
+ * * `expr` - The expression string to add
+ *
+ * # Returns
+ *
+ * The index of the added expression (>= 0) on success, or negative error code:
+ * - `-1`: NULL pointer
+ * - `-2`: Parse error
+ * - `-3`: Invalid UTF-8 in expression
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences raw pointers.
+ * The caller must ensure all pointers are valid.
+ */
+__attribute__((aligned(8)))
+int32_t exp_rs_batch_builder_add_expression(struct BatchBuilderOpaque *builder,
+                                            const char *expr);
+
+/**
+ * Adds a parameter to the batch builder.
+ *
+ * # Parameters
+ *
+ * * `builder` - Pointer to the batch builder
+ * * `name` - The parameter name
+ * * `initial_value` - Initial value for the parameter
+ *
+ * # Returns
+ *
+ * The index of the added parameter (>= 0) on success, or negative error code:
+ * - `-1`: NULL pointer
+ * - `-2`: Duplicate parameter name or other error
+ * - `-3`: Invalid UTF-8 in parameter name
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences raw pointers.
+ * The caller must ensure all pointers are valid.
+ */
+__attribute__((aligned(8)))
+int32_t exp_rs_batch_builder_add_parameter(struct BatchBuilderOpaque *builder,
+                                           const char *name,
+                                           Real initial_value);
+
+/**
+ * Sets a parameter value by index.
+ *
+ * This is the fastest way to update parameter values.
+ *
+ * # Parameters
+ *
+ * * `builder` - Pointer to the batch builder
+ * * `idx` - Parameter index (from `add_parameter`)
+ * * `value` - New value for the parameter
+ *
+ * # Returns
+ *
+ * 0 on success, negative error code on failure:
+ * - `-1`: NULL pointer
+ * - `-2`: Invalid parameter index
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences raw pointers.
+ */
+__attribute__((aligned(8)))
+int32_t exp_rs_batch_builder_set_param(struct BatchBuilderOpaque *builder,
+                                       uintptr_t idx,
+                                       Real value);
+
+/**
+ * Sets a parameter value by name.
+ *
+ * This is more convenient but slower than setting by index.
+ *
+ * # Parameters
+ *
+ * * `builder` - Pointer to the batch builder
+ * * `name` - Parameter name
+ * * `value` - New value for the parameter
+ *
+ * # Returns
+ *
+ * 0 on success, negative error code on failure:
+ * - `-1`: NULL pointer
+ * - `-2`: Unknown parameter name
+ * - `-3`: Invalid UTF-8 in parameter name
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences raw pointers.
+ */
+__attribute__((aligned(8)))
+int32_t exp_rs_batch_builder_set_param_by_name(struct BatchBuilderOpaque *builder,
+                                               const char *name,
+                                               Real value);
+
+/**
+ * Evaluates all expressions with current parameter values.
+ *
+ * This function updates the context with current parameter values and
+ * evaluates all expressions using cached ASTs and a reusable engine.
+ *
+ * # Parameters
+ *
+ * * `builder` - Pointer to the batch builder
+ * * `ctx` - Pointer to the evaluation context
+ *
+ * # Returns
+ *
+ * 0 on success, negative error code on failure:
+ * - `-1`: NULL pointer
+ * - `-2`: Evaluation error
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences raw pointers.
+ */
+__attribute__((aligned(8)))
+int32_t exp_rs_batch_builder_eval(struct BatchBuilderOpaque *builder,
+                                  struct EvalContextOpaque *ctx);
+
+/**
+ * Gets the result of a specific expression by index.
+ *
+ * # Parameters
+ *
+ * * `builder` - Pointer to the batch builder
+ * * `expr_idx` - Expression index (from `add_expression`)
+ *
+ * # Returns
+ *
+ * The result value, or NaN if the index is invalid.
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences raw pointers.
+ */
+__attribute__((aligned(8)))
+Real exp_rs_batch_builder_get_result(const struct BatchBuilderOpaque *builder,
+                                     uintptr_t expr_idx);
+
+/**
+ * Gets the number of parameters in the batch builder.
+ *
+ * # Parameters
+ *
+ * * `builder` - Pointer to the batch builder
+ *
+ * # Returns
+ *
+ * The number of parameters, or 0 if the pointer is NULL.
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences raw pointers.
+ */
+__attribute__((aligned(8)))
+uintptr_t exp_rs_batch_builder_param_count(const struct BatchBuilderOpaque *builder);
+
+/**
+ * Gets the number of expressions in the batch builder.
+ *
+ * # Parameters
+ *
+ * * `builder` - Pointer to the batch builder
+ *
+ * # Returns
+ *
+ * The number of expressions, or 0 if the pointer is NULL.
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences raw pointers.
+ */
+__attribute__((aligned(8)))
+uintptr_t exp_rs_batch_builder_expression_count(const struct BatchBuilderOpaque *builder);
 
 #if defined(EXP_RS_CUSTOM_ALLOC)
 extern void *exp_rs_malloc(uintptr_t size);

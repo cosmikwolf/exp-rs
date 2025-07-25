@@ -585,3 +585,40 @@ impl EvalEngine {
             .ok_or_else(|| ExprError::Other("Value stack underflow".to_string()))
     }
 }
+
+/// Evaluate an expression using a provided engine (avoids engine allocation).
+///
+/// This function is useful for batch evaluation where the same engine can be
+/// reused across multiple evaluations, avoiding the overhead of creating a
+/// new engine for each evaluation.
+///
+/// # Parameters
+///
+/// * `ast` - The abstract syntax tree to evaluate
+/// * `ctx` - Optional evaluation context containing variables and functions
+/// * `engine` - Mutable reference to an existing evaluation engine
+///
+/// # Returns
+///
+/// The result of evaluating the expression, or an error if evaluation fails
+///
+/// # Example
+///
+/// ```
+/// use exp_rs::eval::{eval_with_engine, EvalEngine};
+/// use exp_rs::engine::parse_expression;
+/// use exp_rs::context::EvalContext;
+/// use std::rc::Rc;
+///
+/// let ast = parse_expression("2 + 3").unwrap();
+/// let mut engine = EvalEngine::new();
+/// let result = eval_with_engine(&ast, None, &mut engine).unwrap();
+/// assert_eq!(result, 5.0);
+/// ```
+pub fn eval_with_engine(
+    ast: &AstExpr,
+    ctx: Option<Rc<EvalContext>>,
+    engine: &mut EvalEngine,
+) -> Result<Real, ExprError> {
+    engine.eval(ast, ctx)
+}

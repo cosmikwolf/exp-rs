@@ -424,3 +424,91 @@ if use_f32
     timeout: 5,
   )
 endif
+
+# Batch Performance test (F32 mode)
+if use_f32
+  batch_performance_test_f32_exe = executable(
+    'batch_performance_test_f32',
+    ['batch_performance_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
+    include_directories: include_directories('.', '../include'),
+    dependencies: [qemu_harness_dep, exp_rs_dep],
+    link_args: common_link_args,
+    c_args: ['-DDEF_USE_F32'],
+    install: false,
+  )
+endif
+
+# Add a test target for the batch performance test F32
+if use_f32
+  test(
+    'batch_performance_test_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', batch_performance_test_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 30,  # Longer timeout for performance test
+  )
+endif
+
+# Batch Performance test (F64 mode - only built when F64 is enabled)
+if not use_f32
+  batch_performance_test_f64_exe = executable(
+    'batch_performance_test_f64',
+    ['batch_performance_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
+    include_directories: include_directories('.', '../include'),
+    dependencies: [qemu_harness_dep, exp_rs_dep],
+    link_args: common_link_args,
+    c_args: ['-DDEF_USE_F64', '-DARM_MATH_DOUBLE'],
+    install: false,
+  )
+
+  # Add a test target for the batch performance test F64
+  test(
+    'batch_performance_test_f64',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', batch_performance_test_f64_exe.full_path()],
+    is_parallel: false,
+    timeout: 30,  # Longer timeout for performance test
+  )
+endif
+
+# Test for batch parameter order debugging
+if not use_f32
+  test_batch_param_order_exe = executable(
+    'test_batch_param_order',
+    ['test_batch_param_order.c', 'qemu_harness/vector_table_m7.c'],
+    include_directories: include_directories('.', '../include'),
+    dependencies: [qemu_harness_dep, exp_rs_dep],
+    link_args: common_link_args,
+    c_args: ['-DDEF_USE_F64'],
+    install: false,
+  )
+
+  test(
+    'test_batch_param_order',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_batch_param_order_exe.full_path()],
+    is_parallel: false,
+    timeout: 5,
+  )
+endif
+
+# Test for BatchBuilder API
+if not use_f32
+  test_batch_builder_exe = executable(
+    'test_batch_builder',
+    ['test_batch_builder.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
+    include_directories: include_directories('.', '../include'),
+    dependencies: [qemu_harness_dep, exp_rs_dep],
+    link_args: common_link_args,
+    c_args: ['-DDEF_USE_F64'],
+    install: false,
+  )
+
+  test(
+    'test_batch_builder',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_batch_builder_exe.full_path()],
+    is_parallel: false,
+    timeout: 10,
+  )
+endif
