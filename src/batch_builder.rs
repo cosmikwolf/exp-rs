@@ -10,6 +10,8 @@ use crate::eval::iterative::{EvalEngine, eval_with_engine};
 use alloc::vec::Vec;
 use alloc::string::{String, ToString};
 use alloc::rc::Rc;
+use heapless::FnvIndexMap;
+use crate::types::{HString, TryIntoHeaplessString};
 
 /// A parameter with its name and current value
 #[derive(Clone, Debug)]
@@ -100,25 +102,34 @@ impl BatchBuilder {
     
     /// Evaluate all expressions with current parameter values
     ///
-    /// This updates the context with current parameter values and
-    /// evaluates all expressions using the cached ASTs and reusable engine.
+    /// This uses parameter overrides instead of modifying the context,
+    /// providing better performance and avoiding parameter accumulation.
     pub fn eval(&mut self, base_ctx: &Rc<EvalContext>) -> Result<(), ExprError> {
-        // Create context with current parameter values
-        let mut ctx = base_ctx.clone();
-        let ctx_mut = Rc::make_mut(&mut ctx);
-        
-        // Update all parameters in context
+        // Build parameter override map
+        let mut param_map = FnvIndexMap::<HString, Real, 16>::new();
         for param in &self.params {
-            ctx_mut.set_parameter(&param.name, param.value)?;
+            let hname = param.name.as_str().try_into_heapless()?;
+            param_map.insert(hname, param.value)
+                .map_err(|_| ExprError::CapacityExceeded("parameter overrides"))?;
         }
         
-        // Evaluate each expression
+        // Set parameter overrides in engine
+        self.engine.set_param_overrides(param_map);
+        
+        // Evaluate each expression with the original context
         for (i, (_, ast)) in self.expressions.iter().enumerate() {
-            match eval_with_engine(ast, Some(ctx.clone()), &mut self.engine) {
+            match eval_with_engine(ast, Some(base_ctx.clone()), &mut self.engine) {
                 Ok(value) => self.results[i] = value,
-                Err(e) => return Err(e),
+                Err(e) => {
+                    // Clear overrides on error
+                    self.engine.clear_param_overrides();
+                    return Err(e);
+                }
             }
         }
+        
+        // Clear parameter overrides when done
+        self.engine.clear_param_overrides();
         
         Ok(())
     }

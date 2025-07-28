@@ -7,7 +7,8 @@
       "Bash(cargo test:*)",
       "Bash(cargo run:*)",
       "Bash(timeout 30 cargo run --example basic)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   },

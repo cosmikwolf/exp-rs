@@ -18,6 +18,7 @@ use alloc::rc::Rc;
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::ToString;
+use heapless::FnvIndexMap;
 
 /// Maximum depth of the operation stack (prevents runaway evaluation)
 const MAX_STACK_DEPTH: usize = 1000;
@@ -45,6 +46,8 @@ pub struct EvalEngine {
     ctx_stack: ContextStack,
     /// Function cache
     func_cache: BTreeMap<HString, Option<FunctionCacheEntry>>,
+    /// Parameter overrides for batch evaluation (avoids context modification)
+    param_overrides: Option<FnvIndexMap<HString, Real, 16>>,
 }
 
 impl Default for EvalEngine {
@@ -61,6 +64,7 @@ impl EvalEngine {
             value_stack: Vec::with_capacity(INITIAL_VALUE_CAPACITY),
             ctx_stack: ContextStack::new(),
             func_cache: BTreeMap::new(),
+            param_overrides: None,
         }
     }
     
@@ -327,7 +331,15 @@ impl EvalEngine {
     
     /// Process variable lookup
     fn process_variable_lookup(&mut self, name: HString, ctx_id: usize) -> Result<(), ExprError> {
-        // Try context stack first
+        // Check parameter overrides first (highest priority for batch evaluation)
+        if let Some(ref overrides) = self.param_overrides {
+            if let Some(&value) = overrides.get(&name) {
+                self.value_stack.push(value);
+                return Ok(());
+            }
+        }
+        
+        // Try context stack next
         if let Some(value) = self.ctx_stack.lookup_variable(ctx_id, &name) {
             self.value_stack.push(value);
             return Ok(());
@@ -583,6 +595,30 @@ impl EvalEngine {
     fn pop_value(&mut self) -> Result<Real, ExprError> {
         self.value_stack.pop()
             .ok_or_else(|| ExprError::Other("Value stack underflow".to_string()))
+    }
+    
+    /// Set parameter overrides for batch evaluation.
+    /// These take precedence over context variables during lookup.
+    pub fn set_param_overrides(&mut self, params: FnvIndexMap<HString, Real, 16>) {
+        self.param_overrides = Some(params);
+    }
+    
+    /// Clear parameter overrides.
+    pub fn clear_param_overrides(&mut self) {
+        self.param_overrides = None;
+    }
+    
+    /// Execute a function with parameter overrides, ensuring they are cleared afterwards.
+    /// This provides RAII-style cleanup for safe batch evaluation.
+    pub fn with_param_overrides<F, R>(&mut self, params: FnvIndexMap<HString, Real, 16>, f: F) -> R 
+    where 
+        F: FnOnce(&mut Self) -> R 
+    {
+        let old_overrides = self.param_overrides.take();
+        self.param_overrides = Some(params);
+        let result = f(self);
+        self.param_overrides = old_overrides;
+        result
     }
 }
 

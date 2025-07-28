@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
+#include <math.h>
 #include "include/exp_rs.h"
 
 // Configuration for embedded system
@@ -46,6 +47,15 @@ typedef struct {
 // Global pool - in embedded systems this would be in a specific memory section
 static EmbeddedPool g_pool = {0};
 
+// Native function wrappers
+Real native_sin(const Real* args, uintptr_t n_args) {
+    return sin(args[0]);
+}
+
+Real native_sqrt(const Real* args, uintptr_t n_args) {
+    return sqrt(args[0]);
+}
+
 // Initialize the memory pool - called once at startup
 int embedded_pool_init(void) {
     // Define expressions (these would come from your config)
@@ -68,6 +78,23 @@ int embedded_pool_init(void) {
     g_pool.eval_context = exp_rs_context_new();
     if (!g_pool.eval_context) {
         printf("Failed to create context\n");
+        return -1;
+    }
+    
+    // Register required math functions
+    EvalResult reg_result;
+    
+    reg_result = exp_rs_context_register_native_function(g_pool.eval_context, "sin", 1, native_sin);
+    if (reg_result.status != 0) {
+        printf("Failed to register sin function: %s\n", reg_result.error);
+        exp_rs_free_error((char*)reg_result.error);
+        return -1;
+    }
+    
+    reg_result = exp_rs_context_register_native_function(g_pool.eval_context, "sqrt", 1, native_sqrt);
+    if (reg_result.status != 0) {
+        printf("Failed to register sqrt function: %s\n", reg_result.error);
+        exp_rs_free_error((char*)reg_result.error);
         return -1;
     }
     

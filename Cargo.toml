@@ -57,3 +57,7 @@ harness = false
 [[bench]]
 name = "native_benchmark"
 harness = false
+
+[[example]]
+name = "context_memory"
+path = "benches/context_memory_analysis.rs"

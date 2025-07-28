@@ -1299,6 +1299,8 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
     use crate::engine::parse_expression;
     use crate::eval::iterative::{EvalEngine, eval_with_engine};
     use alloc::rc::Rc;
+    use heapless::FnvIndexMap;
+    use crate::types::{HString, TryIntoHeaplessString};
     if request.is_null() || ctx.is_null() {
         return -1;
     }
@@ -1316,12 +1318,14 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
         return -1;
     }
 
-    // Get the context
+    // Get the context (no longer need to clone and modify it)
     let ctx_handle = unsafe { &*(ctx as *const alloc::rc::Rc<EvalContext>) };
-    let mut base_ctx = ctx_handle.clone();
 
     // Create a single evaluation engine to reuse
     let mut engine = EvalEngine::new();
+    
+    // Pre-allocate parameter override map
+    let mut param_map = FnvIndexMap::<HString, Real, 16>::new();
 
     let mut any_error = false;
 
@@ -1421,10 +1425,10 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
 
         // Evaluate for each batch
         for batch_idx in 0..request.batch_size {
-            // Update parameters in context using Rc::make_mut
-            let ctx_mut = Rc::make_mut(&mut base_ctx);
-
-            // Set parameters for this batch
+            // Clear and build parameter map for this batch
+            param_map.clear();
+            
+            // Set parameters for this batch in the override map
             for param_idx in 0..request.param_count {
                 let param_name_ptr = unsafe { *request.param_names.add(param_idx) };
                 if param_name_ptr.is_null() {
@@ -1438,15 +1442,19 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
                     if !param_values_row.is_null() {
                         // Get value for this batch index
                         let param_value = unsafe { *param_values_row.add(batch_idx) };
-                        ctx_mut.set_parameter(param_name, param_value);
+                        // Add to override map instead of modifying context
+                        if let Ok(hname) = param_name.try_into_heapless() {
+                            let _ = param_map.insert(hname, param_value);
+                        }
                     }
                 }
             }
 
-            // Evaluate using the reusable engine
-            // Note: base_ctx is already the correct context with updated parameters
-            // No need to clone again since Rc::make_mut already handles copy-on-write
-            match eval_with_engine(&ast, Some(base_ctx.clone()), &mut engine) {
+            // Set parameter overrides in engine
+            engine.set_param_overrides(param_map.clone());
+            
+            // Evaluate using the original context without modification
+            match eval_with_engine(&ast, Some(ctx_handle.clone()), &mut engine) {
                 Ok(value) => {
                     unsafe {
                         *result_ptr.add(batch_idx) = value;
@@ -1475,6 +1483,7 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
                     }
                     any_error = true;
                     if request.stop_on_error {
+                        engine.clear_param_overrides();
                         return -5;
                     }
                 }
@@ -1482,6 +1491,9 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
         }
     }
 
+    // Clear parameter overrides when done
+    engine.clear_param_overrides();
+    
     if any_error { -10 } else { 0 }
 }
 
