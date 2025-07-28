@@ -847,6 +847,16 @@ pub struct BatchStatus {
 /// - `param_values`: 2D array where param_values[i] points to an array of values for parameter i
 /// - `results`: 2D array where results[i] points to an array to store results for expression i
 ///
+/// # Memory Ownership
+///
+/// The caller owns all memory passed to this structure and is responsible for:
+/// - Keeping all pointers valid for the duration of the evaluation
+/// - Freeing the memory after the evaluation completes
+/// - Pre-allocating result arrays unless using exp_rs_batch_eval_alloc
+///
+/// For embedded systems, consider pre-allocating all arrays at startup to avoid
+/// runtime allocations. See test_embedded_pool.c for an example.
+///
 /// # Example
 ///
 /// ```c
@@ -1138,6 +1148,17 @@ pub extern "C" fn exp_rs_batch_eval(
 /// result allocation for you. The allocated results must be freed using
 /// exp_rs_batch_free_results.
 ///
+/// # Memory Management
+///
+/// This function allocates memory for results in the following pattern:
+/// 1. Creates Vec<Vec<Real>> for result buffers
+/// 2. Converts to Box<[Vec<Real>]> and leaks it
+/// 3. Creates Vec<*mut Real> for pointer array
+/// 4. Converts to Box<[*mut Real]> and leaks it
+///
+/// The exp_rs_batch_free_results function must be called to properly
+/// deallocate this memory. Do not attempt to free the memory manually.
+///
 /// # Parameters
 ///
 /// * `request` - Pointer to a BatchEvalRequest structure
@@ -1227,20 +1248,38 @@ pub extern "C" fn exp_rs_batch_free_results(result: *mut BatchEvalResult) {
 
     if !result.results.is_null() && result.expression_count > 0 {
         unsafe {
-            // First, free each row of results
-            let results_array =
-                core::slice::from_raw_parts_mut(result.results, result.expression_count);
-
+            // IMPORTANT: This function must match the allocation pattern in exp_rs_batch_eval_alloc
+            // The memory was allocated as:
+            // 1. Vec<Vec<Real>> -> Box<[Vec<Real>]> (leaked)
+            // 2. Vec<*mut Real> -> Box<[*mut Real]> (leaked)
+            
+            // First, reconstruct the boxed slice of pointers
+            let ptrs_slice = core::slice::from_raw_parts_mut(
+                result.results, 
+                result.expression_count
+            );
+            
+            // For each expression, we need to reconstruct the Vec that was part of the leaked slice
             for i in 0..result.expression_count {
-                if !results_array[i].is_null() {
-                    // Free the row (Vec<Real>)
-                    let _ =
-                        Vec::from_raw_parts(results_array[i], result.batch_size, result.batch_size);
+                if !ptrs_slice[i].is_null() {
+                    // Each buffer was originally a Vec<Real> with capacity = batch_size
+                    let _ = Vec::from_raw_parts(
+                        ptrs_slice[i], 
+                        result.batch_size,    // length
+                        result.batch_size     // capacity
+                    );
                 }
             }
-
-            // Then free the array of row pointers
-            let _ = Box::from_raw(result.results);
+            
+            // The original allocation was a Box<[Vec<Real>]> that was leaked
+            // We can't reconstruct it directly because the Vecs have been moved out
+            // But we still need to free the pointer array which was Box<[*mut Real]>
+            let ptrs_vec = Vec::from_raw_parts(
+                result.results,
+                result.expression_count,
+                result.expression_count
+            );
+            drop(ptrs_vec);
         }
 
         // Clear the result structure
@@ -1405,6 +1444,8 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
             }
 
             // Evaluate using the reusable engine
+            // Note: base_ctx is already the correct context with updated parameters
+            // No need to clone again since Rc::make_mut already handles copy-on-write
             match eval_with_engine(&ast, Some(base_ctx.clone()), &mut engine) {
                 Ok(value) => {
                     unsafe {

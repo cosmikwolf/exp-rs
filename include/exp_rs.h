@@ -113,6 +113,16 @@ typedef struct BatchStatus {
  * - `param_values`: 2D array where param_values[i] points to an array of values for parameter i
  * - `results`: 2D array where results[i] points to an array to store results for expression i
  *
+ * # Memory Ownership
+ *
+ * The caller owns all memory passed to this structure and is responsible for:
+ * - Keeping all pointers valid for the duration of the evaluation
+ * - Freeing the memory after the evaluation completes
+ * - Pre-allocating result arrays unless using exp_rs_batch_eval_alloc
+ *
+ * For embedded systems, consider pre-allocating all arrays at startup to avoid
+ * runtime allocations. See test_embedded_pool.c for an example.
+ *
  * # Example
  *
  * ```c
@@ -508,6 +518,17 @@ int32_t exp_rs_batch_eval(const struct BatchEvalRequest *request,
  * This is a convenience wrapper around exp_rs_batch_eval that handles
  * result allocation for you. The allocated results must be freed using
  * exp_rs_batch_free_results.
+ *
+ * # Memory Management
+ *
+ * This function allocates memory for results in the following pattern:
+ * 1. Creates Vec<Vec<Real>> for result buffers
+ * 2. Converts to Box<[Vec<Real>]> and leaks it
+ * 3. Creates Vec<*mut Real> for pointer array
+ * 4. Converts to Box<[*mut Real]> and leaks it
+ *
+ * The exp_rs_batch_free_results function must be called to properly
+ * deallocate this memory. Do not attempt to free the memory manually.
  *
  * # Parameters
  *
