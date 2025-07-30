@@ -19,6 +19,7 @@ hash32 = "0.2.1"
 bitflags = "2.9.0"
 libm = { version = "0.2", optional = true }
 serde = { version = "1.0", features = ["derive"], default-features = false }
+bumpalo = { version = "3.16", default-features = false }
 [features]
 default = ["libm"]
 f32 = []
@@ -44,6 +45,12 @@ lto = true        # Enable link-time optimization
 codegen-units = 1 # Use single codegen unit for better optimization
 debug = true
 
+[profile.bench]
+opt-level = 0     # No optimization for debugging
+debug = true      # Keep debug symbols
+lto = false       # Disable LTO for faster builds
+codegen-units = 16 # Default codegen units
+
 [build-dependencies]
 cbindgen = "0.29"
 
@@ -51,13 +58,5 @@ cbindgen = "0.29"
 criterion = "0.5"
 
 [[bench]]
-name = "batch_benchmark"
+name = "consolidated_benchmark"
 harness = false
-
-[[bench]]
-name = "native_benchmark"
-harness = false
-
-[[example]]
-name = "context_memory"
-path = "benches/context_memory_analysis.rs"

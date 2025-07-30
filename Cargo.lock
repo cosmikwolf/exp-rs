@@ -276,6 +276,7 @@ name = "exp-rs"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "bumpalo",
  "cbindgen",
  "criterion",
  "hash32 0.2.1",

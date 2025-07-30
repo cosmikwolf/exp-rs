@@ -8,7 +8,8 @@
       "Bash(cargo run:*)",
       "Bash(timeout 30 cargo run --example basic)",
       "Bash(find:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "mcp__tree_sitter__find_text"
     ],
     "deny": []
   },
