@@ -24,9 +24,6 @@ use alloc::string::{String, ToString};
 pub trait CustomFunction {
     fn params(&self) -> Vec<String>;
     fn body_str(&self) -> String;
-    fn compiled_ast(&self) -> Option<&AstExpr> {
-        None
-    }
 }
 
 impl CustomFunction for crate::context::UserFunction {
@@ -44,9 +41,6 @@ impl CustomFunction for crate::types::ExpressionFunction {
     }
     fn body_str(&self) -> String {
         self.expression.clone()
-    }
-    fn compiled_ast(&self) -> Option<&AstExpr> {
-        Some(&self.compiled_ast)
     }
 }
 
@@ -90,13 +84,10 @@ where
 
     // We'll use the passed-in function cache directly
 
-    // Use precompiled AST if available, else parse body string
-    let body_ast = if let Some(ast) = func.compiled_ast() {
-        ast.clone()
-    } else {
-        let param_names_str: Vec<String> = func.params().iter().map(|c| c.to_string()).collect();
-        crate::engine::parse_expression_with_reserved(&func.body_str(), Some(&param_names_str))?
-    };
+    // Parse body string on demand
+    // TODO: This needs to be updated to use arena allocation
+    let param_names_str: Vec<String> = func.params().iter().map(|c| c.to_string()).collect();
+    panic!("Expression functions need to be converted to template pattern - cannot parse without arena");
 
     // No global cache needed - we use per-call variable caches
 
@@ -161,7 +152,7 @@ where
                 let mut arg_values = Vec::with_capacity(args.len());
 
                 // Evaluate each argument in the proper context
-                for arg in args {
+                for arg in args.iter() {
                     // Recursively call our custom evaluator
                     let arg_val =
                         eval_custom_function_ast(arg, func_ctx, global_ctx, func_cache, var_cache)?;
@@ -210,19 +201,8 @@ where
                             nested_func_ctx.function_registry = parent.function_registry.clone();
                         }
 
-                        // Evaluate directly using the AST without going through eval_expression_function
-                        let result = eval_custom_function_ast(
-                            &expr_fn.compiled_ast,
-                            &nested_func_ctx,
-                            global_ctx,
-                            func_cache,
-                            var_cache,
-                        );
-                        
-                        // Ensure we always decrement the counter after evaluation
-                        decrement_recursion_depth();
-                        
-                        result
+                        // TODO: Expression functions need arena conversion
+                        panic!("Expression functions need to be converted to template pattern")
                     }
                 } else {
                     // Not found in the contexts, try built-in functions
@@ -376,16 +356,12 @@ where
             nested_func_ctx.function_registry = parent.function_registry.clone();
         }
 
-        // Evaluate the expression with our custom evaluator
-        eval_custom_function_ast(
-            &expr_fn.compiled_ast,
-            &nested_func_ctx,
-            global_ctx.as_ref(),
-            func_cache,
-            var_cache,
-        )
+        // TODO: Expression functions need arena conversion
+        panic!("Expression functions need to be converted to template pattern")
     }
 
+    // TODO: Remove this block when expression functions are converted
+    /*
     // Debug output for the polynomial function
     #[cfg(test)]
     if name == "polynomial" && arg_values.len() == 1 {
@@ -495,4 +471,5 @@ where
     }
 
     result
+    */
 }

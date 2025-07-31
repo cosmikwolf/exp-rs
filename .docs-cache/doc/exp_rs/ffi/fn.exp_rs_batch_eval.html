@@ -1,0 +1,54 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Evaluates multiple expressions with multiple parameter sets in a batch."><title>exp_rs_batch_eval in exp_rs::ffi - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-84e720fa.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="exp_rs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (45f256d9d 2025-05-27)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-fd3af306.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../exp_rs/index.html">exp_rs</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">exp_<wbr>rs_<wbr>batch_<wbr>eval</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#parameters" title="Parameters">Parameters</a></li><li><a href="#returns" title="Returns">Returns</a></li><li><a href="#safety" title="Safety">Safety</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In exp_<wbr>rs::<wbr>ffi</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">exp_rs</a>::<wbr><a href="index.html">ffi</a></div><h1>Function <span class="fn">exp_rs_batch_eval</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/exp_rs/ffi.rs.html#977-1141">Source</a> </span></div><pre class="rust item-decl"><code>#[no_mangle]
+pub extern &quot;C&quot; fn exp_rs_batch_eval(
+    request: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.pointer.html">*const </a><a class="struct" href="struct.BatchEvalRequest.html" title="struct exp_rs::ffi::BatchEvalRequest">BatchEvalRequest</a>,
+    ctx: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.pointer.html">*mut </a><a class="struct" href="struct.EvalContextOpaque.html" title="struct exp_rs::ffi::EvalContextOpaque">EvalContextOpaque</a>,
+) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.i32.html">i32</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Evaluates multiple expressions with multiple parameter sets in a batch.</p>
+<p>This function provides high-performance batch evaluation by:</p>
+<ul>
+<li>Parsing each expression only once</li>
+<li>Reusing a single evaluation engine for all evaluations</li>
+<li>Minimizing FFI overhead</li>
+</ul>
+<h2 id="parameters"><a class="doc-anchor" href="#parameters">§</a>Parameters</h2>
+<ul>
+<li><code>request</code> - Pointer to a BatchEvalRequest structure containing:
+<ul>
+<li><code>expressions</code>: Array of expression strings to evaluate</li>
+<li><code>expression_count</code>: Number of expressions</li>
+<li><code>param_names</code>: Array of parameter names</li>
+<li><code>param_count</code>: Number of parameters</li>
+<li><code>param_values</code>: 2D array of parameter values [param_idx][batch_idx]</li>
+<li><code>batch_size</code>: Number of items to evaluate</li>
+<li><code>results</code>: 2D array to store results [expr_idx][batch_idx]</li>
+<li><code>allocate_results</code>: Whether to allocate result arrays</li>
+<li><code>stop_on_error</code>: Whether to stop on first error</li>
+<li><code>statuses</code>: Optional array for error tracking</li>
+</ul>
+</li>
+<li><code>ctx</code> - Pointer to the evaluation context</li>
+</ul>
+<h2 id="returns"><a class="doc-anchor" href="#returns">§</a>Returns</h2>
+<p>0 on success, non-zero error code on failure:</p>
+<ul>
+<li>1: NULL request or context</li>
+<li>2: Invalid request (zero expressions or batch size)</li>
+<li>3: NULL expression pointer</li>
+<li>4: Invalid UTF-8 in expression</li>
+<li>5: Expression parsing error</li>
+<li>6: Evaluation error (when stop_on_error is true)</li>
+<li>7: Memory allocation error</li>
+</ul>
+<h2 id="safety"><a class="doc-anchor" href="#safety">§</a>Safety</h2>
+<p>This function is unsafe because it:</p>
+<ol>
+<li>Dereferences raw pointers</li>
+<li>Performs pointer arithmetic for array access</li>
+<li>Assumes arrays are properly sized as specified</li>
+</ol>
+<p>The caller must ensure:</p>
+<ul>
+<li>All pointers are valid and properly aligned</li>
+<li>Arrays have the specified dimensions</li>
+<li>The context is valid and not freed during evaluation</li>
+</ul>
+</div></details></section></div></main></body></html>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_and_increment_recursion_depth","decrement_recursion_depth","get_recursion_depth","reset_recursion_depth","set_max_recursion_depth"],"static":["RECURSION_DEPTH"]};

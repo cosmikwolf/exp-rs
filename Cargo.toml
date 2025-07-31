@@ -19,7 +19,7 @@ hash32 = "0.2.1"
 bitflags = "2.9.0"
 libm = { version = "0.2", optional = true }
 serde = { version = "1.0", features = ["derive"], default-features = false }
-bumpalo = { version = "3.16", default-features = false }
+bumpalo = { version = "3.16", default-features = false, features = ["collections"] }
 [features]
 default = ["libm"]
 f32 = []

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CollectionAllocErr"],"mod":["string","vec"],"trait":["CollectIn","FromIteratorIn"]};

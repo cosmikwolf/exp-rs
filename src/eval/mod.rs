@@ -1281,7 +1281,7 @@ mod tests {
         use std::rc::Rc;
 
         let mut ctx = EvalContext::new();
-        ctx.ast_cache = Some(RefCell::new(crate::types::AstCacheMap::new()));
+        // AST cache no longer needed with arena allocation
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
 

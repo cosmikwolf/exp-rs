@@ -76,10 +76,13 @@ use std::vec::Vec;
 /// Each variant of this enum represents a different type of expression node,
 /// forming a tree structure that can be evaluated to produce a result.
 ///
+/// This type uses arena allocation for all strings and recursive structures,
+/// eliminating all dynamic allocations during evaluation.
+///
 /// Using repr(C) with explicit discriminant type and alignment to avoid ARM alignment issues
+#[derive(Debug)]
 #[repr(C, align(8))]
-#[derive(Clone, Debug, PartialEq)]
-pub enum AstExpr {
+pub enum AstExpr<'arena> {
     /// A literal numerical value.
     ///
     /// Examples: `3.14`, `42`, `-1.5`
@@ -88,16 +91,16 @@ pub enum AstExpr {
     /// A named variable reference.
     ///
     /// Examples: `x`, `temperature`, `result`
-    Variable(String),
+    Variable(&'arena str),
 
     /// A function call with a name and list of argument expressions.
     ///
     /// Examples: `sin(x)`, `max(a, b)`, `sqrt(x*x + y*y)`
     Function {
         /// The name of the function being called
-        name: String,
+        name: &'arena str,
         /// The arguments passed to the function
-        args: Vec<AstExpr>,
+        args: &'arena [AstExpr<'arena>],
     },
 
     /// An array element access.
@@ -105,9 +108,9 @@ pub enum AstExpr {
     /// Examples: `array[0]`, `values[i+1]`
     Array {
         /// The name of the array
-        name: String,
+        name: &'arena str,
         /// The expression for the index
-        index: Box<AstExpr>,
+        index: &'arena AstExpr<'arena>,
     },
 
     /// An attribute access on an object.
@@ -115,9 +118,9 @@ pub enum AstExpr {
     /// Examples: `point.x`, `settings.value`
     Attribute {
         /// The base object name
-        base: String,
+        base: &'arena str,
         /// The attribute name
-        attr: String,
+        attr: &'arena str,
     },
 
     /// A logical operation with short-circuit evaluation.
@@ -148,9 +151,9 @@ pub enum AstExpr {
         /// The logical operator (AND or OR)
         op: LogicalOperator,
         /// The left operand (always evaluated)
-        left: Box<AstExpr>,
+        left: &'arena AstExpr<'arena>,
         /// The right operand (conditionally evaluated based on left value)
-        right: Box<AstExpr>,
+        right: &'arena AstExpr<'arena>,
     },
 
     /// A ternary conditional operation (condition ? true_expr : false_expr).
@@ -185,16 +188,16 @@ pub enum AstExpr {
     /// - Use parentheses for clarity when nesting operations
     Conditional {
         /// The condition expression to evaluate
-        condition: Box<AstExpr>,
+        condition: &'arena AstExpr<'arena>,
         /// Expression to evaluate if condition is true (non-zero)
-        true_branch: Box<AstExpr>,
+        true_branch: &'arena AstExpr<'arena>,
         /// Expression to evaluate if condition is false (zero)
-        false_branch: Box<AstExpr>,
+        false_branch: &'arena AstExpr<'arena>,
     },
 }
 
-// AST cache type - now that AstExpr is defined
-pub type AstCacheMap = FnvIndexMap<HString, alloc::rc::Rc<AstExpr>, EXP_RS_MAX_AST_CACHE>;
+// AST cache type - REMOVED: Incompatible with arena allocation
+// pub type AstCacheMap = FnvIndexMap<HString, alloc::rc::Rc<AstExpr>, EXP_RS_MAX_AST_CACHE>;
 
 // Helper trait for string conversion to heapless strings
 pub trait TryIntoHeaplessString {
@@ -230,7 +233,7 @@ impl TryIntoFunctionName for alloc::string::String {
     }
 }
 
-impl AstExpr {
+impl<'arena> AstExpr<'arena> {
     /// Helper method that raises a constant expression to a power.
     ///
     /// This is primarily used in testing to evaluate power operations on constants.
@@ -243,20 +246,20 @@ impl AstExpr {
     /// # Returns
     ///
     /// The constant raised to the given power, or 0.0 for non-constant expressions
-    pub fn pow(self, exp: Real) -> Real {
+    pub fn pow(&self, exp: Real) -> Real {
         match self {
             AstExpr::Constant(val) => {
                 #[cfg(all(feature = "libm", feature = "f32"))]
                 {
-                    libm::powf(val, exp)
+                    libm::powf(*val, *exp)
                 }
                 #[cfg(all(feature = "libm", not(feature = "f32")))]
                 {
-                    libm::pow(val, exp)
+                    libm::pow(*val, exp)
                 }
                 #[cfg(all(not(feature = "libm"), test))]
                 {
-                    val.powf(exp)
+                    val.powf(*exp)
                 } // Use std::powf when in test mode
                 #[cfg(all(not(feature = "libm"), not(test)))]
                 {
@@ -290,8 +293,8 @@ mod tests {
     fn test_eval_ast_array_and_attribute_errors() {
         // Array not found
         let ast = AstExpr::Array {
-            name: "arr".to_string(),
-            index: Box::new(AstExpr::Constant(0.0)),
+            name: "arr",
+            index: &AstExpr::Constant(0.0),
         };
         let err = eval_ast(&ast, None).unwrap_err();
         match err {
@@ -300,8 +303,8 @@ mod tests {
         }
         // Attribute not found
         let ast2 = AstExpr::Attribute {
-            base: "foo".to_string(),
-            attr: "bar".to_string(),
+            base: "foo",
+            attr: "bar",
         };
         let err2 = eval_ast(&ast2, None).unwrap_err();
         match err2 {
@@ -323,9 +326,10 @@ mod tests {
         let ctx = Rc::new(ctx);
 
         // Create AST for sin with 2 args (should be 1)
+        let args = [AstExpr::Constant(1.0), AstExpr::Constant(2.0)];
         let ast = AstExpr::Function {
-            name: "sin".to_string(),
-            args: vec![AstExpr::Constant(1.0), AstExpr::Constant(2.0)],
+            name: "sin",
+            args: &args,
         };
 
         // Should give InvalidFunctionCall error because sin takes 1 arg but we gave 2
@@ -347,9 +351,10 @@ mod tests {
     #[test]
     fn test_eval_ast_unknown_function_and_variable() {
         // Unknown function
+        let args = [AstExpr::Constant(1.0)];
         let ast = AstExpr::Function {
-            name: "notafunc".to_string(),
-            args: vec![AstExpr::Constant(1.0)],
+            name: "notafunc",
+            args: &args,
         };
         let err = eval_ast(&ast, None).unwrap_err();
         match err {
@@ -357,7 +362,7 @@ mod tests {
             _ => panic!("Expected UnknownFunction error"),
         }
         // Unknown variable
-        let ast2 = AstExpr::Variable("notavar".to_string());
+        let ast2 = AstExpr::Variable("notavar");
         let err2 = eval_ast(&ast2, None).unwrap_err();
         match err2 {
             ExprError::UnknownVariable { name } => assert_eq!(name, "notavar"),
@@ -583,9 +588,6 @@ pub struct ExpressionFunction {
     /// The original expression string defining the function body.
     pub expression: String,
 
-    /// The pre-compiled AST of the expression for faster evaluation.
-    pub compiled_ast: AstExpr,
-
     /// Optional description of what the function does.
     pub description: Option<String>,
 }
@@ -595,7 +597,6 @@ pub struct ExpressionFunction {
 /// This is an implementation detail and should not be used directly by library users.
 /// Variables are normally managed through the `EvalContext` interface.
 #[doc(hidden)]
-#[derive(Debug, Clone)]
 pub struct Variable<'a> {
     /// The name of the variable.
     pub name: Cow<'a, str>,
@@ -607,7 +608,7 @@ pub struct Variable<'a> {
     pub function: fn(Real, Real) -> Real,
 
     /// Context or associated AST nodes.
-    pub context: Vec<AstExpr>,
+    pub context: Vec<AstExpr<'a>>,
 }
 
 impl<'a> Variable<'a> {
@@ -617,7 +618,7 @@ impl<'a> Variable<'a> {
             name: Cow::Borrowed(name),
             address: 0,
             function: crate::functions::dummy,
-            context: Vec::<AstExpr>::new(),
+            context: Vec::<AstExpr<'a>>::new(),
         }
     }
 }

@@ -13,6 +13,7 @@ use crate::lexer::{Lexer, Token};
 use crate::types::{AstExpr, TokenKind, TryIntoHeaplessString};
 #[cfg(not(test))]
 use crate::{Box, Vec};
+use bumpalo::Bump;
 
 use alloc::borrow::Cow;
 #[cfg(not(test))]
@@ -27,14 +28,15 @@ use alloc::collections::BTreeSet as HashSet;
 #[cfg(test)]
 use std::collections::HashSet;
 
-struct PrattParser<'a> {
-    lexer: Lexer<'a>,
+struct PrattParser<'input, 'arena> {
+    lexer: Lexer<'input>,
+    arena: &'arena Bump, // Arena is now mandatory
     current: Option<Token>,
     errors: Vec<ExprError>,
     recursion_depth: usize,
     max_recursion_depth: usize,
-    reserved_vars: Option<HashSet<Cow<'a, str>>>, // Parameter names to treat as variables, not functions
-    context_vars: Option<HashSet<Cow<'a, str>>>,  // Variable/constant names from context
+    reserved_vars: Option<HashSet<Cow<'input, str>>>, // Parameter names to treat as variables, not functions
+    context_vars: Option<HashSet<Cow<'input, str>>>,  // Variable/constant names from context
 }
 
 /// Token binding powers for the Pratt parser
@@ -60,27 +62,29 @@ impl BindingPower {
     }
 }
 
-impl<'a> PrattParser<'a> {
-    fn new(input: &'a str) -> Self {
+impl<'input, 'arena> PrattParser<'input, 'arena> {
+    fn new(input: &'input str, arena: &'arena Bump) -> Self {
         let mut lexer = Lexer::new(input);
         let current = lexer.next_token();
         Self {
             lexer,
+            arena,
             current,
             errors: Vec::new(),
             recursion_depth: 0,
-            max_recursion_depth: 2000, // Significantly increased to handle very deep nesting
+            max_recursion_depth: 2000,
             reserved_vars: None,
             context_vars: None,
         }
     }
 
     fn with_reserved_vars_and_context(
-        input: &'a str,
-        reserved_vars: Option<&'a [String]>,
-        context_vars: Option<&'a [String]>,
+        input: &'input str,
+        arena: &'arena Bump,
+        reserved_vars: Option<&'input [String]>,
+        context_vars: Option<&'input [String]>,
     ) -> Self {
-        let mut parser = Self::new(input);
+        let mut parser = Self::new(input, arena);
         if let Some(vars) = reserved_vars {
             let mut set = HashSet::new();
             for v in vars {
@@ -166,7 +170,7 @@ impl<'a> PrattParser<'a> {
     }
 
     // Unified method for handling all postfix operations
-    fn parse_postfix(&mut self, lhs: AstExpr) -> Result<AstExpr, ExprError> {
+    fn parse_postfix(&mut self, lhs: AstExpr<'arena>) -> Result<AstExpr<'arena>, ExprError> {
         let mut result = lhs;
 
         // Keep applying postfix operators as long as they're available
@@ -226,7 +230,7 @@ impl<'a> PrattParser<'a> {
     }
 
     // Helper method for parsing parenthesized expressions
-    fn parse_parenthesized_expr(&mut self) -> Result<AstExpr, ExprError> {
+    fn parse_parenthesized_expr(&mut self) -> Result<AstExpr<'arena>, ExprError> {
         let open_position = self.peek().map(|t| t.position).unwrap_or(0);
         self.next(); // consume '('
 
@@ -258,10 +262,10 @@ impl<'a> PrattParser<'a> {
     }
 
     // Helper method for parsing function calls
-    fn parse_function_call(&mut self, expr: AstExpr) -> Result<AstExpr, ExprError> {
+    fn parse_function_call(&mut self, expr: AstExpr<'arena>) -> Result<AstExpr<'arena>, ExprError> {
         let name = match &expr {
-            AstExpr::Variable(name) => name.clone(),
-            AstExpr::Attribute { attr, .. } => attr.clone(),
+            AstExpr::Variable(name) => *name,
+            AstExpr::Attribute { attr, .. } => *attr,
             _ => {
                 return Err(ExprError::Syntax(
                     "Function call on non-function expression".to_string(),
@@ -271,7 +275,7 @@ impl<'a> PrattParser<'a> {
 
         self.next(); // consume '('
 
-        let mut args = Vec::new();
+        let mut args = bumpalo::collections::Vec::new_in(self.arena);
 
         // Parse arguments
         if let Some(tok) = self.peek() {
@@ -345,13 +349,16 @@ impl<'a> PrattParser<'a> {
             // No-op, just clarity: polynomial(x)
         }
 
-        Ok(AstExpr::Function { name, args })
+        Ok(AstExpr::Function { 
+            name, 
+            args: args.into_bump_slice() 
+        })
     }
 
     // Helper method for parsing array access
-    fn parse_array_access(&mut self, expr: AstExpr) -> Result<AstExpr, ExprError> {
+    fn parse_array_access(&mut self, expr: AstExpr<'arena>) -> Result<AstExpr<'arena>, ExprError> {
         let name = match &expr {
-            AstExpr::Variable(name) => name.clone(),
+            AstExpr::Variable(name) => name,
             _ => {
                 let position = self.peek().map(|t| t.position).unwrap_or(0);
                 return Err(ExprError::Syntax(format!(
@@ -372,19 +379,19 @@ impl<'a> PrattParser<'a> {
 
         Ok(AstExpr::Array {
             name,
-            index: Box::new(index),
+            index: self.arena.alloc(index),
         })
     }
 
     // Helper method for parsing attribute access
-    fn parse_attribute_access(&mut self, expr: AstExpr) -> Result<AstExpr, ExprError> {
+    fn parse_attribute_access(&mut self, expr: AstExpr<'arena>) -> Result<AstExpr<'arena>, ExprError> {
         let dot_position = self.peek().map(|t| t.position).unwrap_or(0);
         self.next(); // consume '.'
 
         // Expect identifier
         let attr_tok = self.expect(TokenKind::Variable, "Expected attribute name")?;
 
-        let attr = attr_tok.text.unwrap_or_default();
+        let attr = self.arena.alloc_str(&attr_tok.text.unwrap_or_default());
 
         #[cfg(test)]
         println!("Parsing attribute access: expr={:?}, attr={}", expr, attr);
@@ -412,7 +419,7 @@ impl<'a> PrattParser<'a> {
     }
 
     // Unified method for parsing expressions with a flag for comma handling
-    fn parse_expr_unified(&mut self, min_bp: u8, allow_comma: bool) -> Result<AstExpr, ExprError> {
+    fn parse_expr_unified(&mut self, min_bp: u8, allow_comma: bool) -> Result<AstExpr<'arena>, ExprError> {
         // Check recursion depth to prevent stack overflow
         self.recursion_depth += 1;
         if self.recursion_depth > self.max_recursion_depth {
@@ -440,7 +447,7 @@ impl<'a> PrattParser<'a> {
         Ok(lhs)
     }
 
-    fn parse_prefix_or_primary(&mut self, allow_comma: bool) -> Result<AstExpr, ExprError> {
+    fn parse_prefix_or_primary(&mut self, allow_comma: bool) -> Result<AstExpr<'arena>, ExprError> {
         if let Some(tok) = self.peek() {
             // Check for error tokens and report them immediately
             if tok.kind == TokenKind::Error {
@@ -473,9 +480,11 @@ impl<'a> PrattParser<'a> {
 
                     // Create the appropriate AST node
                     if op_str == "-" {
+                        let mut args = bumpalo::collections::Vec::new_in(self.arena);
+                        args.push(rhs);
                         Ok(AstExpr::Function {
-                            name: String::from("neg"),
-                            args: vec![rhs],
+                            name: self.arena.alloc_str("neg"),
+                            args: args.into_bump_slice(),
                         })
                     } else {
                         // Unary + is a no-op
@@ -495,9 +504,9 @@ impl<'a> PrattParser<'a> {
     // Helper method for parsing ternary expressions (condition ? true_expr : false_expr)
     fn parse_ternary_op(
         &mut self,
-        condition: AstExpr,
+        condition: AstExpr<'arena>,
         allow_comma: bool,
-    ) -> Result<AstExpr, ExprError> {
+    ) -> Result<AstExpr<'arena>, ExprError> {
         // We've already consumed the '?' at this point
 
         // Parse the true branch (what to evaluate if condition is true)
@@ -523,18 +532,18 @@ impl<'a> PrattParser<'a> {
         let false_branch = self.parse_expr_unified(0, allow_comma)?;
 
         Ok(AstExpr::Conditional {
-            condition: Box::new(condition),
-            true_branch: Box::new(true_branch),
-            false_branch: Box::new(false_branch),
+            condition: self.arena.alloc(condition),
+            true_branch: self.arena.alloc(true_branch),
+            false_branch: self.arena.alloc(false_branch),
         })
     }
 
     fn parse_infix_operators(
         &mut self,
-        mut lhs: AstExpr,
+        mut lhs: AstExpr<'arena>,
         min_bp: u8,
         allow_comma: bool,
-    ) -> Result<AstExpr, ExprError> {
+    ) -> Result<AstExpr<'arena>, ExprError> {
         loop {
             // Get the next operator
             let op_text = if let Some(tok) = self.peek() {
@@ -604,8 +613,8 @@ impl<'a> PrattParser<'a> {
                     } else {
                         crate::types::LogicalOperator::Or
                     },
-                    left: Box::new(lhs),
-                    right: Box::new(rhs),
+                    left: self.arena.alloc(lhs),
+                    right: self.arena.alloc(rhs),
                 };
                 continue;
             }
@@ -631,9 +640,12 @@ impl<'a> PrattParser<'a> {
             };
 
             // Create a function node for the operator
+            let mut args = bumpalo::collections::Vec::new_in(self.arena);
+            args.push(lhs);
+            args.push(rhs);
             lhs = AstExpr::Function {
-                name: op,
-                args: vec![lhs, rhs],
+                name: self.arena.alloc_str(&op),
+                args: args.into_bump_slice(),
             };
         }
         Ok(lhs)
@@ -641,9 +653,9 @@ impl<'a> PrattParser<'a> {
 
     fn parse_juxtaposition(
         &mut self,
-        lhs: AstExpr,
+        lhs: AstExpr<'arena>,
         allow_comma: bool,
-    ) -> Result<AstExpr, ExprError> {
+    ) -> Result<AstExpr<'arena>, ExprError> {
         let mut lhs = lhs;
         if let Some(tok) = self.peek() {
             let is_valid_lhs = matches!(&lhs, AstExpr::Variable(_));
@@ -661,12 +673,12 @@ impl<'a> PrattParser<'a> {
                     let reserved = self
                         .reserved_vars
                         .as_ref()
-                        .map(|s| s.contains(name.as_str()))
+                        .map(|s| s.iter().any(|v| v.as_ref() == *name))
                         .unwrap_or(false);
                     let in_context = self
                         .context_vars
                         .as_ref()
-                        .map(|s| s.contains(name.as_str()))
+                        .map(|s| s.iter().any(|v| v.as_ref() == *name))
                         .unwrap_or(false);
                     reserved || in_context
                 }
@@ -676,7 +688,7 @@ impl<'a> PrattParser<'a> {
             if is_valid_lhs && is_valid_rhs && !is_reserved_var {
                 // Get the function name (variable)
                 let func_name = match &lhs {
-                    AstExpr::Variable(name) => name.clone(),
+                    AstExpr::Variable(name) => name,
                     _ => unreachable!(),
                 };
                 // Parse only a primary expression for juxtaposition to avoid consuming operators
@@ -684,9 +696,11 @@ impl<'a> PrattParser<'a> {
                 let arg = self.parse_primary()?;
 
                 // Create a function node
+                let mut args = bumpalo::collections::Vec::new_in(self.arena);
+                args.push(arg);
                 lhs = AstExpr::Function {
                     name: func_name,
-                    args: vec![arg],
+                    args: args.into_bump_slice(),
                 };
             }
         }
@@ -694,12 +708,12 @@ impl<'a> PrattParser<'a> {
     }
 
     // Parse an expression with the given minimum binding power
-    fn parse_expr(&mut self, min_bp: u8) -> Result<AstExpr, ExprError> {
+    fn parse_expr(&mut self, min_bp: u8) -> Result<AstExpr<'arena>, ExprError> {
         self.parse_expr_unified(min_bp, true)
     }
 
     // Parse a primary expression (number, variable, parenthesized expression)
-    fn parse_primary(&mut self) -> Result<AstExpr, ExprError> {
+    fn parse_primary(&mut self) -> Result<AstExpr<'arena>, ExprError> {
         let tok = match self.peek() {
             Some(tok) => tok,
             None => return Err(ExprError::Syntax("Unexpected end of input".to_string())),
@@ -713,7 +727,7 @@ impl<'a> PrattParser<'a> {
             }
             TokenKind::Variable => {
                 let name = match &tok.text {
-                    Some(name) => name.clone(),
+                    Some(name) => self.arena.alloc_str(name),
                     None => return Err(ExprError::Syntax("Variable name is missing".to_string())),
                 };
                 self.next();
@@ -757,7 +771,7 @@ impl<'a> PrattParser<'a> {
     }
 
     // Parse a complete expression
-    fn parse(&mut self) -> Result<AstExpr, ExprError> {
+    fn parse(&mut self) -> Result<AstExpr<'arena>, ExprError> {
         // Check expression length
         if let Some(remaining) = self.lexer.get_remaining_input() {
             self.check_expression_length(remaining)?;
@@ -832,8 +846,24 @@ impl<'a> PrattParser<'a> {
 /// // Nested ternary expressions
 /// let expr = parse_expression("condition1 ? value1 : condition2 ? value2 : value3").unwrap();
 /// ```
-pub fn parse_expression(input: &str) -> Result<AstExpr, ExprError> {
-    parse_expression_with_context(input, None, None)
+pub fn parse_expression_arena<'arena>(
+    input: &str,
+    arena: &'arena Bump
+) -> Result<AstExpr<'arena>, ExprError> {
+    parse_expression_arena_with_context(input, arena, None, None)
+}
+
+// Temporary compatibility - requires caller to provide arena
+pub fn parse_expression(input: &str) -> Result<AstExpr<'static>, ExprError> {
+    // This won't work without an arena, but it satisfies imports
+    panic!("parse_expression requires arena - use parse_expression_arena instead")
+}
+
+pub fn parse_expression_with_reserved(
+    input: &str,
+    reserved_vars: Option<&[String]>,
+) -> Result<AstExpr<'static>, ExprError> {
+    panic!("parse_expression_with_reserved requires arena - use parse_expression_arena_with_reserved instead")
 }
 
 /// Parse an expression with a list of reserved variable names (typically function parameters).
@@ -843,11 +873,12 @@ pub fn parse_expression(input: &str) -> Result<AstExpr, ExprError> {
 /// treated as a function call.
 ///
 /// Supports the same features as parse_expression, including ternary operators.
-pub fn parse_expression_with_reserved(
+pub fn parse_expression_arena_with_reserved<'arena>(
     input: &str,
+    arena: &'arena Bump,
     reserved_vars: Option<&[String]>,
-) -> Result<AstExpr, ExprError> {
-    parse_expression_with_context(input, reserved_vars, None)
+) -> Result<AstExpr<'arena>, ExprError> {
+    parse_expression_arena_with_context(input, arena, reserved_vars, None)
 }
 
 /// Parse an expression with reserved variables and context variable names.
@@ -861,19 +892,21 @@ pub fn parse_expression_with_reserved(
 /// # Parameters
 ///
 /// * `input` - The expression string to parse
+/// * `arena` - The arena to allocate AST nodes in
 /// * `reserved_vars` - Optional list of variable names that should not be treated as functions
 /// * `context_vars` - Optional list of variable names from the evaluation context
-pub fn parse_expression_with_context(
+pub fn parse_expression_arena_with_context<'arena>(
     input: &str,
+    arena: &'arena Bump,
     reserved_vars: Option<&[String]>,
     context_vars: Option<&[String]>,
-) -> Result<AstExpr, ExprError> {
+) -> Result<AstExpr<'arena>, ExprError> {
     // Ternary operators (? :) are now supported
     // Comparison operators (<, >, <=, >=, ==, !=) are also supported
 
     // The lexer now properly handles decimal numbers starting with a dot
     let mut parser =
-        PrattParser::with_reserved_vars_and_context(input, reserved_vars, context_vars);
+        PrattParser::with_reserved_vars_and_context(input, arena, reserved_vars, context_vars);
     parser.parse()
 }
 
@@ -954,49 +987,16 @@ pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::erro
         }
     };
 
-    // If a context is provided, extract variable and constant names for parsing
-    // AST cache logic: use per-context cache if enabled
-    if let Some(cache) = eval_ctx.ast_cache.as_ref() {
-        use alloc::borrow::ToOwned;
-        let expr_key: Cow<'a, str> = Cow::Owned(expression.to_owned());
-        // Only hold the borrow for the minimum time needed
-        let ast_rc_opt = {
-            let cache_borrow = cache.borrow();
-            if let Ok(key) = expr_key.as_ref().try_into_heapless() {
-                cache_borrow.get(&key).cloned()
-            } else {
-                None
-            }
-        };
-        if let Some(ast_rc) = ast_rc_opt {
-            eval_ast(&ast_rc, Some(Rc::clone(&eval_ctx)))
-        } else {
-            let mut context_vars: Vec<String> =
-                eval_ctx.variables.keys().map(|k| k.to_string()).collect();
-            context_vars.extend(eval_ctx.constants.keys().map(|k| k.to_string()));
-            match parse_expression_with_context(expression, None, Some(&context_vars)) {
-                Ok(ast) => {
-                    let ast_rc = Rc::new(ast);
-                    {
-                        let mut cache_borrow = cache.borrow_mut();
-                        if let Ok(key) = expr_key.as_ref().try_into_heapless() {
-                            let _ = cache_borrow.insert(key, ast_rc.clone());
-                        }
-                    }
-                    eval_ast(&ast_rc, Some(Rc::clone(&eval_ctx)))
-                }
-                Err(err) => Err(err),
-            }
-        }
-    } else {
-        // No cache: behave as before
-        let mut context_vars: Vec<String> =
-            eval_ctx.variables.keys().map(|k| k.to_string()).collect();
-        context_vars.extend(eval_ctx.constants.keys().map(|k| k.to_string()));
-        match parse_expression_with_context(expression, None, Some(&context_vars)) {
-            Ok(ast) => eval_ast(&ast, Some(Rc::clone(&eval_ctx))),
-            Err(err) => Err(err),
-        }
+    // Extract variable and constant names for parsing
+    let mut context_vars: Vec<String> =
+        eval_ctx.variables.keys().map(|k| k.to_string()).collect();
+    context_vars.extend(eval_ctx.constants.keys().map(|k| k.to_string()));
+    
+    // Create a temporary arena for parsing
+    let arena = Bump::new();
+    match parse_expression_arena_with_context(expression, &arena, None, Some(&context_vars)) {
+        Ok(ast) => eval_ast(&ast, Some(Rc::clone(&eval_ctx))),
+        Err(err) => Err(err),
     }
 }
 
@@ -1185,7 +1185,7 @@ mod tests {
     }
 
     // Helper function to print AST for debugging
-    fn debug_ast(expr: &AstExpr, indent: usize) -> String {
+    fn debug_ast(expr: &AstExpr<'_>, indent: usize) -> String {
         let spaces = " ".repeat(indent);
         match expr {
             AstExpr::Constant(val) => format!("{}Constant({})", spaces, val),
@@ -1770,7 +1770,7 @@ mod tests {
     #[test]
     fn test_parse_binary_op_deep_right_assoc_pow() {
         let ast = parse_expression("2^2^2^2^2").unwrap();
-        fn count_right_assoc_pow(expr: &AstExpr) -> usize {
+        fn count_right_assoc_pow(expr: &AstExpr<'_>) -> usize {
             match expr {
                 AstExpr::Function { name, args } if name == "^" && args.len() == 2 => {
                     1 + count_right_assoc_pow(&args[1])

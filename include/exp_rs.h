@@ -225,6 +225,13 @@ typedef struct BatchBuilderOpaque {
   uint8_t _data[0];
 } BatchBuilderOpaque;
 
+/**
+ * Opaque arena type for C
+ */
+typedef struct ArenaOpaque {
+  uint8_t _private[0];
+} ArenaOpaque;
+
 #if defined(USE_F32)
 #define TEST_PRECISION 1e-6
 #endif
@@ -575,6 +582,10 @@ __attribute__((aligned(8))) void exp_rs_batch_free_results(struct BatchEvalResul
 
 /**
  * Batch evaluate multiple expressions with a pre-existing context
+ *
+ * TODO: This function needs to be refactored to work properly with arena allocation.
+ * Currently it creates temporary arenas that don't live long enough.
+ * Use exp_rs_batch_builder_new_with_arena for proper arena-based evaluation.
  */
 __attribute__((aligned(8)))
 int32_t exp_rs_batch_eval_with_context(const struct BatchEvalRequest *request,
@@ -800,6 +811,165 @@ uintptr_t exp_rs_batch_builder_param_count(const struct BatchBuilderOpaque *buil
  */
 __attribute__((aligned(8)))
 uintptr_t exp_rs_batch_builder_expression_count(const struct BatchBuilderOpaque *builder);
+
+/**
+ * Creates a new arena for zero-allocation expression evaluation.
+ *
+ * The arena pre-allocates memory based on the size hint to avoid allocations
+ * during expression parsing and evaluation. Memory is allocated using the
+ * global allocator (which uses exp_rs_malloc in embedded environments).
+ *
+ * # Parameters
+ *
+ * * `size_hint` - Suggested size in bytes for the arena. The actual allocation
+ *                 may be larger to accommodate bumpalo's internal requirements.
+ *
+ * # Returns
+ *
+ * A pointer to the new arena, or NULL on allocation failure.
+ *
+ * # Safety
+ *
+ * The returned pointer must be freed with `exp_rs_arena_free`.
+ *
+ * # Example (C)
+ *
+ * ```c
+ * Arena* arena = exp_rs_arena_new(256 * 1024); // 256KB arena
+ * // ... use arena ...
+ * exp_rs_arena_free(arena);
+ * ```
+ */
+__attribute__((aligned(8))) struct ArenaOpaque *exp_rs_arena_new(uintptr_t size_hint);
+
+/**
+ * Frees an arena previously created by exp_rs_arena_new.
+ *
+ * This releases all memory associated with the arena back to the allocator.
+ *
+ * # Parameters
+ *
+ * * `arena` - Pointer to the arena to free
+ *
+ * # Safety
+ *
+ * This function is unsafe because it:
+ * - Dereferences a raw pointer
+ * - Frees memory allocated by Rust
+ *
+ * The caller must ensure:
+ * - The pointer was allocated by `exp_rs_arena_new`
+ * - The pointer is not used after this call
+ * - No references to arena-allocated data exist
+ */
+__attribute__((aligned(8))) void exp_rs_arena_free(struct ArenaOpaque *arena);
+
+/**
+ * Resets an arena, clearing all allocations.
+ *
+ * This efficiently resets the arena to its initial state, allowing
+ * memory to be reused for new allocations. This is much faster than
+ * freeing and recreating the arena.
+ *
+ * # Parameters
+ *
+ * * `arena` - Pointer to the arena to reset
+ *
+ * # Safety
+ *
+ * This function is unsafe because it dereferences a raw pointer.
+ * All references to arena-allocated data become invalid after reset.
+ *
+ * # Example (C)
+ *
+ * ```c
+ * // Process batch 1
+ * exp_rs_batch_builder_eval(builder, ctx);
+ *
+ * // Reset arena for next batch
+ * exp_rs_arena_reset(arena);
+ *
+ * // Process batch 2 with clean arena
+ * exp_rs_batch_builder_eval(builder, ctx);
+ * ```
+ */
+__attribute__((aligned(8))) void exp_rs_arena_reset(struct ArenaOpaque *arena);
+
+/**
+ * Estimates the arena size needed for a set of expressions.
+ *
+ * This function helps determine the appropriate arena size to allocate
+ * for a given set of expressions, preventing frequent reallocations.
+ *
+ * # Parameters
+ *
+ * * `expressions` - Array of expression strings to estimate
+ * * `num_expressions` - Number of expressions in the array
+ * * `estimated_iterations` - Estimated number of evaluation iterations
+ *
+ * # Returns
+ *
+ * Estimated arena size in bytes
+ *
+ * # Safety
+ *
+ * The expressions pointer must be valid and point to at least num_expressions
+ * null-terminated C strings.
+ *
+ * # Example
+ *
+ * ```c
+ * const char* exprs[] = {"x + y", "sin(x) * cos(y)", "sqrt(x*x + y*y)"};
+ * size_t arena_size = exp_rs_estimate_arena_size(exprs, 3, 1000);
+ * Arena* arena = exp_rs_arena_new(arena_size);
+ * ```
+ */
+__attribute__((aligned(8)))
+uintptr_t exp_rs_estimate_arena_size(const char *const *expressions,
+                                     uintptr_t num_expressions,
+                                     uintptr_t estimated_iterations);
+
+/**
+ * Creates a new batch builder with an arena for zero-allocation evaluation.
+ *
+ * This function creates a batch builder that uses the provided arena for all
+ * AST allocations, eliminating dynamic memory allocation during evaluation.
+ *
+ * # Parameters
+ *
+ * * `arena` - Arena created with exp_rs_arena_new
+ *
+ * # Returns
+ *
+ * Pointer to a new batch builder, or NULL on failure
+ *
+ * # Safety
+ *
+ * - The arena pointer must be valid and created by exp_rs_arena_new
+ * - The returned pointer must be freed with exp_rs_batch_builder_free
+ * - The arena must outlive the batch builder
+ *
+ * # Example
+ *
+ * ```c
+ * // Create arena
+ * Arena* arena = exp_rs_arena_new(256 * 1024);
+ *
+ * // Create batch builder with arena
+ * BatchBuilder* builder = exp_rs_batch_builder_new_with_arena(arena);
+ *
+ * // Add expressions (parsed into arena)
+ * exp_rs_batch_builder_add_expression(builder, "x + y");
+ *
+ * // ... use builder ...
+ *
+ * // Clean up
+ * exp_rs_batch_builder_free(builder);
+ * exp_rs_arena_free(arena);
+ * ```
+ */
+__attribute__((aligned(8)))
+struct BatchBuilderOpaque *exp_rs_batch_builder_new_with_arena(struct ArenaOpaque *arena);
 
 #if defined(EXP_RS_CUSTOM_ALLOC)
 extern void *exp_rs_malloc(uintptr_t size);

@@ -18,14 +18,14 @@ use alloc::string::String;
 #[allow(dead_code)]
 type MathFunc = fn(Real, Real) -> Real;
 
-pub fn eval_ast<'a>(ast: &AstExpr, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
+pub fn eval_ast<'arena>(ast: &'arena AstExpr<'arena>, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
     // Use the iterative evaluator - this eliminates stack overflow issues
     // and provides better performance than the recursive approach
     crate::eval::iterative::eval_iterative(ast, ctx)
 }
 
-pub fn eval_ast_inner<'a>(
-    ast: &AstExpr,
+pub fn eval_ast_inner<'arena>(
+    ast: &'arena AstExpr<'arena>,
     ctx: Option<Rc<EvalContext>>,
     func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
     var_cache: &mut BTreeMap<String, Real>,

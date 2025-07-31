@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "rust-tools": {
+      "command": "rust-mcp-server",
+      "args": ["--project-path", "."],
+      "env": {}
+    }
+  }
+}

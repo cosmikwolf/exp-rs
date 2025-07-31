@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "rust-tools": {
+      "command": "rust-mcp-server",
+      "args": [
+        "--project-path",
+        "."
+      ],
+      "env": {}
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "env": {}
+    },
+    "tree-sitter": {
+      "command": "mcp-server-tree-sitter",
+      "args": [],
+      "env": {}
+    }
+  }
+}

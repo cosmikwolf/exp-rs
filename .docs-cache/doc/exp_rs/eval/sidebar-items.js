@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["ast","context_stack","custom_function","evaluator","iterative","recursion","stack_ops","types"]};

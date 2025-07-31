@@ -1,4 +1,10 @@
 fn main() {
+    // Skip FFI build if requested
+    if std::env::var("SKIP_FFI_BUILD").is_ok() {
+        println!("cargo:warning=Skipping FFI build due to SKIP_FFI_BUILD environment variable");
+        return;
+    }
+
     let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let out_dir = "include";
 

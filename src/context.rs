@@ -98,8 +98,6 @@ pub struct EvalContext {
     pub function_registry: Rc<FunctionRegistry>,
     /// Optional parent context for variable/function inheritance
     pub parent: Option<Rc<EvalContext>>,
-    /// Optional cache for parsed ASTs to speed up repeated evaluations
-    pub ast_cache: Option<RefCell<crate::types::AstCacheMap>>,
 }
 
 impl EvalContext {
@@ -125,7 +123,6 @@ impl EvalContext {
             nested_arrays: crate::types::NestedArrayMap::new(),
             function_registry: Rc::new(FunctionRegistry::default()),
             parent: None,
-            ast_cache: None,
         };
 
         // Always register default math functions
@@ -330,15 +327,14 @@ impl EvalContext {
     ) -> Result<(), crate::error::ExprError> {
         // Parse the expression, passing parameter names as reserved variables
         let param_names: Vec<String> = params.iter().map(|&s| s.to_string()).collect();
-        let ast = crate::engine::parse_expression_with_reserved(expression, Some(&param_names))?;
+        let _ = crate::engine::parse_expression_with_reserved(expression, Some(&param_names))?;
 
-        // Store the expression function
+        // Store the expression function (without compiled AST - will parse on demand with arena)
         let key = name.try_into_function_name()?;
         let function = crate::types::ExpressionFunction {
             name: key.clone(),
             params: param_names,
             expression: expression.to_string(),
-            compiled_ast: ast,
             description: None,
         };
 
@@ -406,14 +402,7 @@ impl EvalContext {
         // Remove the function and check if it existed
         let was_removed = registry.expression_functions.remove(&key).is_some();
 
-        // Invalidate AST cache if function was removed and cache exists
-        if was_removed {
-            if let Some(cache) = &self.ast_cache {
-                // Clear entire cache for simplicity
-                // This prevents cached expressions from referencing the unregistered function
-                cache.borrow_mut().clear();
-            }
-        }
+        // AST cache has been removed in arena implementation
 
         Ok(was_removed)
     }
@@ -447,18 +436,6 @@ impl EvalContext {
     /// let result2 = interp("x^2 + 2*x + 1", Some(Rc::new(ctx))).unwrap();
     /// assert_eq!(result2, 9.0); // 2^2 + 2*2 + 1 = 9
     /// ```
-    pub fn enable_ast_cache(&self) {
-        if self.ast_cache.is_none() {
-            // Use interior mutability to set ast_cache
-            let cache = RefCell::new(crate::types::AstCacheMap::new());
-            // SAFETY: We use unsafe to mutate a field in an immutable reference.
-            // This is safe because ast_cache is an Option<RefCell<_>> and we only set it once.
-            unsafe {
-                let self_mut = self as *const _ as *mut Self;
-                (*self_mut).ast_cache = Some(cache);
-            }
-        }
-    }
 
     /// Disables AST caching and clears the cache.
     ///
@@ -475,20 +452,8 @@ impl EvalContext {
     /// // ... use the context with AST caching ...
     /// ctx.disable_ast_cache();
     /// ```
-    pub fn disable_ast_cache(&self) {
-        // SAFETY: same as above
-        unsafe {
-            let self_mut = self as *const _ as *mut Self;
-            (*self_mut).ast_cache = None;
-        }
-    }
 
     /// Clear the AST cache if enabled.
-    pub fn clear_ast_cache(&self) {
-        if let Some(cache) = self.ast_cache.as_ref() {
-            cache.borrow_mut().clear();
-        }
-    }
 
     /// Registers all built-in math functions as native functions in the context.
     ///
@@ -811,7 +776,6 @@ impl Clone for EvalContext {
             nested_arrays: self.nested_arrays.clone(),
             function_registry: self.function_registry.clone(),
             parent: self.parent.clone(),
-            ast_cache: self.ast_cache.clone(),
         }
     }
 }
@@ -1148,7 +1112,8 @@ mod tests {
     #[test]
     fn test_unregister_expression_function_cache_invalidation() {
         let mut ctx = EvalContext::new();
-        ctx.enable_ast_cache();
+        // AST cache removed in arena implementation
+        // ctx.enable_ast_cache();
 
         // Register a function
         ctx.register_expression_function("triple", &["x"], "x * 3")
@@ -1158,8 +1123,8 @@ mod tests {
         let result1 = engine::interp("triple(4)", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(result1, 12.0);
 
-        // Verify cache has content (indirect verification by checking if cache exists)
-        assert!(ctx.ast_cache.is_some());
+        // AST cache removed in arena implementation
+        // assert!(ctx.ast_cache.is_some());
 
         // Unregister the function
         let was_removed = ctx.unregister_expression_function("triple").unwrap();

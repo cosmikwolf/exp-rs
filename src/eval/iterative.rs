@@ -12,6 +12,7 @@ use crate::eval::types::{FunctionCacheEntry, OwnedNativeFunction};
 use crate::eval::stack_ops::EvalOp;
 use crate::eval::context_stack::ContextStack;
 use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
+use bumpalo::Bump;
 
 use alloc::vec::Vec;
 use alloc::rc::Rc;
@@ -28,8 +29,8 @@ const INITIAL_OP_CAPACITY: usize = 32;
 const INITIAL_VALUE_CAPACITY: usize = 16;
 
 /// Main iterative evaluation function
-pub fn eval_iterative(
-    ast: &AstExpr,
+pub fn eval_iterative<'arena>(
+    ast: &'arena AstExpr<'arena>,
     ctx: Option<Rc<EvalContext>>,
 ) -> Result<Real, ExprError> {
     let mut engine = EvalEngine::new();
@@ -37,9 +38,9 @@ pub fn eval_iterative(
 }
 
 /// Reusable evaluation engine to avoid allocations
-pub struct EvalEngine {
+pub struct EvalEngine<'arena> {
     /// Operation stack
-    op_stack: Vec<EvalOp>,
+    op_stack: Vec<EvalOp<'arena>>,
     /// Value stack for intermediate results
     value_stack: Vec<Real>,
     /// Context management
@@ -48,15 +49,19 @@ pub struct EvalEngine {
     func_cache: BTreeMap<HString, Option<FunctionCacheEntry>>,
     /// Parameter overrides for batch evaluation (avoids context modification)
     param_overrides: Option<FnvIndexMap<HString, Real, 16>>,
+    /// Optional arena for parsing expression functions on-demand
+    arena: Option<&'arena bumpalo::Bump>,
+    /// Cache for parsed expression functions
+    expr_func_cache: BTreeMap<HString, &'arena AstExpr<'arena>>,
 }
 
-impl Default for EvalEngine {
+impl<'arena> Default for EvalEngine<'arena> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl EvalEngine {
+impl<'arena> EvalEngine<'arena> {
     /// Create a new evaluation engine
     pub fn new() -> Self {
         Self {
@@ -65,11 +70,26 @@ impl EvalEngine {
             ctx_stack: ContextStack::new(),
             func_cache: BTreeMap::new(),
             param_overrides: None,
+            arena: None,
+            expr_func_cache: BTreeMap::new(),
+        }
+    }
+    
+    /// Create a new evaluation engine with arena for expression functions
+    pub fn new_with_arena(arena: &'arena bumpalo::Bump) -> Self {
+        Self {
+            op_stack: Vec::with_capacity(INITIAL_OP_CAPACITY),
+            value_stack: Vec::with_capacity(INITIAL_VALUE_CAPACITY),
+            ctx_stack: ContextStack::new(),
+            func_cache: BTreeMap::new(),
+            param_overrides: None,
+            arena: Some(arena),
+            expr_func_cache: BTreeMap::new(),
         }
     }
     
     /// Evaluate an expression
-    pub fn eval(&mut self, ast: &AstExpr, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
+    pub fn eval(&mut self, ast: &'arena AstExpr<'arena>, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
         // Clear stacks but keep capacity
         self.op_stack.clear();
         self.value_stack.clear();
@@ -79,9 +99,9 @@ impl EvalEngine {
         // Initialize with root context
         let root_ctx_id = self.ctx_stack.push_context(ctx)?;
         
-        // Push initial operation
+        // Push initial operation (no clone needed - just use reference!)
         self.op_stack.push(EvalOp::Eval { 
-            expr: ast.clone(), 
+            expr: ast, 
             ctx_id: root_ctx_id 
         });
         
@@ -103,7 +123,7 @@ impl EvalEngine {
     }
     
     /// Process a single operation
-    fn process_operation(&mut self, op: EvalOp) -> Result<(), ExprError> {
+    fn process_operation(&mut self, op: EvalOp<'arena>) -> Result<(), ExprError> {
         match op {
             EvalOp::Eval { expr, ctx_id } => {
                 self.process_eval(expr, ctx_id)?;
@@ -212,14 +232,14 @@ impl EvalEngine {
     }
     
     /// Process an Eval operation by converting AST to stack operations
-    fn process_eval(&mut self, expr: AstExpr, ctx_id: usize) -> Result<(), ExprError> {
+    fn process_eval(&mut self, expr: &'arena AstExpr<'arena>, ctx_id: usize) -> Result<(), ExprError> {
         match expr {
             AstExpr::Constant(val) => {
-                self.value_stack.push(val);
+                self.value_stack.push(*val);
             }
             
             AstExpr::Variable(name) => {
-                let hname = name.as_str().try_into_heapless()?;
+                let hname = name.try_into_heapless()?;
                 self.op_stack.push(EvalOp::LookupVariable { 
                     name: hname, 
                     ctx_id 
@@ -232,54 +252,54 @@ impl EvalEngine {
                 match op {
                     LogicalOperator::And => {
                         self.op_stack.push(EvalOp::ShortCircuitAnd { 
-                            right_expr: *right, 
+                            right_expr: right, 
                             ctx_id 
                         });
-                        self.op_stack.push(EvalOp::Eval { expr: *left, ctx_id });
+                        self.op_stack.push(EvalOp::Eval { expr: left, ctx_id });
                     }
                     LogicalOperator::Or => {
                         self.op_stack.push(EvalOp::ShortCircuitOr { 
-                            right_expr: *right, 
+                            right_expr: right, 
                             ctx_id 
                         });
-                        self.op_stack.push(EvalOp::Eval { expr: *left, ctx_id });
+                        self.op_stack.push(EvalOp::Eval { expr: left, ctx_id });
                     }
                 }
             }
             
             AstExpr::Conditional { condition, true_branch, false_branch } => {
                 self.op_stack.push(EvalOp::TernaryCondition { 
-                    true_branch: *true_branch,
-                    false_branch: *false_branch,
+                    true_branch,
+                    false_branch,
                     ctx_id,
                 });
-                self.op_stack.push(EvalOp::Eval { expr: *condition, ctx_id });
+                self.op_stack.push(EvalOp::Eval { expr: condition, ctx_id });
             }
             
             AstExpr::Function { name, args } => {
                 // Special handling for short-circuit operators
-                match (name.as_str(), args.len()) {
+                match (*name, args.len()) {
                     ("&&", 2) => {
                         // Short-circuit AND: evaluate left first, then right only if left is true
                         self.op_stack.push(EvalOp::ShortCircuitAnd { 
-                            right_expr: args[1].clone(), 
+                            right_expr: &args[1], 
                             ctx_id 
                         });
-                        self.op_stack.push(EvalOp::Eval { expr: args[0].clone(), ctx_id });
+                        self.op_stack.push(EvalOp::Eval { expr: &args[0], ctx_id });
                     }
                     ("||", 2) => {
                         // Short-circuit OR: evaluate left first, then right only if left is false
                         self.op_stack.push(EvalOp::ShortCircuitOr { 
-                            right_expr: args[1].clone(), 
+                            right_expr: &args[1], 
                             ctx_id 
                         });
-                        self.op_stack.push(EvalOp::Eval { expr: args[0].clone(), ctx_id });
+                        self.op_stack.push(EvalOp::Eval { expr: &args[0], ctx_id });
                     }
                     _ => {
                         // All other function calls go through the same path to support overrides
                         // The parser represents operators like ^, +, -, etc. as function calls
                         // So we treat them all uniformly to allow user overrides
-                        let fname = name.as_str().try_into_function_name()?;
+                        let fname = name.try_into_function_name()?;
                         
                         if args.is_empty() {
                             // No arguments to evaluate
@@ -299,7 +319,7 @@ impl EvalEngine {
                             });
                             
                             // Push argument evaluations in reverse order
-                            for arg in args.into_iter().rev() {
+                            for arg in args.iter().rev() {
                                 self.op_stack.push(EvalOp::Eval { expr: arg, ctx_id });
                             }
                         }
@@ -308,15 +328,15 @@ impl EvalEngine {
             }
             
             AstExpr::Array { name, index } => {
-                let array_name = name.as_str().try_into_heapless()?;
+                let array_name = name.try_into_heapless()?;
                 
                 self.op_stack.push(EvalOp::AccessArray { array_name, ctx_id });
-                self.op_stack.push(EvalOp::Eval { expr: *index, ctx_id });
+                self.op_stack.push(EvalOp::Eval { expr: index, ctx_id });
             }
             
             AstExpr::Attribute { base, attr } => {
-                let obj_name = base.as_str().try_into_heapless()?;
-                let attr_name = attr.as_str().try_into_heapless()?;
+                let obj_name = base.try_into_heapless()?;
+                let attr_name = attr.try_into_heapless()?;
                 
                 self.op_stack.push(EvalOp::AccessAttribute { 
                     object_name: obj_name,
@@ -456,14 +476,42 @@ impl EvalEngine {
             // Copy function registry
             func_ctx.function_registry = ctx.function_registry.clone();
             
-            // Push new context and evaluate body
-            let func_ctx_id = self.ctx_stack.push_context_with_parent(func_ctx, ctx_id)?;
-            self.op_stack.push(EvalOp::Eval {
-                expr: func.compiled_ast.clone(),
-                ctx_id: func_ctx_id,
-            });
-            
-            return Ok(());
+            // Parse expression function on-demand if we have an arena
+            if let Some(arena) = self.arena {
+                // Check if we've already parsed this function
+                let func_key = func.name.try_into_heapless()?;
+                
+                let ast = if let Some(&cached_ast) = self.expr_func_cache.get(&func_key) {
+                    cached_ast
+                } else {
+                    // Parse the expression function body into the arena
+                    let param_names: Vec<String> = func.params.clone();
+                    let parsed_ast = crate::engine::parse_expression_arena_with_reserved(
+                        &func.expression,
+                        arena,
+                        Some(&param_names)
+                    )?;
+                    
+                    // Allocate the AST in the arena
+                    let arena_ast = arena.alloc(parsed_ast);
+                    self.expr_func_cache.insert(func_key.clone(), arena_ast);
+                    // Return the reference - no move needed
+                    &*arena_ast
+                };
+                
+                // Push the function's AST for evaluation with the new context
+                let func_ctx_id = self.ctx_stack.push_context(Some(Rc::new(func_ctx)))?;
+                self.op_stack.push(EvalOp::Eval { 
+                    expr: ast, 
+                    ctx_id: func_ctx_id 
+                });
+                return Ok(());
+            } else {
+                // No arena available for expression functions
+                return Err(ExprError::Other(
+                    "Expression functions require an arena-enabled evaluator".to_string()
+                ));
+            }
         }
         
         // Try native function second
@@ -651,10 +699,10 @@ impl EvalEngine {
 /// let result = eval_with_engine(&ast, None, &mut engine).unwrap();
 /// assert_eq!(result, 5.0);
 /// ```
-pub fn eval_with_engine(
-    ast: &AstExpr,
+pub fn eval_with_engine<'arena>(
+    ast: &'arena AstExpr<'arena>,
     ctx: Option<Rc<EvalContext>>,
-    engine: &mut EvalEngine,
+    engine: &mut EvalEngine<'arena>,
 ) -> Result<Real, ExprError> {
     engine.eval(ast, ctx)
 }

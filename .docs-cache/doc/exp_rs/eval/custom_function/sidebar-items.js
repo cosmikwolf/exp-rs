@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["eval_custom_function"],"trait":["CustomFunction"]};

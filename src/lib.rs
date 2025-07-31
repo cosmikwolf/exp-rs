@@ -397,6 +397,8 @@ pub mod error;
 pub mod eval;
 pub mod expression_functions;
 pub mod ffi;
+#[cfg(test)]
+mod test_expr_func_arena;
 pub mod functions;
 pub mod lexer;
 pub mod types;

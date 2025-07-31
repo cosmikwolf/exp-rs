@@ -9,7 +9,15 @@
       "Bash(timeout 30 cargo run --example basic)",
       "Bash(find:*)",
       "Bash(ls:*)",
-      "mcp__tree_sitter__find_text"
+      "mcp__tree_sitter__find_text",
+      "mcp__tree_sitter__run_query",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(rustc:*)",
+      "Bash(SKIP_FFI_BUILD=1 cargo test test_expression_function_with_arena -- --nocapture)",
+      "Bash(SKIP_FFI_BUILD=1 cargo test expression_function_arena_test --lib -- --nocapture)",
+      "Bash(SKIP_FFI_BUILD=1 cargo check)",
+      "Bash(SKIP_FFI_BUILD=1 cargo test test_expression_function_with_arena_minimal -- --nocapture)"
     ],
     "deny": []
   },

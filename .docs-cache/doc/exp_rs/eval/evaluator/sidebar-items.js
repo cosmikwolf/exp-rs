@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["eval_array","eval_attribute","eval_function","eval_native_function","eval_variable"]};
