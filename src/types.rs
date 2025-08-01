@@ -267,9 +267,9 @@ impl<'arena> AstExpr<'arena> {
                     if exp == 0.0 {
                         1.0
                     } else if exp == 1.0 {
-                        val
+                        *val
                     } else if exp == 2.0 {
-                        val * val
+                        *val * *val
                     } else {
                         0.0
                     } // This functionality requires explicit registration

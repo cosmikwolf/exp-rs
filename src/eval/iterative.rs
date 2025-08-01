@@ -485,7 +485,7 @@ impl<'arena> EvalEngine<'arena> {
                     cached_ast
                 } else {
                     // Parse the expression function body into the arena
-                    let param_names: Vec<String> = func.params.clone();
+                    let param_names: Vec<crate::String> = func.params.clone();
                     let parsed_ast = crate::engine::parse_expression_arena_with_reserved(
                         &func.expression,
                         arena,
