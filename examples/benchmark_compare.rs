@@ -264,7 +264,7 @@ fn main() {
         }
 
         // Enable AST cache for the base context
-        ctx_interp_base.enable_ast_cache();
+        // ctx_interp_base.enable_ast_cache(); // AST cache removed with arena implementation
 
         let mut interp_sum = 0.0;
         let start = Instant::now();

@@ -566,12 +566,12 @@ use alloc::borrow::Cow;
 /// # use std::rc::Rc;
 /// let mut ctx = EvalContext::new();
 ///
-/// // Register a function to calculate the area of a circle
-/// ctx.register_expression_function(
-///     "circle_area",            // Function name
-///     &["radius"],              // Parameter names
-///     "pi * radius * radius"    // Function body as an expression
-/// ).unwrap();
+/// // Note: Expression functions require runtime parsing which is not supported
+/// // in the current arena-based architecture. Use native functions instead:
+/// ctx.register_native_function("circle_area", 1, |args| {
+///     let radius = args[0];
+///     std::f64::consts::PI * radius * radius
+/// }).unwrap();
 ///
 /// // Use the function in another expression
 /// let result = interp("circle_area(2)", Some(Rc::new(ctx))).unwrap();

@@ -1,6 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use exp_rs::{interp, EvalContext, BatchBuilder, parse_expression, eval_with_engine, EvalEngine, AstExpr};
+use exp_rs::{interp, EvalContext, BatchBuilder, parse_expression_arena, eval_with_engine, EvalEngine, AstExpr, Real};
 use std::rc::Rc;
+use bumpalo::Bump;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -103,7 +104,7 @@ fn calculate_ast_size(ast: &AstExpr) -> usize {
         AstExpr::Variable(s) => base_size + s.len(),
         AstExpr::Function { name, args } => {
             let mut total = base_size + name.len();
-            for arg in args {
+            for arg in args.iter() {
                 total += calculate_ast_size(arg);
             }
             total
@@ -219,7 +220,8 @@ fn bench_comparison(c: &mut Criterion) {
     // Benchmark using BatchBuilder
     group.bench_function("batch_builder_evaluation", |b| {
         let ctx = create_test_context();
-        let mut builder = BatchBuilder::new();
+        let arena = Bump::new();
+        let mut builder = BatchBuilder::new(&arena);
         
         // Add parameters
         let mut param_indices = Vec::new();
@@ -295,7 +297,8 @@ fn bench_expression_complexity(c: &mut Criterion) {
         
         // Batch evaluation
         group.bench_function(format!("{}_batch", name), |b| {
-            let mut builder = BatchBuilder::new();
+            let arena = Bump::new();
+            let mut builder = BatchBuilder::new(&arena);
             
             // Add parameters
             for i in 0..10 {
@@ -334,9 +337,10 @@ fn run_memory_analysis() {
     });
     
     // Stage 2: Parsing expressions
+    let parse_arena = Bump::new();
     let (parsed_expressions, _) = measure_stage("Parsing 7 expressions", || {
         expressions.iter()
-            .map(|expr| parse_expression(expr).unwrap())
+            .map(|expr| parse_expression_arena(expr, &parse_arena).unwrap())
             .collect::<Vec<_>>()
     });
     
@@ -387,8 +391,9 @@ fn run_memory_analysis() {
     println!("\n--- Batch Evaluation Approach ---");
     
     // Stage 5: Batch builder setup
+    let arena = Bump::new();
     let (mut builder, _) = measure_stage("Setting up BatchBuilder", || {
-        let mut builder = BatchBuilder::new();
+        let mut builder = BatchBuilder::new(&arena);
         
         // Add parameters
         for name in &param_names {
@@ -438,8 +443,9 @@ fn run_memory_analysis() {
     println!("\n--- Direct Engine Evaluation (No Context Clone) ---");
     
     // Stage 8: Using evaluation engine directly
+    let engine_arena = Bump::new();
     let (mut engine, _) = measure_stage("Creating evaluation engine", || {
-        EvalEngine::new()
+        EvalEngine::new_with_arena(&engine_arena)
     });
     
     let (_, stats) = measure_stage("1000 evaluations with engine", || {
@@ -476,8 +482,9 @@ fn run_ast_size_analysis() {
     println!("Expression Type    | Total Size | Shallow Size | Expression");
     println!("-------------------|------------|--------------|------------");
     
+    let ast_arena = Bump::new();
     for (name, expr) in expressions {
-        let ast = parse_expression(expr).unwrap();
+        let ast = parse_expression_arena(expr, &ast_arena).unwrap();
         let total = calculate_ast_size(&ast);
         let shallow = size_of_val(&ast);
         println!("{:<18} | {:>10} | {:>12} | {}", name, total, shallow, expr);
@@ -488,8 +495,9 @@ fn run_ast_size_analysis() {
     let real_expressions = get_test_expressions();
     let mut total_size = 0;
     
+    let real_arena = Bump::new();
     for (i, expr) in real_expressions.iter().enumerate() {
-        let ast = parse_expression(expr).unwrap();
+        let ast = parse_expression_arena(expr, &real_arena).unwrap();
         let size = calculate_ast_size(&ast);
         total_size += size;
         println!("Expression {}: {} bytes", i + 1, size);
@@ -562,7 +570,8 @@ fn run_cpu_utilization_test() {
     // Test 2: BatchBuilder approach
     println!("\nTest 2: BatchBuilder (with parameter overrides)");
     
-    let mut builder = BatchBuilder::new();
+    let batch_arena = Bump::new();
+    let mut builder = BatchBuilder::new(&batch_arena);
     
     // Add parameters
     for name in &param_names {

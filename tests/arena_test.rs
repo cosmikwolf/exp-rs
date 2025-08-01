@@ -48,16 +48,15 @@ fn test_arena_zero_allocations() {
     let ast = parse_expression_arena("x * 2 + y", &arena).unwrap();
     let allocated_after_parse = arena.allocated_bytes();
     
-    // Create context
-    let mut ctx = EvalContext::new();
-    ctx.set_parameter("x", 1.0);
-    ctx.set_parameter("y", 1.0);
-    let ctx = Rc::new(ctx);
-    
     // Evaluate many times - should not allocate
     for i in 0..1000 {
+        // Create context for each iteration
+        let mut ctx = EvalContext::new();
         ctx.set_parameter("x", i as Real);
-        let result = eval_ast(&ast, Some(ctx.clone())).unwrap();
+        ctx.set_parameter("y", 1.0);
+        let ctx = Rc::new(ctx);
+        
+        let result = eval_ast(&ast, Some(ctx)).unwrap();
         assert_eq!(result, (i as Real) * 2.0 + 1.0);
         
         // Verify no new allocations

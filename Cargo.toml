@@ -60,3 +60,15 @@ criterion = "0.5"
 [[bench]]
 name = "consolidated_benchmark"
 harness = false
+
+[[bench]]
+name = "simple_arena_bench"
+harness = false
+
+[[bench]]
+name = "arena_memory_bench"
+harness = false
+
+[[bench]]
+name = "arena_consolidated_benchmark"
+harness = false

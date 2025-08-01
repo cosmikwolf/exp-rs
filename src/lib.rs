@@ -234,20 +234,19 @@
 //!
 //! fn main() {
 //!     let mut ctx = EvalContext::new();
-//!     ctx.enable_ast_cache(); // Enable AST caching
 //!
-//!     // First evaluation will parse and cache the AST
-//!     ctx.set_parameter("x", 1.0);
+//!     // Evaluate expression with different parameter values
+//!     ctx.set_parameter("x", 1.0).unwrap();
 //!     let result1 = interp("x^2 + 2*x + 1", Some(Rc::new(ctx.clone()))).unwrap();
 //!     assert_eq!(result1, 4.0); // 1^2 + 2*1 + 1 = 4
 //!
-//!     // Subsequent evaluations with the same expression will reuse the cached AST
-//!     ctx.set_parameter("x", 2.0);
+//!     // Update parameter and evaluate again
+//!     ctx.set_parameter("x", 2.0).unwrap();
 //!     let result2 = interp("x^2 + 2*x + 1", Some(Rc::new(ctx.clone()))).unwrap();
 //!     assert_eq!(result2, 9.0); // 2^2 + 2*2 + 1 = 9
 //!
-//!     // This is much faster for repeated evaluations
-//!     ctx.set_parameter("x", 3.0);
+//!     // The arena-based implementation provides efficient evaluation
+//!     ctx.set_parameter("x", 3.0).unwrap();
 //!     let result3 = interp("x^2 + 2*x + 1", Some(Rc::new(ctx))).unwrap();
 //!     assert_eq!(result3, 16.0); // 3^2 + 2*3 + 1 = 16
 //! }
@@ -402,6 +401,9 @@ mod test_expr_func_arena;
 pub mod functions;
 pub mod lexer;
 pub mod types;
+
+#[cfg(test)]
+pub mod test_utils;
 
 pub use batch_builder::{BatchBuilder, Param};
 pub use context::*;

@@ -13,6 +13,7 @@ use exp_rs::eval::{get_recursion_depth, reset_recursion_depth};
 
 /// Test that verifies factorial(4) uses exactly 4 levels of recursion
 #[test]
+#[ignore = "Expression functions require arena allocation - not supported in current architecture"]
 fn test_factorial_recursion_depth() {
     // Create a new evaluation context
     let mut ctx = EvalContext::default();

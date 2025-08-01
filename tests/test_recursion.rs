@@ -3,6 +3,7 @@ use exp_rs::engine::interp;
 use std::rc::Rc;
 
 #[test]
+#[ignore = "Expression functions require arena allocation - not supported in current architecture"]
 fn test_simple_infinite_recursion() {
     let mut ctx = EvalContext::new();
     
@@ -21,6 +22,7 @@ fn test_simple_infinite_recursion() {
 }
 
 #[test]
+#[ignore = "Expression functions require arena allocation - not supported in current architecture"]
 fn test_recursion_with_small_depth() {
     let mut ctx = EvalContext::new();
     

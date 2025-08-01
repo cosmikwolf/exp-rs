@@ -689,13 +689,15 @@ impl<'arena> EvalEngine<'arena> {
 /// # Example
 ///
 /// ```
-/// use exp_rs::eval::{eval_with_engine, EvalEngine};
-/// use exp_rs::engine::parse_expression;
+/// use exp_rs::eval::iterative::{eval_with_engine, EvalEngine};
+/// use exp_rs::engine::parse_expression_arena;
 /// use exp_rs::context::EvalContext;
 /// use std::rc::Rc;
+/// use bumpalo::Bump;
 ///
-/// let ast = parse_expression("2 + 3").unwrap();
-/// let mut engine = EvalEngine::new();
+/// let arena = Bump::new();
+/// let ast = parse_expression_arena("2 + 3", &arena).unwrap();
+/// let mut engine = EvalEngine::new_with_arena(&arena);
 /// let result = eval_with_engine(&ast, None, &mut engine).unwrap();
 /// assert_eq!(result, 5.0);
 /// ```

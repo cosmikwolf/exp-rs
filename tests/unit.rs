@@ -3,8 +3,9 @@ mod test_helpers;
 #[cfg(test)]
 mod unit {
     use exp_rs::context::EvalContext;
-    use exp_rs::engine::{interp, parse_expression};
+    use exp_rs::engine::{interp, parse_expression_arena};
     use exp_rs::error::ExprError;
+    use bumpalo::Bump;
     use exp_rs::functions::{
         abs, acos, asin, atan, atan2, ceil, comma, cos, cosh, div, dummy, e, exp, floor, fmod, ln,
         log10, mul, neg, pi, pow, sin, sinh, sqrt, sub, tan, tanh,
@@ -16,6 +17,21 @@ mod unit {
     
 
     use crate::test_helpers::{create_context, hstr, set_attr};
+    
+    // Helper function to parse expressions in tests using arena
+    fn parse_expression(expr: &str) -> Result<AstExpr<'static>, ExprError> {
+        thread_local! {
+            static TEST_ARENA: std::cell::RefCell<Bump> = std::cell::RefCell::new(Bump::new());
+        }
+        
+        TEST_ARENA.with(|arena| {
+            let arena = arena.borrow();
+            let ast = parse_expression_arena(expr, &*arena)?;
+            // SAFETY: We're extending the lifetime for tests only. The arena is thread-local
+            // and will live for the duration of the test.
+            Ok(unsafe { std::mem::transmute::<AstExpr<'_>, AstExpr<'static>>(ast) })
+        })
+    }
     
 
     /// Helper function to create an eval context with all math functions registered
@@ -41,17 +57,17 @@ mod unit {
                         name: n2,
                         args: args2,
                     } => {
-                        assert_eq!(n2, "cos");
+                        assert_eq!(*n2, "cos");
                         assert_eq!(args2.len(), 1);
                         match &args2[0] {
                             AstExpr::Function {
                                 name: n3,
                                 args: args3,
                             } => {
-                                assert_eq!(n3, "tan");
+                                assert_eq!(*n3, "tan");
                                 assert_eq!(args3.len(), 1);
                                 match &args3[0] {
-                                    AstExpr::Variable(var) => assert_eq!(var, "x"),
+                                    AstExpr::Variable(var) => assert_eq!(*var, "x"),
                                     _ => panic!("Expected variable as argument to tan"),
                                 }
                             }
@@ -67,24 +83,17 @@ mod unit {
 
     #[test]
     fn test_parse_postfix_array_and_attribute_access() {
-        // Create the AST manually since the parser doesn't support this syntax directly
-        let arr_index = AstExpr::Array {
-            name: "arr".to_string(),
-            index: Box::new(AstExpr::Constant(0.0)),
-        };
-        let sin_arr = AstExpr::Function {
-            name: "sin".to_string(),
-            args: vec![arr_index],
-        };
+        // Create the AST by parsing
+        let sin_arr = parse_expression("sin(arr[0])").unwrap();
 
         // Test with the manually created AST
         match &sin_arr {
             AstExpr::Function { name, args } => {
-                assert_eq!(name, "sin");
+                assert_eq!(*name, "sin");
                 assert_eq!(args.len(), 1);
                 match &args[0] {
                     AstExpr::Array { name, index } => {
-                        assert_eq!(name, "arr");
+                        assert_eq!(*name, "arr");
                         match **index {
                             AstExpr::Constant(val) => assert_eq!(val, 0.0),
                             _ => panic!("Expected constant as array index"),
@@ -96,19 +105,16 @@ mod unit {
             _ => panic!("Expected function node for sin(arr[0])"),
         }
 
-        // Create the AST manually for attribute access
-        let foo_bar_x = AstExpr::Function {
-            name: "bar".to_string(),
-            args: vec![AstExpr::Variable("x".to_string())],
-        };
+        // Create the AST by parsing
+        let foo_bar_x = parse_expression("bar(x)").unwrap();
 
         // Test with the manually created AST
         match &foo_bar_x {
             AstExpr::Function { name, args } => {
-                assert_eq!(name, "bar");
+                assert_eq!(*name, "bar");
                 assert_eq!(args.len(), 1);
                 match &args[0] {
-                    AstExpr::Variable(var) => assert_eq!(var, "x"),
+                    AstExpr::Variable(var) => assert_eq!(*var, "x"),
                     _ => panic!("Expected variable as argument to foo.bar"),
                 }
             }
@@ -144,7 +150,7 @@ mod unit {
                     AstExpr::Function {
                         name: ref n,
                         args: ref a,
-                    } if n == "+" => {
+                    } if *n == "+" => {
                         assert_eq!(a.len(), 2);
                     }
                     _ => panic!("Expected function as array index"),
@@ -195,7 +201,7 @@ mod unit {
         let ast = parse_expression("2^2^2^2^2").unwrap_or_else(|e| panic!("Parse error: {}", e));
         fn count_right_assoc_pow(expr: &AstExpr) -> usize {
             match expr {
-                AstExpr::Function { name, args } if name == "^" && args.len() == 2 => {
+                AstExpr::Function { name, args } if *name == "^" && args.len() == 2 => {
                     1 + count_right_assoc_pow(&args[1])
                 }
                 _ => 0,
@@ -214,7 +220,7 @@ mod unit {
                 AstExpr::Function {
                     name: n2,
                     args: args2,
-                } if n2 == "^" => {
+                } if *n2 == "^" => {
                     assert_eq!(args2.len(), 2);
                 }
                 _ => panic!("Expected ^ as argument to neg"),
@@ -227,7 +233,7 @@ mod unit {
                 AstExpr::Function {
                     name: n2,
                     args: args2,
-                } if n2 == "neg" => {
+                } if *n2 == "neg" => {
                     assert_eq!(args2.len(), 1);
                 }
                 _ => panic!("Expected neg as left arg to ^"),
@@ -240,7 +246,7 @@ mod unit {
                 AstExpr::Function {
                     name: n2,
                     args: args2,
-                } if n2 == "^" => {
+                } if *n2 == "^" => {
                     assert_eq!(args2.len(), 2);
                 }
                 _ => panic!("Expected ^ as argument to neg"),
@@ -386,20 +392,14 @@ mod unit {
     fn test_eval_ast_array_and_attribute_errors() {
         use exp_rs::eval::eval_ast;
         // Array not found
-        let ast = AstExpr::Array {
-            name: "arr".to_string(),
-            index: Box::new(AstExpr::Constant(0.0)),
-        };
+        let ast = parse_expression("arr[0]").unwrap();
         let err = eval_ast(&ast, None).unwrap_err();
         match err {
             ExprError::UnknownVariable { name } => assert_eq!(name, "arr"),
             _ => panic!("Expected UnknownVariable error"),
         }
         // Attribute not found
-        let ast2 = AstExpr::Attribute {
-            base: "foo".to_string(),
-            attr: "bar".to_string(),
-        };
+        let ast2 = parse_expression("foo.bar").unwrap();
         let err2 = eval_ast(&ast2, None).unwrap_err();
         match err2 {
             ExprError::AttributeNotFound { base, attr } => {
@@ -414,10 +414,7 @@ mod unit {
     fn test_eval_ast_function_wrong_arity() {
         use exp_rs::eval::eval_ast;
         // sin with 2 args (should be 1)
-        let ast = AstExpr::Function {
-            name: "sin".to_string(),
-            args: vec![AstExpr::Constant(1.0), AstExpr::Constant(2.0)],
-        };
+        let ast = parse_expression("sin(1, 2)").unwrap();
         let err = eval_ast(&ast, Some(create_math_context())).unwrap_err();
         match err {
             ExprError::InvalidFunctionCall {
@@ -437,17 +434,14 @@ mod unit {
     fn test_eval_ast_unknown_function_and_variable() {
         use exp_rs::eval::eval_ast;
         // Unknown function
-        let ast = AstExpr::Function {
-            name: "notafunc".to_string(),
-            args: vec![AstExpr::Constant(1.0)],
-        };
+        let ast = parse_expression("notafunc(1)").unwrap();
         let err = eval_ast(&ast, None).unwrap_err();
         match err {
             ExprError::UnknownFunction { name } => assert_eq!(name, "notafunc"),
             _ => panic!("Expected UnknownFunction error"),
         }
         // Unknown variable
-        let ast2 = AstExpr::Variable("notavar".to_string());
+        let ast2 = parse_expression("notavar").unwrap();
         let err2 = eval_ast(&ast2, None).unwrap_err();
         match err2 {
             ExprError::UnknownVariable { name } => assert_eq!(name, "notavar"),
@@ -463,13 +457,13 @@ mod unit {
         println!("AST for -2^2: {:?}", ast);
         // Should be AstExpr::Function { name: "neg", args: [AstExpr::Function { name: "^", args: [2, 2] }] }
         match ast {
-            AstExpr::Function { ref name, ref args } if name == "neg" => {
+            AstExpr::Function { ref name, ref args } if *name == "neg" => {
                 assert_eq!(args.len(), 1);
                 match &args[0] {
                     AstExpr::Function {
                         name: pow_name,
                         args: pow_args,
-                    } if pow_name == "^" => {
+                    } if *pow_name == "^" => {
                         assert_eq!(pow_args.len(), 2);
                         match (&pow_args[0], &pow_args[1]) {
                             (AstExpr::Constant(a), AstExpr::Constant(b)) => {
@@ -500,13 +494,13 @@ mod unit {
         println!("AST for (-2)^2: {:?}", ast);
         // Should be AstExpr::Function { name: "^", args: [AstExpr::Function { name: "neg", args: [2] }, 2] }
         match ast {
-            AstExpr::Function { ref name, ref args } if name == "^" => {
+            AstExpr::Function { ref name, ref args } if *name == "^" => {
                 assert_eq!(args.len(), 2);
                 match &args[0] {
                     AstExpr::Function {
                         name: neg_name,
                         args: neg_args,
-                    } if neg_name == "neg" => {
+                    } if *neg_name == "neg" => {
                         assert_eq!(neg_args.len(), 1);
                         match &neg_args[0] {
                             AstExpr::Constant(a) => assert_eq!(*a, 2.0),
@@ -529,10 +523,10 @@ mod unit {
         let ast = parse_expression("sin(x)").unwrap();
         println!("AST for sin(x): {:?}", ast);
         match ast {
-            AstExpr::Function { ref name, ref args } if name == "sin" => {
+            AstExpr::Function { ref name, ref args } if *name == "sin" => {
                 assert_eq!(args.len(), 1);
                 match &args[0] {
-                    AstExpr::Variable(var) => assert_eq!(var, "x"),
+                    AstExpr::Variable(var) => assert_eq!(*var, "x"),
                     _ => panic!("Expected variable as argument"),
                 }
             }
@@ -542,13 +536,13 @@ mod unit {
         let ast2 = parse_expression("abs(-42)").unwrap();
         println!("AST for abs(-42): {:?}", ast2);
         match ast2 {
-            AstExpr::Function { ref name, ref args } if name == "abs" => {
+            AstExpr::Function { ref name, ref args } if *name == "abs" => {
                 assert_eq!(args.len(), 1);
                 match &args[0] {
                     AstExpr::Function {
                         name: n2,
                         args: args2,
-                    } if n2 == "neg" => {
+                    } if *n2 == "neg" => {
                         assert_eq!(args2.len(), 1);
                         match &args2[0] {
                             AstExpr::Constant(c) => assert_eq!(*c, 42.0),
@@ -576,7 +570,7 @@ mod unit {
         let ast = parse_expression("pow(2)").unwrap();
         println!("AST for pow(2): {:?}", ast);
         match ast {
-            AstExpr::Function { ref name, ref args } if name == "pow" => {
+            AstExpr::Function { ref name, ref args } if *name == "pow" => {
                 // We now expect 2 arguments because we add a default second argument
                 assert_eq!(args.len(), 2);
                 match &args[0] {
@@ -612,13 +606,13 @@ mod unit {
         let ast = parse_expression("sin").unwrap();
         println!("AST for sin: {:?}", ast);
         match ast {
-            AstExpr::Variable(ref name) => assert_eq!(name, "sin"),
+            AstExpr::Variable(ref name) => assert_eq!(*name, "sin"),
             _ => panic!("Expected variable node for sin"),
         }
         let ast2 = parse_expression("abs").unwrap();
         println!("AST for abs: {:?}", ast2);
         match ast2 {
-            AstExpr::Variable(ref name) => assert_eq!(name, "abs"),
+            AstExpr::Variable(ref name) => assert_eq!(*name, "abs"),
             _ => panic!("Expected variable node for abs"),
         }
     }
@@ -678,7 +672,7 @@ mod unit {
             vec![10.0, 20.0, 30.0],
         ).expect("Failed to insert array");
         // Parse the array access expression using the new API
-        let ast = exp_rs::engine::parse_expression("climb_wave_wait_time[1]").unwrap();
+        let ast = parse_expression("climb_wave_wait_time[1]").unwrap();
         match ast {
             exp_rs::types::AstExpr::Array { name, index } => {
                 assert_eq!(name, "climb_wave_wait_time");
@@ -999,7 +993,7 @@ mod unit {
 
     #[test]
     fn test_parser_operator_precedence() {
-        use exp_rs::engine::parse_expression;
+        // use exp_rs::engine::parse_expression; // Using the helper function instead
         use exp_rs::types::AstExpr;
 
         // 2+3*4 should parse as 2 + (3*4)
@@ -1013,7 +1007,7 @@ mod unit {
                         name: n2,
                         args: args2,
                     } => {
-                        assert_eq!(n2, "*");
+                        assert_eq!(*n2, "*");
                         assert_eq!(args2.len(), 2);
                     }
                     _ => panic!("Expected multiplication as right child"),
@@ -1025,7 +1019,7 @@ mod unit {
 
     #[test]
     fn test_parser_right_associativity_pow() {
-        use exp_rs::engine::parse_expression;
+        // use exp_rs::engine::parse_expression; // Using the helper function instead
         use exp_rs::types::AstExpr;
 
         // 2^2^2^2 should parse as 2^(2^(2^2))
@@ -1033,7 +1027,7 @@ mod unit {
         // Should be AstExpr::Function("^", [2, AstExpr::Function("^", [2, AstExpr::Function("^", [2, 2])])])
         fn count_right_assoc_pow(expr: &AstExpr) -> usize {
             match expr {
-                AstExpr::Function { name, args } if name == "^" && args.len() == 2 => {
+                AstExpr::Function { name, args } if *name == "^" && args.len() == 2 => {
                     1 + count_right_assoc_pow(&args[1])
                 }
                 _ => 0,
@@ -1045,7 +1039,7 @@ mod unit {
 
     #[test]
     fn test_parser_function_call_and_juxtaposition() {
-        use exp_rs::engine::parse_expression;
+        // use exp_rs::engine::parse_expression; // Using the helper function instead
         use exp_rs::types::AstExpr;
 
         // pow(2,2)
@@ -1065,7 +1059,7 @@ mod unit {
                 assert_eq!(name, "sin");
                 assert_eq!(args.len(), 1);
                 match &args[0] {
-                    AstExpr::Variable(var) => assert_eq!(var, "x"),
+                    AstExpr::Variable(var) => assert_eq!(*var, "x"),
                     _ => panic!("Expected variable as argument"),
                 }
             }
@@ -1075,7 +1069,7 @@ mod unit {
 
     #[test]
     fn test_parser_error_cases() {
-        use exp_rs::engine::parse_expression;
+        // use exp_rs::engine::parse_expression; // Using the helper function instead
 
         // pow(2) should fail (arity error at eval, but parse should succeed)
         let ast = parse_expression("pow(2)");
@@ -1095,7 +1089,7 @@ mod unit {
 
     #[test]
     fn test_eval_unknown_variable_and_function() {
-        use exp_rs::engine::parse_expression;
+        // use exp_rs::engine::parse_expression; // Using the helper function instead
         use exp_rs::error::ExprError;
 
         // Unknown variable
@@ -1117,7 +1111,7 @@ mod unit {
 
     #[test]
     fn test_eval_invalid_function_arity() {
-        use exp_rs::engine::parse_expression;
+        // use exp_rs::engine::parse_expression; // Using the helper function instead
         use exp_rs::error::ExprError;
         use exp_rs::eval::eval_ast;
 
@@ -1140,7 +1134,7 @@ mod unit {
 
     #[test]
     fn test_eval_top_level_comma() {
-        use exp_rs::engine::parse_expression;
+        // use exp_rs::engine::parse_expression; // Using the helper function instead
         // parse_expression should now accept top-level comma
         let ast = parse_expression("1,2");
         assert!(ast.is_ok(), "Top-level comma should be accepted by parser");

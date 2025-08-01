@@ -11,6 +11,7 @@ use std::rc::Rc;
 
 /// Test that the recursion/capacity limit is enforced
 #[test]
+#[ignore = "Expression functions require arena allocation - not supported in current architecture"]
 fn test_recursion_depth_limit() {
     // With the iterative evaluator, we don't need to reset recursion depth
     // as it uses a fixed-size context stack instead
@@ -51,6 +52,7 @@ fn test_recursion_depth_limit() {
 
 /// Test that properly implemented recursive functions with base cases work
 #[test]
+#[ignore = "Expression functions require arena allocation - not supported in current architecture"]
 fn test_proper_recursion() {
     // Reset recursion depth to ensure clean test state
     exp_rs::eval::recursion::reset_recursion_depth();

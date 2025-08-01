@@ -17,7 +17,14 @@
       "Bash(SKIP_FFI_BUILD=1 cargo test test_expression_function_with_arena -- --nocapture)",
       "Bash(SKIP_FFI_BUILD=1 cargo test expression_function_arena_test --lib -- --nocapture)",
       "Bash(SKIP_FFI_BUILD=1 cargo check)",
-      "Bash(SKIP_FFI_BUILD=1 cargo test test_expression_function_with_arena_minimal -- --nocapture)"
+      "Bash(SKIP_FFI_BUILD=1 cargo test test_expression_function_with_arena_minimal -- --nocapture)",
+      "Bash(cargo bench:*)",
+      "Bash(cargo build:*)",
+      "Bash(SKIP_CBINDGEN=1 cargo test --lib --no-run)",
+      "Bash(SKIP_FFI_BUILD=1 cargo test --lib --no-run)",
+      "Bash(./compile_arena_test.sh)",
+      "Bash(clang:*)",
+      "Bash(./test_detailed_timing)"
     ],
     "deny": []
   },
