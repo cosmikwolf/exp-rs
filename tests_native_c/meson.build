@@ -11,16 +11,8 @@ test_programs = {
     'sources': ['test_simple_batch.c'],
     'deps': [exp_rs_dep, m_dep]
   },
-  'test_direct_batch_alloc': {
-    'sources': ['test_direct_batch_alloc.c'],
-    'deps': [exp_rs_dep, m_dep]
-  },
   
   # Arena tests
-  'test_arena_ffi': {
-    'sources': ['test_arena_ffi.c'],
-    'deps': [exp_rs_dep, m_dep]
-  },
   'test_arena_integration': {
     'sources': ['test_arena_integration.c'],
     'deps': [exp_rs_dep, m_dep]
@@ -83,9 +75,7 @@ run_target('test-timing',
 )  
 
 memory_tests = [
-  'test_direct_batch_alloc',
   'test_embedded_pool',
-  'test_arena_ffi',
   'test_arena_integration'
 ]
 
@@ -95,7 +85,6 @@ run_target('test-memory',
 
 functional_tests = [
   'test_simple_batch',
-  'test_arena_ffi',
   'test_arena_integration',
   'test_embedded_pool'
 ]

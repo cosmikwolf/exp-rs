@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "exp_rs.h"
 
 int main() {
@@ -62,6 +63,13 @@ int main() {
     // Get result
     double value = exp_rs_batch_builder_get_result(builder, 0);
     printf("Result: %f (expected 5.0)\n", value);
+    if (fabs(value - 5.0) > 0.0001) {
+        printf("ERROR: Expected 5.0 but got %f\n", value);
+        exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
+        exp_rs_context_free(ctx);
+        return 1;
+    }
     
     // Update parameters and re-evaluate
     exp_rs_batch_builder_set_param(builder, a_idx, 10.0);
@@ -78,6 +86,13 @@ int main() {
     
     value = exp_rs_batch_builder_get_result(builder, 0);
     printf("Result: %f (expected 30.0)\n", value);
+    if (fabs(value - 30.0) > 0.0001) {
+        printf("ERROR: Expected 30.0 but got %f\n", value);
+        exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
+        exp_rs_context_free(ctx);
+        return 1;
+    }
     
     // Cleanup
     exp_rs_batch_builder_free(builder);
