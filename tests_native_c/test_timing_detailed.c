@@ -69,13 +69,13 @@ int main() {
     EvalContextOpaque* ctx = create_test_context();
     
     // Test 1: Measure individual expression parsing more carefully
-    printf("1. Individual Expression Parsing (100 iterations each)\n");
+    printf("1. Individual Expression Parsing (100000 iterations each)\n");
     
     for (int e = 0; e < 7; e++) {
         uint64_t total_time = 0;
         
         // Do multiple runs to get stable measurement
-        for (int run = 0; run < 100; run++) {
+        for (int run = 0; run < 100000; run++) {
             BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
             
             // Add parameters
@@ -95,9 +95,9 @@ int main() {
             exp_rs_batch_builder_free(builder);
         }
         
-        double avg_ns = total_time / 100.0;
+        double avg_ns = total_time / 100000.0;
         double avg_us = avg_ns / 1000.0;
-        printf("   Expression %d: %.3f µs (%.0f ns)\n", e + 1, avg_us, avg_ns);
+        printf("   Expression %d: %.6f µs (%.3f ns)\n", e + 1, avg_us, avg_ns);
     }
     
     // Test 2: Try to isolate parsing time by comparing simple vs complex expressions
@@ -120,7 +120,7 @@ int main() {
         uint64_t complex_time = 0;
         
         // Measure simple expression
-        for (int run = 0; run < 1000; run++) {
+        for (int run = 0; run < 100000; run++) {
             BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
             for (int p = 0; p < 10; p++) {
                 exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
@@ -135,7 +135,7 @@ int main() {
         }
         
         // Measure complex expression
-        for (int run = 0; run < 1000; run++) {
+        for (int run = 0; run < 100000; run++) {
             BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
             for (int p = 0; p < 10; p++) {
                 exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
@@ -149,8 +149,8 @@ int main() {
             exp_rs_batch_builder_free(builder);
         }
         
-        double simple_us = simple_time / 1000.0 / 1000.0;
-        double complex_us = complex_time / 1000.0 / 1000.0;
+        double simple_us = simple_time / 1000.0 / 100000.0;
+        double complex_us = complex_time / 1000.0 / 100000.0;
         
         printf("   Level %d:\n", i + 1);
         printf("     Simple: %.3f µs - %s\n", simple_us, simple_exprs[i]);
@@ -159,11 +159,11 @@ int main() {
     }
     
     // Test 3: Measure in larger batches to accumulate measurable time
-    printf("\n3. Batch Measurement (parse 7 expressions 1000 times)\n");
+    printf("\n3. Batch Measurement (parse 7 expressions 100000 times)\n");
     
     uint64_t batch_start = nanotime_now();
     
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 100000; i++) {
         BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
         
         // Add parameters
@@ -182,7 +182,7 @@ int main() {
     uint64_t batch_end = nanotime_now();
     uint64_t batch_total = nanotime_interval(batch_start, batch_end, now_max);
     double batch_ms = batch_total / 1000000.0;
-    double per_iteration_us = batch_total / 1000.0 / 1000.0;
+    double per_iteration_us = batch_total / 1000.0 / 100000.0;
     double per_expression_us = per_iteration_us / 7.0;
     
     printf("   Total time: %.3f ms\n", batch_ms);

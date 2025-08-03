@@ -45,6 +45,26 @@ void check_counter_rollover(void);
 uint32_t benchmark_stop(void);
 uint32_t qemu_get_tick_count(void);
 
+/* Timer overflow handling for accurate long-duration measurements */
+void Timer1_Handler(void);
+void reset_overflow_counter(void);
+uint32_t get_overflow_count(void);
+uint64_t calculate_total_ticks(uint32_t start_value, uint32_t end_value, 
+                               uint32_t start_overflows, uint32_t end_overflows);
+
+/* Warning tracking for timing measurements */
+uint32_t get_small_elapsed_warning_count(void);
+uint32_t get_invalid_timing_warning_count(void);
+void reset_warning_counts(void);
+void increment_invalid_timing_warning(void);
+
+/* Get current timer state for total test timing */
+void get_timer_snapshot(uint32_t *timer_value, uint32_t *overflow_count);
+
+/* Timer register access (needed by overflow handler) */
+#define TIMER1_RIS ((volatile uint32_t *)(0x40001010))
+#define TIMER1_INTCLR ((volatile uint32_t *)(0x4000100C))
+
 #ifdef __cplusplus
 }
 #endif

@@ -26,6 +26,9 @@ extern uint32_t _sbss;   /* Start of .bss in RAM */
 extern uint32_t _ebss;   /* End of .bss in RAM */
 extern unsigned long _estack;  /* Top of stack from linker script */
 
+/* External Timer1 handler (defined in timer_overflow.c) */
+extern void Timer1_Handler(void);
+
 /* Vector table */
 __attribute__ ((section(".isr_vector")))
 void (* const g_pfnVectors[])(void) = {
@@ -50,6 +53,17 @@ void (* const g_pfnVectors[])(void) = {
     Default_Handler,                /* PendSV */
     Default_Handler,                /* SysTick */
 #endif
+    /* External Interrupts */
+    Default_Handler,                /* IRQ0 */
+    Default_Handler,                /* IRQ1 */
+    Default_Handler,                /* IRQ2 */
+    Default_Handler,                /* IRQ3 */
+    Default_Handler,                /* IRQ4 */
+    Default_Handler,                /* IRQ5 */
+    Default_Handler,                /* IRQ6 */
+    Default_Handler,                /* IRQ7 */
+    Default_Handler,                /* IRQ8 - Timer0 */
+    Timer1_Handler,                 /* IRQ9 - Timer1 */
 };
 
 /* Default interrupt handler */

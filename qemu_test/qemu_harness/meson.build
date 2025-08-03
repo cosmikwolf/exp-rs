@@ -6,6 +6,7 @@ if meson.is_cross_build()
   qemu_harness_sources = [
     'qemu_test_harness.c',
     'stubs.c',
+    'timer_overflow.c',
   ]
   qemu_harness_lib = static_library(
     'qemu_test_harness',

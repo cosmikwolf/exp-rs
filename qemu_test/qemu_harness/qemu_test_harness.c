@@ -154,7 +154,12 @@ void qemu_exit(int status) {
 
 // Global timer state
 static uint32_t cycle_start = 0;
+static uint32_t overflow_start = 0;  // Overflow count at start
 int timer_initialized = 0;
+
+// Warning tracking
+static uint32_t small_elapsed_warning_count = 0;
+static uint32_t invalid_timing_warning_count = 0;
 
 // Initialize the CMSDK hardware timer
 void init_hardware_timer(void) {
@@ -170,8 +175,8 @@ void init_hardware_timer(void) {
   // Clear any pending interrupts
   *TIMER1_INTCLR = 1;
 
-  // Configure as 32-bit timer, no prescaler (DIV1), periodic mode
-  uint32_t control = TIMER_CTRL_32BIT | TIMER_CTRL_DIV1 | TIMER_CTRL_PERIODIC;
+  // Configure as 32-bit timer, no prescaler (DIV1), periodic mode, with interrupts
+  uint32_t control = TIMER_CTRL_32BIT | TIMER_CTRL_DIV1 | TIMER_CTRL_PERIODIC | TIMER_CTRL_IE;
   *TIMER1_CONTROL = control;
 
   // Set maximum reload value for maximum range
@@ -202,7 +207,16 @@ void init_hardware_timer(void) {
   if (start > end) {
     qemu_printf("CMSDK Timer test: start=%u, end=%u, diff=%u ticks\n", start,
                 end, start - end);
-    qemu_print("CMSDK Timer initialized successfully!\n");
+    
+    // Enable Timer1 interrupt in NVIC (IRQ9)
+    #define NVIC_ISER0 ((volatile uint32_t *)0xE000E100)
+    *NVIC_ISER0 = (1 << 9);  // Enable IRQ9 (Timer1)
+    
+    // Reset overflow counter
+    extern void reset_overflow_counter(void);
+    reset_overflow_counter();
+    
+    qemu_print("CMSDK Timer initialized successfully with overflow interrupt!\n");
     timer_initialized = 1;
   } else {
 // Try with another base address - some platforms use different addresses
@@ -304,13 +318,34 @@ void init_hardware_timer(void) {
   }
 
   qemu_print("Timer warm-up complete\n");
+  
+  // Try to estimate the timer frequency
+  qemu_print("\nEstimating timer frequency...\n");
+  
+  // Do a longer timing run to get better accuracy
+  uint32_t freq_start_value, freq_start_overflows;
+  get_timer_snapshot(&freq_start_value, &freq_start_overflows);
+  
+  // Busy wait for a known number of iterations
+  volatile uint32_t counter = 0;
+  for (volatile uint32_t i = 0; i < 1000000; i++) {
+    counter++;
+  }
+  
+  uint32_t freq_end_value, freq_end_overflows;
+  get_timer_snapshot(&freq_end_value, &freq_end_overflows);
+  
+  uint64_t freq_ticks = calculate_total_ticks(freq_start_value, freq_end_value,
+                                               freq_start_overflows, freq_end_overflows);
+  
+  qemu_printf("Timer advanced %u ticks for 1M iterations\n", (uint32_t)freq_ticks);
+  
+  // The actual frequency depends on QEMU's emulation speed
+  // But we can see the relative tick rate
 }
 
 // Start timing measurement
 void benchmark_start(void) {
-  // Reset timer to ensure consistent measurements
-  reset_timer();
-
   // Memory barriers to ensure proper ordering
   __asm__ volatile("dmb" ::: "memory");
   __asm__ volatile("dsb" ::: "memory");
@@ -328,7 +363,9 @@ void benchmark_start(void) {
     __asm__ volatile("isb" ::: "memory");
   }
 
-  // Record the current counter value
+  // Record the current counter value and overflow count
+  extern uint32_t get_overflow_count(void);
+  overflow_start = get_overflow_count();
   cycle_start = *TIMER1_VALUE;
 }
 
@@ -409,26 +446,29 @@ uint32_t benchmark_stop(void) {
   __asm__ volatile("dsb" ::: "memory");
   __asm__ volatile("isb" ::: "memory");
 
-  // Read final counter value
+  // Read final counter value and overflow count
   uint32_t end_count = *TIMER1_VALUE;
+  extern uint32_t get_overflow_count(void);
+  uint32_t overflow_end = get_overflow_count();
 
-  // Calculate elapsed ticks
-  // CMSDK timer counts DOWN from load value, so calculate difference
-  uint32_t elapsed;
+  // Use the overflow-aware calculation
+  extern uint64_t calculate_total_ticks(uint32_t start_value, uint32_t end_value, 
+                                        uint32_t start_overflows, uint32_t end_overflows);
+  uint64_t total_ticks = calculate_total_ticks(cycle_start, end_count, 
+                                                overflow_start, overflow_end);
 
-  // Since the timer counts down, the start value should be larger than the end
-  // value
-  if (cycle_start >= end_count) {
-    elapsed = cycle_start - end_count;
-  } else {
-    // Timer wrapped around (full 32-bit counter)
-    elapsed = (0xFFFFFFFF - end_count) + cycle_start + 1;
+  // Check if result fits in 32 bits
+  if (total_ticks > 0xFFFFFFFF) {
+    qemu_printf("WARNING: Elapsed time exceeds 32 bits: %llu cycles\n", 
+                (unsigned long long)total_ticks);
+    return 0xFFFFFFFF;  // Return max value
   }
 
-  // Sanity check for very small values
+  uint32_t elapsed = (uint32_t)total_ticks;
+
+  // Track small elapsed times for summary reporting
   if (elapsed < 10) {
-    qemu_printf("WARNING: Unusually small elapsed time: %u cycles\n", elapsed);
-    qemu_printf("  Start: %u, End: %u\n", cycle_start, end_count);
+    small_elapsed_warning_count++;
   }
 
   return elapsed;
@@ -455,6 +495,36 @@ uint32_t qemu_get_tick_count(void) {
 
   // Read the current timer value
   return *TIMER1_VALUE;
+}
+
+// Get and reset warning counts
+uint32_t get_small_elapsed_warning_count(void) {
+  return small_elapsed_warning_count;
+}
+
+uint32_t get_invalid_timing_warning_count(void) {
+  return invalid_timing_warning_count;
+}
+
+void reset_warning_counts(void) {
+  small_elapsed_warning_count = 0;
+  invalid_timing_warning_count = 0;
+}
+
+void increment_invalid_timing_warning(void) {
+  invalid_timing_warning_count++;
+}
+
+// Get current timer snapshot for total test timing
+void get_timer_snapshot(uint32_t *timer_value, uint32_t *overflow_count) {
+  // Memory barriers
+  __asm__ volatile("dmb" ::: "memory");
+  __asm__ volatile("dsb" ::: "memory");
+  __asm__ volatile("isb" ::: "memory");
+  
+  extern uint32_t get_overflow_count(void);
+  *overflow_count = get_overflow_count();
+  *timer_value = *TIMER1_VALUE;
 }
 
 // QEMU semihosting file operations based on ARM semihosting spec

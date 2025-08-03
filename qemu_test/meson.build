@@ -512,3 +512,24 @@ if not use_f32
     timeout: 10,
   )
 endif
+
+# Test for setup timing
+if not use_f32
+  test_setup_timing_exe = executable(
+    'test_setup_timing',
+    ['test_setup_timing.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
+    include_directories: include_directories('.', '../include'),
+    dependencies: [qemu_harness_dep, exp_rs_dep],
+    link_args: common_link_args,
+    c_args: ['-DDEF_USE_F64'],
+    install: false,
+  )
+
+  test(
+    'test_setup_timing',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', test_setup_timing_exe.full_path()],
+    is_parallel: false,
+    timeout: 30,
+  )
+endif

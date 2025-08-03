@@ -142,8 +142,6 @@ struct EvalContextOpaque* create_test_context(void) {
 
 // Register all math functions with the given context
 void register_test_math_functions(struct EvalContextOpaque* ctx) {
-    qemu_printf("Registering math functions for testing...\n");
-    
     if (!ctx) {
         qemu_printf("Error: NULL context provided\n");
         return;
@@ -188,6 +186,4 @@ void register_test_math_functions(struct EvalContextOpaque* ctx) {
     // Other functions
     exp_rs_context_register_native_function(ctx, "hypot", 2, (void*)native_hypot);
     exp_rs_context_register_native_function(ctx, "fmod", 2, (void*)native_fmod);
-    
-    qemu_printf("Math functions registered successfully\n");
 }

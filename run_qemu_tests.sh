@@ -7,6 +7,7 @@ CLEAN_BUILD=0
 VERBOSE=0
 TEST_NAME=""
 FLOAT_MODE="f32" # Default to f32 mode
+LIST_TESTS=0
 
 show_help() {
 	echo "Usage: $0 [options]"
@@ -17,6 +18,7 @@ show_help() {
 	echo "  -v, --verbose     Run tests with verbose output"
 	echo "  -t, --test NAME   Run a specific test by name"
 	echo "  -m, --mode MODE   Float mode: f32 or f64 (default: f32)"
+	echo "  -l, --list        List all available tests"
 	echo "  -h, --help        Show this help message"
 }
 
@@ -54,6 +56,10 @@ while [ "$#" -gt 0 ]; do
 			exit 1
 		fi
 		;;
+	-l | --list)
+		LIST_TESTS=1
+		shift
+		;;
 	-h | --help)
 		show_help
 		exit 0
@@ -71,6 +77,38 @@ if [ "$CLEAN_BUILD" -eq 1 ]; then
 	echo "Cleaning build directory..."
 	rm -rf "$BUILD_DIR"
 	cargo clean
+fi
+
+# If list tests is requested, show available tests and exit
+if [ "$LIST_TESTS" -eq 1 ]; then
+	# Check if build directory exists or if we need to reconfigure for different float mode
+	if [ ! -d "$BUILD_DIR" ]; then
+		echo "Build directory not found. Setting up meson build..."
+		if [ "$FLOAT_MODE" = "f32" ]; then
+			meson setup "$BUILD_DIR" --cross-file=qemu_test/qemu_harness/arm-cortex-m7-qemu.ini -Duse_f32=true -Denable_exprs_qemu_tests=true
+		else
+			meson setup "$BUILD_DIR" --cross-file=qemu_test/qemu_harness/arm-cortex-m7-qemu.ini -Denable_exprs_qemu_tests=true
+		fi
+	else
+		# Check current configuration
+		CURRENT_F32=$(cd "$BUILD_DIR" && meson configure | grep "use_f32" | awk '{print $2}')
+		EXPECTED_F32="true"
+		if [ "$FLOAT_MODE" = "f64" ]; then
+			EXPECTED_F32="false"
+		fi
+		
+		if [ "$CURRENT_F32" != "$EXPECTED_F32" ]; then
+			echo "Note: Build directory is configured for different float mode. Showing tests for current configuration."
+			echo "Run with -c to clean and reconfigure for $FLOAT_MODE mode."
+		fi
+	fi
+	
+	echo "Available tests:"
+	echo "================"
+	meson test -C "$BUILD_DIR" --list | while read -r test; do
+		echo "  $test"
+	done
+	exit 0
 fi
 
 # Make sure Rust library is built with the correct float mode
