@@ -6,7 +6,7 @@
 #include <sys/time.h>
 #include <assert.h>
 #include <stdint.h>
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 // Memory tracking structures
 typedef struct allocation_info {

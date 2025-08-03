@@ -48,13 +48,16 @@ static timing_result_t measure_operation(void (*operation)(void)) {
 static const char** g_expressions;
 static const char** g_param_names;
 static double* g_param_values;
+static ArenaOpaque* g_arena = NULL;
+static ArenaOpaque* g_eval_arena = NULL;
 static BatchBuilderOpaque* g_eval_builder = NULL;
 static EvalContextOpaque* g_ctx = NULL;
 
 // Operation wrappers for timing
 static void op_complete_setup(void) {
     EvalContextOpaque* ctx = create_test_context();
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
+    ArenaOpaque* arena = exp_rs_arena_new(8192);
+    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
     
     for (int p = 0; p < 10; p++) {
         exp_rs_batch_builder_add_parameter(builder, g_param_names[p], g_param_values[p]);
@@ -67,6 +70,7 @@ static void op_complete_setup(void) {
     exp_rs_batch_builder_eval(builder, ctx);
     
     exp_rs_batch_builder_free(builder);
+    exp_rs_arena_free(arena);
     exp_rs_context_free(ctx);
 }
 
@@ -75,13 +79,26 @@ static void op_create_context(void) {
     exp_rs_context_free(ctx);
 }
 
+static void op_create_arena(void) {
+    ArenaOpaque* arena = exp_rs_arena_new(8192);
+    exp_rs_arena_free(arena);
+}
+
 static void op_create_builder(void) {
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
+    // Use the global arena for builder creation timing
+    if (g_arena) {
+        exp_rs_arena_reset(g_arena);
+    }
+    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(g_arena);
     exp_rs_batch_builder_free(builder);
 }
 
 static void op_parse_expressions(void) {
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
+    // Use the global arena for parse timing
+    if (g_arena) {
+        exp_rs_arena_reset(g_arena);
+    }
+    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(g_arena);
     
     for (int p = 0; p < 10; p++) {
         exp_rs_batch_builder_add_parameter(builder, g_param_names[p], g_param_values[p]);
@@ -98,114 +115,140 @@ static void op_evaluate(void) {
     exp_rs_batch_builder_eval(g_eval_builder, g_ctx);
 }
 
-static void op_full_cycle(void) {
-    static int counter = 0;
-    
+static void op_param_update(void) {
     for (int p = 0; p < 10; p++) {
-        exp_rs_batch_builder_set_param(g_eval_builder, p, g_param_values[p] + (counter % 100) * 0.01);
+        exp_rs_batch_builder_set_param(g_eval_builder, p, g_param_values[p] + 0.1);
     }
-    
-    exp_rs_batch_builder_eval(g_eval_builder, g_ctx);
-    counter++;
 }
 
-// Helper to run multiple iterations and get average
-static uint32_t measure_average(void (*operation)(void), int iterations) {
-    uint32_t total_ticks = 0;
-    int valid_runs = 0;
+test_result_t test_setup_timing(void) {
+    qemu_printf("=== Setup Timing Test ===\n");
     
-    for (int i = 0; i < iterations; i++) {
-        timing_result_t result = measure_operation(operation);
-        if (result.valid) {
-            total_ticks += result.ticks;
-            valid_runs++;
-        }
-    }
-    
-    if (valid_runs == 0) return 0;
-    return total_ticks / valid_runs;
-}
-
-// Test setup timing on embedded platform
-test_result_t test_setup_timing() {
-    qemu_print("=== Setup Timing Test (QEMU/ARM) ===\n\n");
-    
-    // Initialize hardware timer
-    init_hardware_timer();
-    
-    // Get test start time
-    uint32_t test_start_value, test_start_overflows;
-    get_timer_snapshot(&test_start_value, &test_start_overflows);
-    
+    // Test data
     const char* expressions[] = {
-        "a*sin(b*3.14159/180) + c*cos(d*3.14159/180) + sqrt(e*e + f*f)",
-        "exp(g/10) * log(h+1) + pow(i, 0.5) * j",
-        "((a > 5) && (b < 10)) * c + ((d >= e) || (f != g)) * h + min(i, j)",
-        "sqrt(pow(a-e, 2) + pow(b-f, 2)) + atan2(c-g, d-h) * (i+j)/2",
-        "abs(a-b) * sign(c-d) + max(e, f) * min(g, h) + fmod(i*j, 10)",
-        "(a+b+c)/3 * sin((d+e+f)*3.14159/6) + log10(g*h+1) - exp(-i*j/100)",
-        "a + b * c - d / (e + 0.001) + pow(f, g) * h - i + j"
+        "p0 + p1",
+        "p0 * p1 + p2",
+        "sqrt(p0*p0 + p1*p1)",
+        "p3 * sin(p4)",
+        "p5 + p6 - p7",
+        "p8 * p8 * p9",
+        "(p0 + p1 + p2) / 3.0"
     };
     
-    const char* param_names[] = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"};
-    double param_values[] = {1.5, 3.0, 4.5, 6.0, 7.5, 9.0, 10.5, 12.0, 13.5, 15.0};
+    const char* param_names[] = {"p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"};
+    double param_values[] = {1.5, 2.3, 3.7, 0.5, 1.2, -0.8, 2.1, 0.9, 1.4, 0.7};
     
-    // Set global pointers for operation functions
+    // Set global pointers
     g_expressions = expressions;
     g_param_names = param_names;
     g_param_values = param_values;
     
-    // Test 1: Complete setup time
-    qemu_print("1. Complete Setup Time\n");
-    reset_warning_counts();
-    uint32_t avg_setup = measure_average(op_complete_setup, SETUP_ITERATIONS);
-    qemu_printf("   Average ticks per complete setup: %u\n", avg_setup);
-    uint32_t small_warnings = get_small_elapsed_warning_count();
-    uint32_t invalid_warnings = get_invalid_timing_warning_count();
-    if (small_warnings > 0 || invalid_warnings > 0) {
-        qemu_printf("   [Warnings: %u invalid timing, %u small elapsed]\n", 
-                    invalid_warnings, small_warnings);
+    // Initialize hardware timer
+    init_hardware_timer();
+    reset_invalid_timing_warning();
+    
+    // Warm up
+    qemu_printf("\nWarming up...\n");
+    for (int i = 0; i < 10; i++) {
+        op_complete_setup();
     }
     
-    // Test 2: Component timing
-    qemu_print("\n2. Component Timing\n");
-    reset_warning_counts();
+    qemu_printf("\n1. Setup Operations (%d iterations each)\n", SETUP_ITERATIONS);
     
-    uint32_t avg_context = measure_average(op_create_context, SETUP_ITERATIONS);
-    qemu_printf("   Context creation: %u ticks average\n", avg_context);
-    
-    uint32_t avg_builder = measure_average(op_create_builder, SETUP_ITERATIONS * 10);
-    qemu_printf("   Builder creation: %u ticks average\n", avg_builder);
-    
-    small_warnings = get_small_elapsed_warning_count();
-    invalid_warnings = get_invalid_timing_warning_count();
-    if (small_warnings > 0 || invalid_warnings > 0) {
-        qemu_printf("   [Warnings: %u invalid timing, %u small elapsed]\n", 
-                    invalid_warnings, small_warnings);
+    // Create global arena for builder/parse timing
+    g_arena = exp_rs_arena_new(8192);
+    if (!g_arena) {
+        qemu_printf("FAIL: Failed to create arena\n");
+        return TEST_FAIL;
     }
     
-    // Test 3: Expression parsing
-    qemu_print("\n3. Expression Parsing\n");
-    reset_warning_counts();
-    uint32_t avg_parse = measure_average(op_parse_expressions, SETUP_ITERATIONS);
-    qemu_printf("   Parse all 7 expressions: %u ticks average\n", avg_parse);
-    qemu_printf("   Per expression: %u ticks\n", avg_parse / 7);
-    small_warnings = get_small_elapsed_warning_count();
-    invalid_warnings = get_invalid_timing_warning_count();
-    if (small_warnings > 0 || invalid_warnings > 0) {
-        qemu_printf("   [Warnings: %u invalid timing, %u small elapsed]\n", 
-                    invalid_warnings, small_warnings);
+    // Context creation
+    uint32_t total = 0;
+    int valid_count = 0;
+    qemu_printf("   Context creation: ");
+    for (int i = 0; i < SETUP_ITERATIONS; i++) {
+        timing_result_t result = measure_operation(op_create_context);
+        if (result.valid) {
+            total += result.ticks;
+            valid_count++;
+        }
+    }
+    if (valid_count > 0) {
+        qemu_printf("%u ticks avg\n", total / valid_count);
+    } else {
+        qemu_printf("TIMING ERROR\n");
     }
     
-    // Test 4: Runtime evaluation
-    qemu_print("\n4. Runtime Evaluation Performance\n");
-    reset_warning_counts();
+    // Arena creation
+    total = 0;
+    valid_count = 0;
+    qemu_printf("   Arena creation: ");
+    for (int i = 0; i < SETUP_ITERATIONS; i++) {
+        timing_result_t result = measure_operation(op_create_arena);
+        if (result.valid) {
+            total += result.ticks;
+            valid_count++;
+        }
+    }
+    if (valid_count > 0) {
+        qemu_printf("%u ticks avg\n", total / valid_count);
+    } else {
+        qemu_printf("TIMING ERROR\n");
+    }
     
-    // Setup a builder for evaluation tests
+    // Builder creation (with arena)
+    total = 0;
+    valid_count = 0;
+    qemu_printf("   Builder creation: ");
+    for (int i = 0; i < SETUP_ITERATIONS; i++) {
+        timing_result_t result = measure_operation(op_create_builder);
+        if (result.valid) {
+            total += result.ticks;
+            valid_count++;
+        }
+    }
+    if (valid_count > 0) {
+        qemu_printf("%u ticks avg\n", total / valid_count);
+    } else {
+        qemu_printf("TIMING ERROR\n");
+    }
+    
+    // Expression parsing
+    total = 0;
+    valid_count = 0;
+    qemu_printf("   Expression parsing: ");
+    for (int i = 0; i < SETUP_ITERATIONS; i++) {
+        timing_result_t result = measure_operation(op_parse_expressions);
+        if (result.valid) {
+            total += result.ticks;
+            valid_count++;
+        }
+    }
+    if (valid_count > 0) {
+        qemu_printf("%u ticks avg\n", total / valid_count);
+    } else {
+        qemu_printf("TIMING ERROR\n");
+    }
+    
+    // Clean up global arena
+    exp_rs_arena_free(g_arena);
+    g_arena = NULL;
+    
+    // Setup for evaluation tests
+    qemu_printf("\n2. Runtime Operations\n");
+    qemu_printf("   Setting up for evaluation tests...\n");
+    
     g_ctx = create_test_context();
     exp_rs_context_register_native_function(g_ctx, "sign", 1, native_sign);
     
-    g_eval_builder = exp_rs_batch_builder_new();
+    g_eval_arena = exp_rs_arena_new(8192);
+    if (!g_eval_arena) {
+        qemu_printf("FAIL: Failed to create eval arena\n");
+        exp_rs_context_free(g_ctx);
+        return TEST_FAIL;
+    }
+    
+    g_eval_builder = exp_rs_batch_builder_new(g_eval_arena);
     for (int p = 0; p < 10; p++) {
         exp_rs_batch_builder_add_parameter(g_eval_builder, param_names[p], param_values[p]);
     }
@@ -213,85 +256,81 @@ test_result_t test_setup_timing() {
         exp_rs_batch_builder_add_expression(g_eval_builder, expressions[e]);
     }
     
-    // Warm up
-    for (int i = 0; i < 100; i++) {
-        op_evaluate();
-    }
+    // Evaluation timing
+    total = 0;
+    valid_count = 0;
+    qemu_printf("   Evaluation (%d iterations): ", EVAL_ITERATIONS);
     
-    // Measure evaluation time
     benchmark_start();
     for (int i = 0; i < EVAL_ITERATIONS; i++) {
-        op_evaluate();
+        exp_rs_batch_builder_eval(g_eval_builder, g_ctx);
     }
     uint32_t eval_ticks = benchmark_stop();
     
-    qemu_printf("   %d evaluations in %u ticks\n", EVAL_ITERATIONS, eval_ticks);
-    qemu_printf("   Ticks per evaluation: %u\n", eval_ticks / EVAL_ITERATIONS);
-    small_warnings = get_small_elapsed_warning_count();
-    invalid_warnings = get_invalid_timing_warning_count();
-    if (small_warnings > 0 || invalid_warnings > 0) {
-        qemu_printf("   [Warnings: %u invalid timing, %u small elapsed]\n", 
-                    invalid_warnings, small_warnings);
+    if (eval_ticks < 0xF0000000) {
+        qemu_printf("%u total ticks, ", eval_ticks);
+        qemu_printf("%u ticks/eval\n", eval_ticks / EVAL_ITERATIONS);
+    } else {
+        qemu_printf("TIMING ERROR\n");
+        increment_invalid_timing_warning();
     }
     
-    // Test 5: Full cycle with parameter updates
-    qemu_print("\n5. Full Cycle (params + eval)\n");
-    reset_warning_counts();
+    // Parameter update timing
+    qemu_printf("   Parameter update (%d iterations): ", EVAL_ITERATIONS);
     
     benchmark_start();
     for (int i = 0; i < EVAL_ITERATIONS; i++) {
-        op_full_cycle();
+        for (int p = 0; p < 10; p++) {
+            exp_rs_batch_builder_set_param(g_eval_builder, p, param_values[p] + (i & 0xFF) * 0.001);
+        }
     }
-    uint32_t full_ticks = benchmark_stop();
+    uint32_t param_ticks = benchmark_stop();
     
-    qemu_printf("   %d full cycles in %u ticks\n", EVAL_ITERATIONS, full_ticks);
-    qemu_printf("   Ticks per full cycle: %u\n", full_ticks / EVAL_ITERATIONS);
-    qemu_printf("   Parameter update overhead: %u ticks\n", 
-                (full_ticks - eval_ticks) / EVAL_ITERATIONS);
-    small_warnings = get_small_elapsed_warning_count();
-    invalid_warnings = get_invalid_timing_warning_count();
-    if (small_warnings > 0 || invalid_warnings > 0) {
-        qemu_printf("   [Warnings: %u invalid timing, %u small elapsed]\n", 
-                    invalid_warnings, small_warnings);
+    if (param_ticks < 0xF0000000) {
+        qemu_printf("%u total ticks, ", param_ticks);
+        qemu_printf("%u ticks/update\n", param_ticks / EVAL_ITERATIONS);
+    } else {
+        qemu_printf("TIMING ERROR\n");
+        increment_invalid_timing_warning();
     }
     
-    // Summary
-    qemu_print("\n6. Summary\n");
-    qemu_printf("   Complete setup: %u ticks\n", avg_setup);
-    qemu_printf("   - Context creation: %u ticks (%u%%)\n", 
-                avg_context, (avg_context * 100) / avg_setup);
-    qemu_printf("   - Expression parsing: %u ticks (%u%%)\n", 
-                avg_parse, (avg_parse * 100) / avg_setup);
-    qemu_printf("   - Evaluation: %u ticks\n", eval_ticks / EVAL_ITERATIONS);
+    // Combined update + eval
+    qemu_printf("   Update + eval (%d iterations): ", EVAL_ITERATIONS);
+    
+    benchmark_start();
+    for (int i = 0; i < EVAL_ITERATIONS; i++) {
+        // Update parameters
+        for (int p = 0; p < 10; p++) {
+            exp_rs_batch_builder_set_param(g_eval_builder, p, param_values[p] + (i & 0xFF) * 0.001);
+        }
+        // Evaluate
+        exp_rs_batch_builder_eval(g_eval_builder, g_ctx);
+    }
+    uint32_t combined_ticks = benchmark_stop();
+    
+    if (combined_ticks < 0xF0000000) {
+        qemu_printf("%u total ticks, ", combined_ticks);
+        qemu_printf("%u ticks/cycle\n", combined_ticks / EVAL_ITERATIONS);
+    } else {
+        qemu_printf("TIMING ERROR\n");
+        increment_invalid_timing_warning();
+    }
     
     // Cleanup
     exp_rs_batch_builder_free(g_eval_builder);
+    exp_rs_arena_free(g_eval_arena);
     exp_rs_context_free(g_ctx);
     
-    // Get test end time and calculate total duration
-    uint32_t test_end_value, test_end_overflows;
-    get_timer_snapshot(&test_end_value, &test_end_overflows);
-    
-    uint64_t total_test_ticks = calculate_total_ticks(test_start_value, test_end_value,
-                                                       test_start_overflows, test_end_overflows);
-    
-    qemu_print("\n7. Total Test Duration\n");
-    // Print the 64-bit value properly
-    uint32_t high_part = (uint32_t)(total_test_ticks >> 32);
-    uint32_t low_part = (uint32_t)(total_test_ticks & 0xFFFFFFFF);
-    if (high_part > 0) {
-        qemu_printf("   Total ticks: 0x%08x%08x\n", high_part, low_part);
-    } else {
-        qemu_printf("   Total ticks: %u\n", low_part);
+    // Report warnings
+    int warnings = get_invalid_timing_warnings();
+    if (warnings > 0) {
+        qemu_printf("\nWARNING: %d invalid timing measurements detected\n", warnings);
     }
-    qemu_print("   Note: Compare with wall clock time reported by meson/qemu\n");
-    qemu_print("   to calculate ticks per second rate\n");
     
-    qemu_print("\nTest completed successfully\n");
+    qemu_printf("\nTest completed successfully\n");
     return TEST_PASS;
 }
 
-// Main entry point
 int main(void) {
     test_result_t result = test_setup_timing();
     qemu_exit(result == TEST_PASS ? 0 : 1);

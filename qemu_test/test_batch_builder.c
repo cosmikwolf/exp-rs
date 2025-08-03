@@ -15,9 +15,18 @@ test_result_t test_batch_builder_basic(void) {
         return TEST_FAIL;
     }
     
-    void* builder = exp_rs_batch_builder_new();
+    // Create arena for zero-allocation expression evaluation
+    void* arena = exp_rs_arena_new(8192); // 8KB arena for embedded test
+    if (!arena) {
+        qemu_printf("FAIL: Failed to create arena\n");
+        exp_rs_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    void* builder = exp_rs_batch_builder_new(arena);
     if (!builder) {
         qemu_printf("FAIL: Failed to create batch builder\n");
+        exp_rs_arena_free(arena);
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
@@ -30,6 +39,7 @@ test_result_t test_batch_builder_basic(void) {
     if (param_a < 0 || param_b < 0 || param_c < 0) {
         qemu_printf("FAIL: Failed to add parameters\n");
         exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
@@ -43,6 +53,7 @@ test_result_t test_batch_builder_basic(void) {
     if (expr1 < 0 || expr2 < 0 || expr3 < 0 || expr4 < 0) {
         qemu_printf("FAIL: Failed to add expressions\n");
         exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
@@ -56,6 +67,7 @@ test_result_t test_batch_builder_basic(void) {
     if (exp_rs_batch_builder_eval(builder, ctx) != 0) {
         qemu_printf("FAIL: Evaluation failed\n");
         exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
@@ -74,6 +86,7 @@ test_result_t test_batch_builder_basic(void) {
         fabs(result3 - 5.0) > 0.001 || fabs(result4 - 12.0) > 0.001) {
         qemu_printf("FAIL: Results don't match expected values\n");
         exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
@@ -87,6 +100,7 @@ test_result_t test_batch_builder_basic(void) {
     if (exp_rs_batch_builder_eval(builder, ctx) != 0) {
         qemu_printf("FAIL: Re-evaluation failed\n");
         exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
@@ -105,6 +119,7 @@ test_result_t test_batch_builder_basic(void) {
         fabs(result3 - 13.0) > 0.001 || fabs(result4 - 17.0) > 0.001) {
         qemu_printf("FAIL: Updated results don't match expected values\n");
         exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
@@ -155,12 +170,14 @@ test_result_t test_batch_builder_basic(void) {
     if (param_count != 3 || expr_count != 4) {
         qemu_printf("FAIL: Incorrect counts\n");
         exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
         exp_rs_context_free(ctx);
         return TEST_FAIL;
     }
     
     // Clean up
     exp_rs_batch_builder_free(builder);
+    exp_rs_arena_free(arena);
     exp_rs_context_free(ctx);
     
     qemu_printf("\nAll tests PASSED!\n");

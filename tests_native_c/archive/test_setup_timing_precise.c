@@ -4,7 +4,7 @@
 #include <time.h>
 #include <math.h>
 #include <stdint.h>
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 #ifdef __APPLE__
 #include <mach/mach_time.h>

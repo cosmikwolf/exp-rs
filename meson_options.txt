@@ -18,3 +18,10 @@ option(
   value: false,
   description: 'Enables building of qemu tests',
 )
+
+option(
+  'test_native',
+  type: 'boolean',
+  value: false,
+  description: 'Enable building and running native C tests',
+)

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include "include/exp_rs.h"
+#include "exp_rs.h"
 
 #define EPSILON 1e-10
 

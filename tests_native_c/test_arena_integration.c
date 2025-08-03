@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <time.h>
 #include <math.h>
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 // Helper function to measure time in microseconds
 static double get_time_us() {
@@ -59,7 +59,7 @@ void test_batch_builder_with_arena() {
     assert(arena != NULL);
     
     // Create batch builder with arena
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new_with_arena(arena);
+    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
     assert(builder != NULL);
     printf("✓ Batch builder created with arena\n");
     
@@ -123,7 +123,7 @@ void test_arena_reset_reuse() {
     EvalContextOpaque* ctx = exp_rs_context_new();
     
     // First use
-    BatchBuilderOpaque* builder1 = exp_rs_batch_builder_new_with_arena(arena);
+    BatchBuilderOpaque* builder1 = exp_rs_batch_builder_new(arena);
     exp_rs_batch_builder_add_expression(builder1, "a + b + c");
     exp_rs_batch_builder_add_parameter(builder1, "a", 1.0);
     exp_rs_batch_builder_add_parameter(builder1, "b", 2.0);
@@ -141,7 +141,7 @@ void test_arena_reset_reuse() {
     printf("✓ Arena reset\n");
     
     // Second use with same arena
-    BatchBuilderOpaque* builder2 = exp_rs_batch_builder_new_with_arena(arena);
+    BatchBuilderOpaque* builder2 = exp_rs_batch_builder_new(arena);
     exp_rs_batch_builder_add_expression(builder2, "x * y * z");
     exp_rs_batch_builder_add_parameter(builder2, "x", 2.0);
     exp_rs_batch_builder_add_parameter(builder2, "y", 3.0);
@@ -182,7 +182,7 @@ void test_benchmark_expressions() {
     exp_rs_context_register_native_function(ctx, "max", 2, native_max);
     exp_rs_context_register_native_function(ctx, "fmod", 2, native_fmod);
     
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new_with_arena(arena);
+    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
     
     // Add the same 7 expressions from consolidated_benchmark.rs
     const char* expressions[] = {
@@ -277,7 +277,7 @@ void test_zero_allocations() {
     exp_rs_context_register_native_function(ctx, "tan", 1, native_tan);
     exp_rs_context_register_native_function(ctx, "sqrt", 1, native_sqrt);
     
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new_with_arena(arena);
+    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
     
     // Add complex expression
     exp_rs_batch_builder_add_expression(builder, 
@@ -353,7 +353,7 @@ void test_arena_size_estimation() {
     printf("✓ Created arena with estimated size\n");
     
     // Test that we can actually use it
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new_with_arena(arena);
+    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
     for (size_t i = 0; i < num_exprs; i++) {
         int32_t idx = exp_rs_batch_builder_add_expression(builder, expressions[i]);
         assert(idx == (int32_t)i);
@@ -371,13 +371,13 @@ void test_error_handling() {
     printf("=== Test Error Handling ===\n");
     
     // Test NULL arena
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new_with_arena(NULL);
+    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(NULL);
     assert(builder == NULL);
     printf("✓ NULL arena handled correctly\n");
     
     // Test invalid expression (skip for now - parser might accept it)
     ArenaOpaque* arena = exp_rs_arena_new(64 * 1024);
-    builder = exp_rs_batch_builder_new_with_arena(arena);
+    builder = exp_rs_batch_builder_new(arena);
     
     // int32_t idx = exp_rs_batch_builder_add_expression(builder, "x + + y");
     // assert(idx < 0);  // Should return error

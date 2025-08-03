@@ -585,30 +585,11 @@ __attribute__((aligned(8))) void exp_rs_batch_free_results(struct BatchEvalResul
  *
  * TODO: This function needs to be refactored to work properly with arena allocation.
  * Currently it creates temporary arenas that don't live long enough.
- * Use exp_rs_batch_builder_new_with_arena for proper arena-based evaluation.
+ * Use exp_rs_batch_builder_new for proper arena-based evaluation.
  */
 __attribute__((aligned(8)))
 int32_t exp_rs_batch_eval_with_context(const struct BatchEvalRequest *request,
                                        const struct EvalContextOpaque *ctx);
-
-/**
- * Creates a new batch builder for efficient expression evaluation.
- *
- * The batch builder allows you to:
- * - Pre-parse expressions once
- * - Reuse a single evaluation engine
- * - Update parameters efficiently
- * - Evaluate all expressions in one call
- *
- * # Returns
- *
- * A pointer to the new batch builder, or NULL on allocation failure.
- *
- * # Safety
- *
- * The returned pointer must be freed with `exp_rs_batch_builder_free`.
- */
-__attribute__((aligned(8))) struct BatchBuilderOpaque *exp_rs_batch_builder_new(void);
 
 /**
  * Frees a batch builder.
@@ -956,7 +937,7 @@ uintptr_t exp_rs_estimate_arena_size(const char *const *expressions,
  * Arena* arena = exp_rs_arena_new(256 * 1024);
  *
  * // Create batch builder with arena
- * BatchBuilder* builder = exp_rs_batch_builder_new_with_arena(arena);
+ * BatchBuilder* builder = exp_rs_batch_builder_new(arena);
  *
  * // Add expressions (parsed into arena)
  * exp_rs_batch_builder_add_expression(builder, "x + y");
@@ -969,7 +950,7 @@ uintptr_t exp_rs_estimate_arena_size(const char *const *expressions,
  * ```
  */
 __attribute__((aligned(8)))
-struct BatchBuilderOpaque *exp_rs_batch_builder_new_with_arena(struct ArenaOpaque *arena);
+struct BatchBuilderOpaque *exp_rs_batch_builder_new(struct ArenaOpaque *arena);
 
 #if defined(EXP_RS_CUSTOM_ALLOC)
 extern void *exp_rs_malloc(uintptr_t size);

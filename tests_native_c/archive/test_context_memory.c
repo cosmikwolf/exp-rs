@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <dlfcn.h>
-#include "include/exp_rs.h"
+#include "exp_rs.h"
 
 // Memory tracking globals
 static size_t g_total_allocated = 0;

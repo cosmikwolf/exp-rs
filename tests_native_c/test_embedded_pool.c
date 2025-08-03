@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <math.h>
-#include "include/exp_rs.h"
+#include "exp_rs.h"
 
 // Configuration for embedded system
 #define NUM_EXPRESSIONS 7
@@ -35,6 +35,7 @@ typedef struct {
     uint32_t read_index;
     
     // Pre-parsed batch builder
+    void* arena;
     void* batch_builder;
     void* eval_context;
     
@@ -98,9 +99,18 @@ int embedded_pool_init(void) {
         return -1;
     }
     
-    g_pool.batch_builder = exp_rs_batch_builder_new();
+    // Create arena for zero-allocation expression evaluation
+    g_pool.arena = exp_rs_arena_new(16384); // 16KB arena for embedded system
+    if (!g_pool.arena) {
+        printf("Failed to create arena\n");
+        exp_rs_context_free(g_pool.eval_context);
+        return -1;
+    }
+    
+    g_pool.batch_builder = exp_rs_batch_builder_new(g_pool.arena);
     if (!g_pool.batch_builder) {
         printf("Failed to create batch builder\n");
+        exp_rs_arena_free(g_pool.arena);
         exp_rs_context_free(g_pool.eval_context);
         return -1;
     }
@@ -231,6 +241,11 @@ void embedded_pool_cleanup(void) {
     if (g_pool.batch_builder) {
         exp_rs_batch_builder_free(g_pool.batch_builder);
         g_pool.batch_builder = NULL;
+    }
+    
+    if (g_pool.arena) {
+        exp_rs_arena_free(g_pool.arena);
+        g_pool.arena = NULL;
     }
     
     if (g_pool.eval_context) {

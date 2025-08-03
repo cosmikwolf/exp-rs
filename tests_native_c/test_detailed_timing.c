@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <time.h>
 #include <math.h>
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 // Helper function to measure time in microseconds
 static double get_time_us() {
@@ -53,7 +53,7 @@ int main() {
     exp_rs_context_register_native_function(ctx, "max", 2, native_max);
     exp_rs_context_register_native_function(ctx, "fmod", 2, native_fmod);
     
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new_with_arena(arena);
+    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
     
     // Add the same 7 expressions
     const char* expressions[] = {

@@ -31,44 +31,68 @@ cargo_profile = 'release'
 cargo_profile_flag = ['--release']
 
 # Build Rust static library using cargo build
-exp_rs_build = custom_target(
-  'cargo_build',
-  output: 'libexp_rs.a',
-  # input: meson.current_build_dir()
-  # + '/exp_rs/thumbv7em-none-eabihf/release/libexp_rs.a',
-  # install_dir: meson.current_build_dir(),
-  command: [
-    'cargo',
-    'build',
-    '-Zbuild-std=core,alloc,compiler_builtins',
-    # '--target', 'thumbv7em-none-eabihf',
-    '--target', meson.current_source_dir() + '/targets/cortex-m7-strict.json',
-    cargo_profile_flag,
-    '--no-default-features',
-    '--features', ','.join(rust_features),
-    '--target-dir', meson.current_build_dir(),
-    '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
-    # '--target-dir', meson.current_build_dir() + '/exp-rs',
-    '--lib', '&&',
-    'cp',
-    meson.current_source_dir() + '/include/exp_rs.h',
-    meson.current_build_dir(),
-    '&&',
-    'cp',
-    meson.current_build_dir()
-    + '/cortex-m7-strict/'
-    + cargo_profile
-    + '/libexp_rs.a',
-    # meson.current_source_dir()
-    # + '/target/thumbv7em-none-eabihf/release/libexp_rs.a',
-    meson.current_build_dir()
-    + '/libexp_rs.a',
-  ],
-  build_always_stale: false,
-  build_by_default: false,
-  # install: true,
-  console: true,
-)
+if get_option('test_native')
+  # Native build for host tests
+  exp_rs_build = custom_target(
+    'cargo_build',
+    output: 'libexp_rs.a',
+    command: [
+      'cargo',
+      'build',
+      cargo_profile_flag,
+      '--features', ','.join(rust_features),
+      '--target-dir', meson.current_build_dir(),
+      '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
+      '--lib', '&&',
+      'cp',
+      meson.current_source_dir() + '/include/exp_rs.h',
+      meson.current_build_dir(),
+      '&&',
+      'cp',
+      meson.current_source_dir()
+      + '/target/'
+      + cargo_profile
+      + '/libexp_rs.a',
+      meson.current_build_dir()
+      + '/libexp_rs.a',
+    ],
+    build_always_stale: false,
+    build_by_default: false,
+    console: true,
+  )
+else
+  # Cross-compilation build for QEMU tests
+  exp_rs_build = custom_target(
+    'cargo_build',
+    output: 'libexp_rs.a',
+    command: [
+      'cargo',
+      'build',
+      '-Zbuild-std=core,alloc,compiler_builtins',
+      '--target', meson.current_source_dir() + '/targets/cortex-m7-strict.json',
+      cargo_profile_flag,
+      '--no-default-features',
+      '--features', ','.join(rust_features),
+      '--target-dir', meson.current_build_dir(),
+      '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
+      '--lib', '&&',
+      'cp',
+      meson.current_source_dir() + '/include/exp_rs.h',
+      meson.current_build_dir(),
+      '&&',
+      'cp',
+      meson.current_build_dir()
+      + '/cortex-m7-strict/'
+      + cargo_profile
+      + '/libexp_rs.a',
+      meson.current_build_dir()
+      + '/libexp_rs.a',
+    ],
+    build_always_stale: false,
+    build_by_default: false,
+    console: true,
+  )
+endif
 
 exp_rs_dep = declare_dependency(
   # sources: ['src/ffi.rs'],
@@ -79,4 +103,9 @@ exp_rs_dep = declare_dependency(
 # Include the qemu_test subdir if building qemu tests
 if get_option('enable_exprs_qemu_tests')
   subdir('qemu_test')
+endif
+
+# Include native C tests if building for host system
+if get_option('test_native')
+  subdir('tests_native_c')
 endif

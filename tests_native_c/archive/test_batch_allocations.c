@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <dlfcn.h>
 #include <math.h>
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 // Memory tracking
 static size_t g_allocated_before = 0;

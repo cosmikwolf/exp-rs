@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "include/exp_rs.h"
+#include "exp_rs.h"
 
 int main() {
     printf("Testing simple evaluation...\n");

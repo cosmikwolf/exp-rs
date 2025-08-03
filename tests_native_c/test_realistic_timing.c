@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 // Native function implementations
 Real native_sin(const Real* args, uintptr_t nargs) { (void)nargs; return sin(args[0]); }
@@ -48,35 +48,32 @@ EvalContextOpaque* create_test_context() {
 }
 
 int main() {
-    printf("=== C FFI Realistic Timing Analysis ===\n");
-    printf("Measuring bulk operations for accurate timings\n\n");
+    printf("=== Realistic Usage Timing (Bulk Operations) ===\n");
     
-    const uint64_t now_max = nanotime_now_max();
+    // Initialize nanotime
+    uint64_t now_max = nanotime_now_max();
     
+    // Test data
     const char* expressions[] = {
-        "a*sin(b*3.14159/180) + c*cos(d*3.14159/180) + sqrt(e*e + f*f)",
-        "exp(g/10) * log(h+1) + pow(i, 0.5) * j",
-        "((a > 5) && (b < 10)) * c + ((d >= e) || (f != g)) * h + min(i, j)",
-        "sqrt(pow(a-e, 2) + pow(b-f, 2)) + atan2(c-g, d-h) * (i+j)/2",
-        "abs(a-b) * sign(c-d) + max(e, f) * min(g, h) + fmod(i*j, 10)",
-        "(a+b+c)/3 * sin((d+e+f)*3.14159/6) + log10(g*h+1) - exp(-i*j/100)",
-        "a + b * c - d / (e + 0.001) + pow(f, g) * h - i + j"
+        "p0 + p1",
+        "p0 * p1 + p2",
+        "sqrt(p0*p0 + p1*p1)",
+        "p3 * sin(p4)",
+        "p5 + p6 - p7",
+        "p8 * p8 * p9",
+        "(p0 + p1 + p2) / 3.0"
     };
     
-    const char* param_names[] = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"};
-    double param_values[] = {1.5, 3.0, 4.5, 6.0, 7.5, 9.0, 10.5, 12.0, 13.5, 15.0};
+    const char* param_names[] = {"p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"};
+    double param_values[] = {1.5, 2.3, 3.7, 0.5, 1.2, -0.8, 2.1, 0.9, 1.4, 0.7};
     
-    // Test 1: Complete setup operations
-    printf("1. Complete Setup Time (1000 iterations)\n");
-    
-    uint64_t start = nanotime_now();
-    
-    for (int i = 0; i < 1000; i++) {
-        // Create context
+    // Warm up
+    {
         EvalContextOpaque* ctx = create_test_context();
         
-        // Create builder
-        BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
+        // Create arena and builder
+        ArenaOpaque* arena = exp_rs_arena_new(32768);
+        BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
         
         // Add parameters
         for (int p = 0; p < 10; p++) {
@@ -88,34 +85,46 @@ int main() {
             exp_rs_batch_builder_add_expression(builder, expressions[e]);
         }
         
-        // First evaluation
+        // Evaluate
         exp_rs_batch_builder_eval(builder, ctx);
         
         // Cleanup
         exp_rs_batch_builder_free(builder);
+        exp_rs_arena_free(arena);
         exp_rs_context_free(ctx);
     }
     
-    uint64_t end = nanotime_now();
-    uint64_t total_ns = nanotime_interval(start, end, now_max);
-    double setup_us = total_ns / 1000.0 / 1000.0;
-    printf("   Average setup time: %.3f µs\n", setup_us);
-    
-    // Test 2: Expression parsing in bulk
-    printf("\n2. Expression Parsing Only (10000 iterations)\n");
+    // Create context
     EvalContextOpaque* ctx = create_test_context();
     
+    printf("\n1. Context Creation (100 times)\n");
+    uint64_t start = nanotime_now();
+    
+    for (int i = 0; i < 100; i++) {
+        EvalContextOpaque* temp_ctx = create_test_context();
+        exp_rs_context_free(temp_ctx);
+    }
+    
+    uint64_t elapsed = nanotime_interval(start, nanotime_now(), now_max);
+    printf("   Total: %.3f ms\n", elapsed / 1000000.0);
+    printf("   Average: %.3f µs per context\n", elapsed / 1000.0 / 100.0);
+    
+    printf("\n2. Full Setup (Parse + Build) with Arena Reuse (10000 times)\n");
+    
+    // Create a reusable arena
+    ArenaOpaque* setup_arena = exp_rs_arena_new(32768);
     start = nanotime_now();
     
     for (int i = 0; i < 10000; i++) {
-        BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
+        if (i > 0) exp_rs_arena_reset(setup_arena);
+        BatchBuilderOpaque* builder = exp_rs_batch_builder_new(setup_arena);
         
         // Add parameters first
         for (int p = 0; p < 10; p++) {
             exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
         }
         
-        // Parse all expressions - this is what we're timing
+        // Add expressions
         for (int e = 0; e < 7; e++) {
             exp_rs_batch_builder_add_expression(builder, expressions[e]);
         }
@@ -123,18 +132,20 @@ int main() {
         exp_rs_batch_builder_free(builder);
     }
     
-    end = nanotime_now();
-    total_ns = nanotime_interval(start, end, now_max);
-    double parse_total_us = total_ns / 10000.0 / 1000.0;
-    printf("   Time to setup builder + parse 7 expressions: %.3f µs\n", parse_total_us);
+    elapsed = nanotime_interval(start, nanotime_now(), now_max);
+    exp_rs_arena_free(setup_arena);
     
-    // Test 3: Just builder setup overhead
-    printf("\n3. Builder Setup Overhead (10000 iterations)\n");
+    printf("   Total: %.3f ms\n", elapsed / 1000000.0);
+    printf("   Average: %.3f µs per setup\n", elapsed / 1000.0 / 10000.0);
     
+    printf("\n3. Parameter Setup Only with Arena Reuse (10000 times)\n");
+    
+    ArenaOpaque* param_arena = exp_rs_arena_new(32768);
     start = nanotime_now();
     
     for (int i = 0; i < 10000; i++) {
-        BatchBuilderOpaque* builder = exp_rs_batch_builder_new();
+        if (i > 0) exp_rs_arena_reset(param_arena);
+        BatchBuilderOpaque* builder = exp_rs_batch_builder_new(param_arena);
         
         // Add parameters only
         for (int p = 0; p < 10; p++) {
@@ -144,18 +155,19 @@ int main() {
         exp_rs_batch_builder_free(builder);
     }
     
-    end = nanotime_now();
-    total_ns = nanotime_interval(start, end, now_max);
-    double builder_overhead_us = total_ns / 10000.0 / 1000.0;
-    printf("   Builder + parameters time: %.3f µs\n", builder_overhead_us);
-    printf("   Expression parsing only: %.3f µs\n", parse_total_us - builder_overhead_us);
-    printf("   Per expression: %.3f µs\n", (parse_total_us - builder_overhead_us) / 7.0);
+    elapsed = nanotime_interval(start, nanotime_now(), now_max);
+    exp_rs_arena_free(param_arena);
     
-    // Test 4: Runtime evaluation performance
+    printf("   Total: %.3f ms\n", elapsed / 1000000.0);
+    printf("   Average: %.3f µs per param setup\n", elapsed / 1000.0 / 10000.0);
+    printf("   Expression parsing overhead: ~%.3f µs per expression\n", 
+           ((elapsed / 1000.0 / 10000.0) / 7.0));
+    
     printf("\n4. Runtime Performance (100000 iterations)\n");
     
-    // Setup once
-    BatchBuilderOpaque* eval_builder = exp_rs_batch_builder_new();
+    // Setup once with arena
+    ArenaOpaque* eval_arena = exp_rs_arena_new(32768);
+    BatchBuilderOpaque* eval_builder = exp_rs_batch_builder_new(eval_arena);
     for (int p = 0; p < 10; p++) {
         exp_rs_batch_builder_add_parameter(eval_builder, param_names[p], param_values[p]);
     }
@@ -163,32 +175,25 @@ int main() {
         exp_rs_batch_builder_add_expression(eval_builder, expressions[e]);
     }
     
-    // Warm up
-    for (int i = 0; i < 1000; i++) {
-        exp_rs_batch_builder_eval(eval_builder, ctx);
-    }
-    
-    // Time evaluation only
+    // Eval only
     start = nanotime_now();
     
     for (int i = 0; i < 100000; i++) {
         exp_rs_batch_builder_eval(eval_builder, ctx);
     }
     
-    end = nanotime_now();
-    total_ns = nanotime_interval(start, end, now_max);
-    double eval_us = total_ns / 100000.0 / 1000.0;
-    printf("   Evaluation only: %.3f µs\n", eval_us);
-    printf("   Per expression: %.3f µs\n", eval_us / 7.0);
-    printf("   Rate: %.0f Hz\n", 1e6 / eval_us);
+    elapsed = nanotime_interval(start, nanotime_now(), now_max);
     
-    // Test 5: Full cycle with parameter updates
-    printf("\n5. Full Cycle Performance (100000 iterations)\n");
+    printf("   Total: %.3f ms\n", elapsed / 1000000.0);
+    printf("   Average: %.3f µs per eval\n", elapsed / 1000.0 / 100000.0);
+    printf("   Per expression: %.3f µs\n", elapsed / 1000.0 / 100000.0 / 7.0);
     
+    // Parameter update + eval
+    printf("\n5. Parameter Update + Eval (100000 iterations)\n");
     start = nanotime_now();
     
     for (int i = 0; i < 100000; i++) {
-        // Update all parameters
+        // Update parameters
         for (int p = 0; p < 10; p++) {
             exp_rs_batch_builder_set_param(eval_builder, p, param_values[p] + (i % 100) * 0.01);
         }
@@ -197,50 +202,63 @@ int main() {
         exp_rs_batch_builder_eval(eval_builder, ctx);
     }
     
-    end = nanotime_now();
-    total_ns = nanotime_interval(start, end, now_max);
-    double full_us = total_ns / 100000.0 / 1000.0;
-    printf("   Full cycle: %.3f µs\n", full_us);
-    printf("   Parameter updates: %.3f µs\n", full_us - eval_us);
-    printf("   Rate: %.0f Hz\n", 1e6 / full_us);
+    elapsed = nanotime_interval(start, nanotime_now(), now_max);
     
-    // Summary and comparison
-    printf("\n6. Summary\n");
-    printf("   Complete setup: %.3f µs\n", setup_us);
-    printf("   Expression parsing: %.3f µs (%.3f µs per expression)\n", 
-           parse_total_us - builder_overhead_us, 
-           (parse_total_us - builder_overhead_us) / 7.0);
-    printf("   Evaluation only: %.3f µs\n", eval_us);
-    printf("   Full cycle: %.3f µs\n", full_us);
+    printf("   Total: %.3f ms\n", elapsed / 1000000.0);
+    printf("   Average: %.3f µs per cycle\n", elapsed / 1000.0 / 100000.0);
     
-    printf("\n7. Setup Time Breakdown\n");
-    double ctx_creation = 3.0;  // Estimate from previous tests
-    double builder_creation = builder_overhead_us;
-    double expr_parsing = parse_total_us - builder_overhead_us;
-    double first_eval = eval_us;
-    double other = setup_us - ctx_creation - builder_creation - expr_parsing - first_eval;
+    // Cleanup eval builder
+    exp_rs_batch_builder_free(eval_builder);
+    exp_rs_arena_free(eval_arena);
     
-    printf("   Context creation: %.3f µs (%.1f%%)\n", ctx_creation, (ctx_creation / setup_us) * 100);
-    printf("   Builder + params: %.3f µs (%.1f%%)\n", builder_creation, (builder_creation / setup_us) * 100);
-    printf("   Expression parsing: %.3f µs (%.1f%%)\n", expr_parsing, (expr_parsing / setup_us) * 100);
-    printf("   First evaluation: %.3f µs (%.1f%%)\n", first_eval, (first_eval / setup_us) * 100);
-    printf("   Other overhead: %.3f µs (%.1f%%)\n", other, (other / setup_us) * 100);
+    // Test at different batch sizes
+    printf("\n6. Batch Size Scaling\n");
+    int batch_sizes[] = {1, 10, 100, 1000};
     
-    printf("\n8. Comparison with Rust\n");
-    printf("   Rust setup: 33.5 µs\n");
-    printf("   C FFI setup: %.3f µs\n", setup_us);
-    printf("   Rust evaluation: 13.7 µs\n");
-    printf("   C FFI evaluation: %.3f µs\n", eval_us);
-    
-    // The real story
-    if (expr_parsing < 1.0) {
-        printf("\n   NOTE: Expression parsing time seems unrealistically low (%.3f µs).\n", expr_parsing);
-        printf("   This suggests the FFI may be deferring parsing work until evaluation.\n");
-        printf("   The \"setup\" time may not include all initialization work.\n");
+    for (int b = 0; b < 4; b++) {
+        int batch_size = batch_sizes[b];
+        int iterations = 100000 / batch_size;  // Keep total operations constant
+        
+        // Create arena and builder for this batch size
+        ArenaOpaque* batch_arena = exp_rs_arena_new(32768);
+        BatchBuilderOpaque* batch_builder = exp_rs_batch_builder_new(batch_arena);
+        
+        // Setup
+        for (int p = 0; p < 10; p++) {
+            exp_rs_batch_builder_add_parameter(batch_builder, param_names[p], param_values[p]);
+        }
+        for (int e = 0; e < 7; e++) {
+            exp_rs_batch_builder_add_expression(batch_builder, expressions[e]);
+        }
+        
+        start = nanotime_now();
+        
+        for (int i = 0; i < iterations; i++) {
+            // Simulate batch processing
+            for (int j = 0; j < batch_size; j++) {
+                // Update params for each item
+                for (int p = 0; p < 10; p++) {
+                    exp_rs_batch_builder_set_param(batch_builder, p, 
+                        param_values[p] + (i * batch_size + j) * 0.001);
+                }
+                
+                // Evaluate
+                exp_rs_batch_builder_eval(batch_builder, ctx);
+            }
+        }
+        
+        elapsed = nanotime_interval(start, nanotime_now(), now_max);
+        
+        printf("   Batch size %4d: %.3f µs per item (%.3f ms total)\n", 
+               batch_size,
+               elapsed / 1000.0 / (iterations * batch_size),
+               elapsed / 1000000.0);
+        
+        exp_rs_batch_builder_free(batch_builder);
+        exp_rs_arena_free(batch_arena);
     }
     
     // Cleanup
-    exp_rs_batch_builder_free(eval_builder);
     exp_rs_context_free(ctx);
     
     return 0;

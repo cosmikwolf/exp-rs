@@ -60,6 +60,10 @@ use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::ffi::{CStr, c_char};
+use crate::batch_builder::ArenaBatchBuilder;
+
+// Type alias for FFI compatibility
+type BatchBuilder<'a> = ArenaBatchBuilder<'a>;
 
 // Add allocator code for ARM targets
 #[cfg(all(not(test), target_arch = "arm"))]
@@ -1191,16 +1195,17 @@ pub extern "C" fn exp_rs_batch_eval_alloc(
         buffer.resize(modified_request.batch_size, 0.0 as Real);
         result_buffers.push(buffer);
     }
-    
+
     // Get pointers to each buffer
-    let result_ptrs: Vec<*mut Real> = result_buffers.iter_mut()
+    let result_ptrs: Vec<*mut Real> = result_buffers
+        .iter_mut()
         .map(|buf| buf.as_mut_ptr())
         .collect();
-    
+
     // Leak both the buffers and the pointer array to keep them alive
     let leaked_buffers = Box::leak(result_buffers.into_boxed_slice());
     let leaked_ptrs = Box::leak(result_ptrs.into_boxed_slice());
-    
+
     modified_request.results = leaked_ptrs.as_mut_ptr();
 
     // Call the main batch eval function
@@ -1250,32 +1255,30 @@ pub extern "C" fn exp_rs_batch_free_results(result: *mut BatchEvalResult) {
             // The memory was allocated as:
             // 1. Vec<Vec<Real>> -> Box<[Vec<Real>]> (leaked)
             // 2. Vec<*mut Real> -> Box<[*mut Real]> (leaked)
-            
+
             // First, reconstruct the boxed slice of pointers
-            let ptrs_slice = core::slice::from_raw_parts_mut(
-                result.results, 
-                result.expression_count
-            );
-            
+            let ptrs_slice =
+                core::slice::from_raw_parts_mut(result.results, result.expression_count);
+
             // For each expression, we need to reconstruct the Vec that was part of the leaked slice
             for i in 0..result.expression_count {
                 if !ptrs_slice[i].is_null() {
                     // Each buffer was originally a Vec<Real> with capacity = batch_size
                     let _ = Vec::from_raw_parts(
-                        ptrs_slice[i], 
-                        result.batch_size,    // length
-                        result.batch_size     // capacity
+                        ptrs_slice[i],
+                        result.batch_size, // length
+                        result.batch_size, // capacity
                     );
                 }
             }
-            
+
             // The original allocation was a Box<[Vec<Real>]> that was leaked
             // We can't reconstruct it directly because the Vecs have been moved out
             // But we still need to free the pointer array which was Box<[*mut Real]>
             let ptrs_vec = Vec::from_raw_parts(
                 result.results,
                 result.expression_count,
-                result.expression_count
+                result.expression_count,
             );
             drop(ptrs_vec);
         }
@@ -1289,10 +1292,10 @@ pub extern "C" fn exp_rs_batch_free_results(result: *mut BatchEvalResult) {
 }
 
 /// Batch evaluate multiple expressions with a pre-existing context
-/// 
+///
 /// TODO: This function needs to be refactored to work properly with arena allocation.
 /// Currently it creates temporary arenas that don't live long enough.
-/// Use exp_rs_batch_builder_new_with_arena for proper arena-based evaluation.
+/// Use exp_rs_batch_builder_new for proper arena-based evaluation.
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_batch_eval_with_context(
     request: *const BatchEvalRequest,
@@ -1301,78 +1304,55 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
     // TODO: This function needs refactoring for arena allocation
     // For now, return error to avoid compilation issues
     return -99; // Special error code indicating not implemented
-    
+
     #[allow(unreachable_code)]
     {
-    use crate::engine::parse_expression_arena;
-    use crate::eval::iterative::{EvalEngine, eval_with_engine};
-    use alloc::rc::Rc;
-    use heapless::FnvIndexMap;
-    use crate::types::{HString, TryIntoHeaplessString};
-    use bumpalo::Bump;
-    if request.is_null() || ctx.is_null() {
-        return -1;
-    }
-
-    let request = unsafe { &*request };
-
-    // Validate request
-    if request.expressions.is_null()
-        || request.expression_count == 0
-        || request.param_names.is_null()
-        || request.param_values.is_null()
-        || request.batch_size == 0
-        || request.results.is_null()
-    {
-        return -1;
-    }
-
-    // Get the context (no longer need to clone and modify it)
-    let ctx_handle = unsafe { &*(ctx as *const alloc::rc::Rc<EvalContext>) };
-
-    // Create a single evaluation engine to reuse
-    let mut engine = EvalEngine::new();
-    
-    // Pre-allocate parameter override map
-    let mut param_map = FnvIndexMap::<HString, Real, 16>::new();
-
-    let mut any_error = false;
-
-    // Process each expression
-    for expr_idx in 0..request.expression_count {
-        // Get expression string
-        let expr_ptr = unsafe { *request.expressions.add(expr_idx) };
-        if expr_ptr.is_null() {
-            if !request.statuses.is_null() {
-                for batch_idx in 0..request.batch_size {
-                    unsafe {
-                        let status = &mut *request
-                            .statuses
-                            .add(expr_idx * request.batch_size + batch_idx);
-                        status.code = -1;
-                        status.expr_index = expr_idx;
-                        status.batch_index = batch_idx;
-                    }
-                }
-            }
-            any_error = true;
-            if request.stop_on_error {
-                return -1;
-            }
-            continue;
+        use crate::engine::parse_expression_arena;
+        use crate::eval::iterative::{EvalEngine, eval_with_engine};
+        use crate::types::{HString, TryIntoHeaplessString};
+        use alloc::rc::Rc;
+        use bumpalo::Bump;
+        use heapless::FnvIndexMap;
+        if request.is_null() || ctx.is_null() {
+            return -1;
         }
 
-        let expr_cstr = unsafe { CStr::from_ptr(expr_ptr) };
-        let expr_str = match expr_cstr.to_str() {
-            Ok(s) => s,
-            Err(_) => {
+        let request = unsafe { &*request };
+
+        // Validate request
+        if request.expressions.is_null()
+            || request.expression_count == 0
+            || request.param_names.is_null()
+            || request.param_values.is_null()
+            || request.batch_size == 0
+            || request.results.is_null()
+        {
+            return -1;
+        }
+
+        // Get the context (no longer need to clone and modify it)
+        let ctx_handle = unsafe { &*(ctx as *const alloc::rc::Rc<EvalContext>) };
+
+        // Create a single evaluation engine to reuse
+        let mut engine = EvalEngine::new();
+
+        // Pre-allocate parameter override map
+        let mut param_map = FnvIndexMap::<HString, Real, 16>::new();
+
+        let mut any_error = false;
+
+        // Process each expression
+        for expr_idx in 0..request.expression_count {
+            // Get expression string
+            let expr_ptr = unsafe { *request.expressions.add(expr_idx) };
+            if expr_ptr.is_null() {
                 if !request.statuses.is_null() {
                     for batch_idx in 0..request.batch_size {
                         unsafe {
                             let status = &mut *request
                                 .statuses
                                 .add(expr_idx * request.batch_size + batch_idx);
-                            status.code = -2;
+                            status.code = -1;
                             status.expr_index = expr_idx;
                             status.batch_index = batch_idx;
                         }
@@ -1380,43 +1360,45 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
                 }
                 any_error = true;
                 if request.stop_on_error {
-                    return -2;
+                    return -1;
                 }
                 continue;
             }
-        };
 
-        // TODO: Fix arena lifetime issue
-        // For now, we can't parse in this function
-        // Users should use BatchBuilder with arena instead
-        if !request.statuses.is_null() {
-            for batch_idx in 0..request.batch_size {
-                unsafe {
-                    let status = &mut *request
-                        .statuses
-                        .add(expr_idx * request.batch_size + batch_idx);
-                    status.code = -3;
-                    status.expr_index = expr_idx;
-                    status.batch_index = batch_idx;
+            let expr_cstr = unsafe { CStr::from_ptr(expr_ptr) };
+            let expr_str = match expr_cstr.to_str() {
+                Ok(s) => s,
+                Err(_) => {
+                    if !request.statuses.is_null() {
+                        for batch_idx in 0..request.batch_size {
+                            unsafe {
+                                let status = &mut *request
+                                    .statuses
+                                    .add(expr_idx * request.batch_size + batch_idx);
+                                status.code = -2;
+                                status.expr_index = expr_idx;
+                                status.batch_index = batch_idx;
+                            }
+                        }
+                    }
+                    any_error = true;
+                    if request.stop_on_error {
+                        return -2;
+                    }
+                    continue;
                 }
-            }
-        }
-        any_error = true;
-        if request.stop_on_error {
-            return -3;
-        }
-        continue;
+            };
 
-        // Get result array pointer
-        let result_ptr = unsafe { *request.results.add(expr_idx) };
-        if result_ptr.is_null() {
+            // TODO: Fix arena lifetime issue
+            // For now, we can't parse in this function
+            // Users should use BatchBuilder with arena instead
             if !request.statuses.is_null() {
                 for batch_idx in 0..request.batch_size {
                     unsafe {
                         let status = &mut *request
                             .statuses
                             .add(expr_idx * request.batch_size + batch_idx);
-                        status.code = -4;
+                        status.code = -3;
                         status.expr_index = expr_idx;
                         status.batch_index = batch_idx;
                     }
@@ -1424,85 +1406,106 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
             }
             any_error = true;
             if request.stop_on_error {
-                return -4;
+                return -3;
             }
             continue;
-        }
 
-        // Evaluate for each batch
-        for batch_idx in 0..request.batch_size {
-            // Clear and build parameter map for this batch
-            param_map.clear();
-            
-            // Set parameters for this batch in the override map
-            for param_idx in 0..request.param_count {
-                let param_name_ptr = unsafe { *request.param_names.add(param_idx) };
-                if param_name_ptr.is_null() {
-                    continue;
-                }
-
-                let param_name_cstr = unsafe { CStr::from_ptr(param_name_ptr) };
-                if let Ok(param_name) = param_name_cstr.to_str() {
-                    // Get parameter values array for this parameter (using correct layout)
-                    let param_values_row = unsafe { *request.param_values.add(param_idx) };
-                    if !param_values_row.is_null() {
-                        // Get value for this batch index
-                        let param_value = unsafe { *param_values_row.add(batch_idx) };
-                        // Add to override map instead of modifying context
-                        if let Ok(hname) = param_name.try_into_heapless() {
-                            let _ = param_map.insert(hname, param_value);
+            // Get result array pointer
+            let result_ptr = unsafe { *request.results.add(expr_idx) };
+            if result_ptr.is_null() {
+                if !request.statuses.is_null() {
+                    for batch_idx in 0..request.batch_size {
+                        unsafe {
+                            let status = &mut *request
+                                .statuses
+                                .add(expr_idx * request.batch_size + batch_idx);
+                            status.code = -4;
+                            status.expr_index = expr_idx;
+                            status.batch_index = batch_idx;
                         }
                     }
                 }
+                any_error = true;
+                if request.stop_on_error {
+                    return -4;
+                }
+                continue;
             }
 
-            // Set parameter overrides in engine
-            engine.set_param_overrides(param_map.clone());
-            
-            // Evaluate using the original context without modification
-            // TODO: ast needs to be parsed with arena
-            /*match eval_with_engine(&ast, Some(ctx_handle.clone()), &mut engine) {
-                Ok(value) => {*/
-                    unsafe {
-                        // TODO: value would come from eval_with_engine
-                        *result_ptr.add(batch_idx) = 0.0;
+            // Evaluate for each batch
+            for batch_idx in 0..request.batch_size {
+                // Clear and build parameter map for this batch
+                param_map.clear();
+
+                // Set parameters for this batch in the override map
+                for param_idx in 0..request.param_count {
+                    let param_name_ptr = unsafe { *request.param_names.add(param_idx) };
+                    if param_name_ptr.is_null() {
+                        continue;
                     }
-                    if !request.statuses.is_null() {
-                        unsafe {
-                            let status = &mut *request
-                                .statuses
-                                .add(expr_idx * request.batch_size + batch_idx);
-                            status.code = 0;
-                            status.expr_index = expr_idx;
-                            status.batch_index = batch_idx;
+
+                    let param_name_cstr = unsafe { CStr::from_ptr(param_name_ptr) };
+                    if let Ok(param_name) = param_name_cstr.to_str() {
+                        // Get parameter values array for this parameter (using correct layout)
+                        let param_values_row = unsafe { *request.param_values.add(param_idx) };
+                        if !param_values_row.is_null() {
+                            // Get value for this batch index
+                            let param_value = unsafe { *param_values_row.add(batch_idx) };
+                            // Add to override map instead of modifying context
+                            if let Ok(hname) = param_name.try_into_heapless() {
+                                let _ = param_map.insert(hname, param_value);
+                            }
                         }
-                    }
-                /*}
-                Err(_) => {
-                    if !request.statuses.is_null() {
-                        unsafe {
-                            let status = &mut *request
-                                .statuses
-                                .add(expr_idx * request.batch_size + batch_idx);
-                            status.code = -5;
-                            status.expr_index = expr_idx;
-                            status.batch_index = batch_idx;
-                        }
-                    }
-                    any_error = true;
-                    if request.stop_on_error {
-                        engine.clear_param_overrides();
-                        return -5;
                     }
                 }
-            }*/
-        }
-    }
 
-    // Clear parameter overrides when done
-    engine.clear_param_overrides();
-    
-    if any_error { -10 } else { 0 }
+                // Set parameter overrides in engine
+                engine.set_param_overrides(param_map.clone());
+
+                // Evaluate using the original context without modification
+                // TODO: ast needs to be parsed with arena
+                /*match eval_with_engine(&ast, Some(ctx_handle.clone()), &mut engine) {
+                Ok(value) => {*/
+                unsafe {
+                    // TODO: value would come from eval_with_engine
+                    *result_ptr.add(batch_idx) = 0.0;
+                }
+                if !request.statuses.is_null() {
+                    unsafe {
+                        let status = &mut *request
+                            .statuses
+                            .add(expr_idx * request.batch_size + batch_idx);
+                        status.code = 0;
+                        status.expr_index = expr_idx;
+                        status.batch_index = batch_idx;
+                    }
+                }
+                /*}
+                    Err(_) => {
+                        if !request.statuses.is_null() {
+                            unsafe {
+                                let status = &mut *request
+                                    .statuses
+                                    .add(expr_idx * request.batch_size + batch_idx);
+                                status.code = -5;
+                                status.expr_index = expr_idx;
+                                status.batch_index = batch_idx;
+                            }
+                        }
+                        any_error = true;
+                        if request.stop_on_error {
+                            engine.clear_param_overrides();
+                            return -5;
+                        }
+                    }
+                }*/
+            }
+        }
+
+        // Clear parameter overrides when done
+        engine.clear_param_overrides();
+
+        if any_error { -10 } else { 0 }
     } // end unreachable block
 }
 
@@ -1510,34 +1513,12 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
 // Batch Builder API
 // ============================================================================
 
-use crate::batch_builder::BatchBuilder;
-
 /// Opaque type for BatchBuilder
 #[repr(C)]
 pub struct BatchBuilderOpaque {
     _data: [u8; 0],
 }
 
-/// Creates a new batch builder for efficient expression evaluation.
-///
-/// The batch builder allows you to:
-/// - Pre-parse expressions once
-/// - Reuse a single evaluation engine
-/// - Update parameters efficiently
-/// - Evaluate all expressions in one call
-///
-/// # Returns
-///
-/// A pointer to the new batch builder, or NULL on allocation failure.
-///
-/// # Safety
-///
-/// The returned pointer must be freed with `exp_rs_batch_builder_free`.
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_batch_builder_new() -> *mut BatchBuilderOpaque {
-    // Deprecated - use exp_rs_batch_builder_new_with_arena instead
-    core::ptr::null_mut()
-}
 
 /// Frees a batch builder.
 ///
@@ -1588,10 +1569,10 @@ pub extern "C" fn exp_rs_batch_builder_add_expression(
     if builder.is_null() || expr.is_null() {
         return -1;
     }
-    
+
     let builder = unsafe { &mut *(builder as *mut BatchBuilder) };
     let expr_cstr = unsafe { CStr::from_ptr(expr) };
-    
+
     match expr_cstr.to_str() {
         Ok(expr_str) => match builder.add_expression(expr_str) {
             Ok(idx) => idx as i32,
@@ -1629,10 +1610,10 @@ pub extern "C" fn exp_rs_batch_builder_add_parameter(
     if builder.is_null() || name.is_null() {
         return -1;
     }
-    
+
     let builder = unsafe { &mut *(builder as *mut BatchBuilder) };
     let name_cstr = unsafe { CStr::from_ptr(name) };
-    
+
     match name_cstr.to_str() {
         Ok(name_str) => match builder.add_parameter(name_str, initial_value) {
             Ok(idx) => idx as i32,
@@ -1670,7 +1651,7 @@ pub extern "C" fn exp_rs_batch_builder_set_param(
     if builder.is_null() {
         return -1;
     }
-    
+
     let builder = unsafe { &mut *(builder as *mut BatchBuilder) };
     match builder.set_param(idx, value) {
         Ok(_) => 0,
@@ -1707,10 +1688,10 @@ pub extern "C" fn exp_rs_batch_builder_set_param_by_name(
     if builder.is_null() || name.is_null() {
         return -1;
     }
-    
+
     let builder = unsafe { &mut *(builder as *mut BatchBuilder) };
     let name_cstr = unsafe { CStr::from_ptr(name) };
-    
+
     match name_cstr.to_str() {
         Ok(name_str) => match builder.set_param_by_name(name_str, value) {
             Ok(_) => 0,
@@ -1747,10 +1728,10 @@ pub extern "C" fn exp_rs_batch_builder_eval(
     if builder.is_null() || ctx.is_null() {
         return -1;
     }
-    
+
     let builder = unsafe { &mut *(builder as *mut BatchBuilder) };
     let ctx_handle = unsafe { &*(ctx as *const alloc::rc::Rc<EvalContext>) };
-    
+
     match builder.eval(ctx_handle) {
         Ok(_) => 0,
         Err(_) => -2,
@@ -1779,7 +1760,7 @@ pub extern "C" fn exp_rs_batch_builder_get_result(
     if builder.is_null() {
         return Real::NAN;
     }
-    
+
     let builder = unsafe { &*(builder as *const BatchBuilder) };
     builder.get_result(expr_idx).unwrap_or(Real::NAN)
 }
@@ -1798,13 +1779,11 @@ pub extern "C" fn exp_rs_batch_builder_get_result(
 ///
 /// This function is unsafe because it dereferences raw pointers.
 #[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_batch_builder_param_count(
-    builder: *const BatchBuilderOpaque,
-) -> usize {
+pub extern "C" fn exp_rs_batch_builder_param_count(builder: *const BatchBuilderOpaque) -> usize {
     if builder.is_null() {
         return 0;
     }
-    
+
     let builder = unsafe { &*(builder as *const BatchBuilder) };
     builder.param_count()
 }
@@ -1829,7 +1808,7 @@ pub extern "C" fn exp_rs_batch_builder_expression_count(
     if builder.is_null() {
         return 0;
     }
-    
+
     let builder = unsafe { &*(builder as *const BatchBuilder) };
     builder.expression_count()
 }
@@ -1925,10 +1904,10 @@ pub extern "C" fn exp_rs_arena_free(arena: *mut ArenaOpaque) {
 /// ```c
 /// // Process batch 1
 /// exp_rs_batch_builder_eval(builder, ctx);
-/// 
+///
 /// // Reset arena for next batch
 /// exp_rs_arena_reset(arena);
-/// 
+///
 /// // Process batch 2 with clean arena
 /// exp_rs_batch_builder_eval(builder, ctx);
 /// ```
@@ -1980,7 +1959,7 @@ pub extern "C" fn exp_rs_estimate_arena_size(
     }
 
     let mut total_size = 0;
-    
+
     unsafe {
         for i in 0..num_expressions {
             let expr_ptr = *expressions.add(i);
@@ -1997,13 +1976,13 @@ pub extern "C" fn exp_rs_estimate_arena_size(
             }
         }
     }
-    
+
     // Add overhead for arena metadata and alignment
     total_size = (total_size * 150) / 100; // 50% overhead
-    
+
     // Round up to nearest page size (4KB)
     total_size = ((total_size + 4095) / 4096) * 4096;
-    
+
     // Minimum 16KB, maximum 1MB for safety
     total_size.clamp(16 * 1024, 1024 * 1024)
 }
@@ -2011,23 +1990,24 @@ pub extern "C" fn exp_rs_estimate_arena_size(
 /// Helper function to estimate the number of AST nodes in an expression.
 fn estimate_ast_nodes(expr: &str) -> usize {
     let mut count = 1; // At least one node
-    
+
     // Count operators and functions as nodes
     for ch in expr.chars() {
         match ch {
             '+' | '-' | '*' | '/' | '^' | '%' => count += 2, // Binary ops create 2 nodes
-            '(' | ')' => count += 1, // Function calls
-            ',' => count += 1, // Additional arguments
+            '(' | ')' => count += 1,                         // Function calls
+            ',' => count += 1,                               // Additional arguments
             _ => {}
         }
     }
-    
+
     // Count identifiers and numbers
-    let tokens: Vec<&str> = expr.split(|c: char| !c.is_alphanumeric() && c != '.' && c != '_')
+    let tokens: Vec<&str> = expr
+        .split(|c: char| !c.is_alphanumeric() && c != '.' && c != '_')
         .filter(|s| !s.is_empty())
         .collect();
     count += tokens.len();
-    
+
     count
 }
 
@@ -2055,31 +2035,36 @@ fn estimate_ast_nodes(expr: &str) -> usize {
 /// ```c
 /// // Create arena
 /// Arena* arena = exp_rs_arena_new(256 * 1024);
-/// 
+///
 /// // Create batch builder with arena
-/// BatchBuilder* builder = exp_rs_batch_builder_new_with_arena(arena);
-/// 
+/// BatchBuilder* builder = exp_rs_batch_builder_new(arena);
+///
 /// // Add expressions (parsed into arena)
 /// exp_rs_batch_builder_add_expression(builder, "x + y");
-/// 
+///
 /// // ... use builder ...
-/// 
+///
 /// // Clean up
 /// exp_rs_batch_builder_free(builder);
 /// exp_rs_arena_free(arena);
 /// ```
 #[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_batch_builder_new_with_arena(
-    arena: *mut ArenaOpaque
+pub extern "C" fn exp_rs_batch_builder_new(
+    arena: *mut ArenaOpaque,
 ) -> *mut BatchBuilderOpaque {
     if arena.is_null() {
+        eprintln!("exp_rs_batch_builder_new: arena is null");
         return ptr::null_mut();
     }
-    
+
     unsafe {
+        eprintln!("exp_rs_batch_builder_new: arena = {:?}", arena);
         let arena = &*(arena as *const Bump);
+        eprintln!("exp_rs_batch_builder_new: cast to Bump succeeded");
         let builder = Box::new(crate::batch_builder::ArenaBatchBuilder::new(arena));
-        Box::into_raw(builder) as *mut BatchBuilderOpaque
+        eprintln!("exp_rs_batch_builder_new: created ArenaBatchBuilder");
+        let result = Box::into_raw(builder) as *mut BatchBuilderOpaque;
+        eprintln!("exp_rs_batch_builder_new: returning {:?}", result);
+        result
     }
 }
-

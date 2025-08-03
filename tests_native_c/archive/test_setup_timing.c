@@ -3,7 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 // Native function implementations
 Real native_sin(const Real* args, uintptr_t nargs) { (void)nargs; return sin(args[0]); }
