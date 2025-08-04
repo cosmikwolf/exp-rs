@@ -358,6 +358,98 @@ pub extern "C" fn expr_context_remove_expression_function(
     }
 }
 
+/// Add an expression function to a batch
+///
+/// Expression functions are mathematical expressions that can call other functions.
+/// They are specific to this batch and take precedence over context functions.
+///
+/// # Parameters
+/// - `batch`: The batch
+/// - `name`: Function name (must be valid UTF-8)
+/// - `params`: Comma-separated parameter names (e.g., "x,y,z")
+/// - `expression`: The expression string defining the function
+///
+/// # Returns
+/// 0 on success, non-zero on error
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_batch_add_expression_function(
+    batch: *mut ExprBatch,
+    name: *const c_char,
+    params: *const c_char,
+    expression: *const c_char,
+) -> i32 {
+    if batch.is_null() || name.is_null() || params.is_null() || expression.is_null() {
+        return -1;
+    }
+    
+    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+    
+    // Parse strings
+    let name_cstr = unsafe { CStr::from_ptr(name) };
+    let name_str = match name_cstr.to_str() {
+        Ok(s) => s,
+        Err(_) => return -2, // Invalid UTF-8
+    };
+    
+    let params_cstr = unsafe { CStr::from_ptr(params) };
+    let params_str = match params_cstr.to_str() {
+        Ok(s) => s,
+        Err(_) => return -2, // Invalid UTF-8
+    };
+    
+    let expr_cstr = unsafe { CStr::from_ptr(expression) };
+    let expr_str = match expr_cstr.to_str() {
+        Ok(s) => s,
+        Err(_) => return -2, // Invalid UTF-8
+    };
+    
+    // Split parameters by comma
+    let param_vec: Vec<&str> = if params_str.is_empty() {
+        Vec::new()
+    } else {
+        params_str.split(',').map(|s| s.trim()).collect()
+    };
+    
+    // Register function
+    match builder.register_expression_function(name_str, &param_vec, expr_str) {
+        Ok(_) => 0,
+        Err(_) => -3, // Registration failed
+    }
+}
+
+/// Remove an expression function from a batch
+///
+/// # Parameters
+/// - `batch`: The batch
+/// - `name`: Function name to remove
+///
+/// # Returns
+/// - 1 if the function was removed
+/// - 0 if the function didn't exist
+/// - negative error code on failure
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_batch_remove_expression_function(
+    batch: *mut ExprBatch,
+    name: *const c_char,
+) -> i32 {
+    if batch.is_null() || name.is_null() {
+        return -1;
+    }
+    
+    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+    
+    let name_cstr = unsafe { CStr::from_ptr(name) };
+    let name_str = match name_cstr.to_str() {
+        Ok(s) => s,
+        Err(_) => return -2, // Invalid UTF-8
+    };
+    
+    match builder.unregister_expression_function(name_str) {
+        Ok(was_removed) => if was_removed { 1 } else { 0 },
+        Err(_) => -3, // Error
+    }
+}
+
 // ============================================================================
 // Arena Management
 // ============================================================================

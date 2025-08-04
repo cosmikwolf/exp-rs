@@ -48,6 +48,8 @@ pub struct EvalEngine<'arena> {
     func_cache: BTreeMap<HString, Option<FunctionCacheEntry>>,
     /// Parameter overrides for batch evaluation (avoids context modification)
     param_overrides: Option<FnvIndexMap<HString, Real, 16>>,
+    /// Optional reference to local expression functions
+    local_functions: Option<&'arena core::cell::RefCell<crate::types::ExpressionFunctionMap>>,
     /// Optional arena for parsing expression functions on-demand
     arena: Option<&'arena bumpalo::Bump>,
     /// Cache for parsed expression functions
@@ -69,6 +71,7 @@ impl<'arena> EvalEngine<'arena> {
             ctx_stack: ContextStack::new(),
             func_cache: BTreeMap::new(),
             param_overrides: None,
+            local_functions: None,
             arena: None,
             expr_func_cache: BTreeMap::new(),
         }
@@ -82,9 +85,15 @@ impl<'arena> EvalEngine<'arena> {
             ctx_stack: ContextStack::new(),
             func_cache: BTreeMap::new(),
             param_overrides: None,
+            local_functions: None,
             arena: Some(arena),
             expr_func_cache: BTreeMap::new(),
         }
+    }
+    
+    /// Set the local expression functions for this evaluation
+    pub fn set_local_functions(&mut self, functions: Option<&'arena core::cell::RefCell<crate::types::ExpressionFunctionMap>>) {
+        self.local_functions = functions;
     }
 
     /// Evaluate an expression
@@ -526,67 +535,17 @@ impl<'arena> EvalEngine<'arena> {
             .get_context(ctx_id)
             .ok_or_else(|| ExprError::Other("Invalid context ID".to_string()))?;
 
-        // Try expression function first (highest priority) - clone it to avoid borrowing issues
+        // Check local functions first (highest priority)
+        if let Some(local_funcs) = self.local_functions {
+            if let Some(func) = local_funcs.borrow().get(&name).cloned() {
+                return self.process_expression_function(&func, args, ctx_id);
+            }
+        }
+
+        // Try expression function from context (second priority) - clone it to avoid borrowing issues
         let expr_func = ctx.get_expression_function(&name).cloned();
         if let Some(func) = expr_func {
-            if args.len() != func.params.len() {
-                return Err(ExprError::InvalidFunctionCall {
-                    name: name.to_string(),
-                    expected: func.params.len(),
-                    found: args.len(),
-                });
-            }
-
-            // Create new context for function evaluation
-            let mut func_ctx = EvalContext::new();
-
-            // Set parameters
-            for (param, value) in func.params.iter().zip(args.iter()) {
-                func_ctx.set_parameter(param, *value)?;
-            }
-
-            // Copy function registry
-            func_ctx.function_registry = ctx.function_registry.clone();
-
-            // Set parent context to inherit variables and constants
-            func_ctx.parent = Some(ctx.clone());
-
-            // Parse expression function on-demand if we have an arena
-            if let Some(arena) = self.arena {
-                // Check if we've already parsed this function
-                let func_key = func.name.try_into_heapless()?;
-
-                let ast = if let Some(&cached_ast) = self.expr_func_cache.get(&func_key) {
-                    cached_ast
-                } else {
-                    // Parse the expression function body into the arena
-                    let param_names: Vec<crate::String> = func.params.clone();
-                    let parsed_ast = crate::engine::parse_expression_with_parameters(
-                        &func.expression,
-                        arena,
-                        &param_names,
-                    )?;
-
-                    // Allocate the AST in the arena
-                    let arena_ast = arena.alloc(parsed_ast);
-                    self.expr_func_cache.insert(func_key.clone(), arena_ast);
-                    // Return the reference - no move needed
-                    &*arena_ast
-                };
-
-                // Push the function's AST for evaluation with the new context
-                let func_ctx_id = self.ctx_stack.push_context(Some(Rc::new(func_ctx)))?;
-                self.op_stack.push(EvalOp::Eval {
-                    expr: ast,
-                    ctx_id: func_ctx_id,
-                });
-                return Ok(());
-            } else {
-                // No arena available for expression functions
-                return Err(ExprError::Other(
-                    "Expression functions require an arena-enabled evaluator".to_string(),
-                ));
-            }
+            return self.process_expression_function(&func, args, ctx_id);
         }
 
         // Try native function second
@@ -755,6 +714,83 @@ impl<'arena> EvalEngine<'arena> {
         let result = f(self);
         self.param_overrides = old_overrides;
         result
+    }
+    
+    /// Process an expression function call
+    fn process_expression_function(
+        &mut self,
+        func: &crate::types::ExpressionFunction,
+        args: Vec<Real>,
+        ctx_id: usize,
+    ) -> Result<(), ExprError> {
+        use crate::types::TryIntoHeaplessString;
+        
+        if args.len() != func.params.len() {
+            return Err(ExprError::InvalidFunctionCall {
+                name: func.name.to_string(),
+                expected: func.params.len(),
+                found: args.len(),
+            });
+        }
+
+        // Get context
+        let ctx = self
+            .ctx_stack
+            .get_context(ctx_id)
+            .ok_or_else(|| ExprError::Other("Invalid context ID".to_string()))?;
+
+        // Create new context for function evaluation
+        let mut func_ctx = EvalContext::new();
+
+        // Set parameters
+        for (param, value) in func.params.iter().zip(args.iter()) {
+            func_ctx.set_parameter(param, *value)?;
+        }
+
+        // Copy function registry
+        func_ctx.function_registry = ctx.function_registry.clone();
+
+        // Set parent context to inherit variables and constants
+        func_ctx.parent = Some(ctx.clone());
+
+        // Parse expression function on-demand if we have an arena
+        if let Some(arena) = self.arena {
+            // Check if we've already parsed this function
+            let func_key = func.name.try_into_heapless()?;
+
+            let ast = if let Some(&cached_ast) = self.expr_func_cache.get(&func_key) {
+                cached_ast
+            } else {
+                // Parse the expression function body into the arena
+                let param_names: Vec<crate::String> = func.params.clone();
+                let parsed_ast = crate::engine::parse_expression_with_parameters(
+                    &func.expression,
+                    arena,
+                    &param_names,
+                )?;
+
+                // Allocate the AST in the arena
+                let arena_ast = arena.alloc(parsed_ast);
+
+                // Cache for future use
+                self.expr_func_cache.insert(func_key.clone(), &*arena_ast);
+
+                &*arena_ast
+            };
+
+            // Push the function's AST for evaluation with the new context
+            let func_ctx_id = self.ctx_stack.push_context(Some(Rc::new(func_ctx)))?;
+            self.op_stack.push(EvalOp::Eval {
+                expr: ast,
+                ctx_id: func_ctx_id,
+            });
+            Ok(())
+        } else {
+            // No arena available for expression functions
+            Err(ExprError::Other(
+                "Expression functions require an arena-enabled evaluator".to_string(),
+            ))
+        }
     }
 }
 

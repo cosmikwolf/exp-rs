@@ -12,6 +12,7 @@ use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use bumpalo::Bump;
+use core::cell::RefCell;
 use heapless::FnvIndexMap;
 
 /// A parameter with its name and current value
@@ -43,6 +44,9 @@ pub struct Expression<'arena> {
 
     /// Reusable evaluation engine
     engine: EvalEngine<'arena>,
+    
+    /// Optional arena-allocated expression functions (lazy-initialized)
+    local_functions: Option<&'arena RefCell<crate::types::ExpressionFunctionMap>>,
 }
 
 impl<'arena> Expression<'arena> {
@@ -54,6 +58,7 @@ impl<'arena> Expression<'arena> {
             params: Vec::new(),
             results: Vec::new(),
             engine: EvalEngine::new_with_arena(arena),
+            local_functions: None,
         }
     }
 
@@ -124,6 +129,9 @@ impl<'arena> Expression<'arena> {
 
         // Set parameter overrides in engine
         self.engine.set_param_overrides(param_map);
+        
+        // Set local functions in engine
+        self.engine.set_local_functions(self.local_functions);
 
         // Evaluate each expression with the original context
         for (i, (_, ast)) in self.expressions.iter().enumerate() {
@@ -320,6 +328,71 @@ impl<'arena> Expression<'arena> {
     pub fn set(&mut self, name: &str, value: Real) -> Result<(), ExprError> {
         self.set_param_by_name(name, value)
     }
+    
+    /// Register a local expression function for this batch
+    ///
+    /// Expression functions are mathematical expressions that can call other functions.
+    /// They are specific to this batch and take precedence over context functions.
+    ///
+    /// # Arguments
+    /// * `name` - Function name
+    /// * `params` - Parameter names
+    /// * `body` - Expression string defining the function
+    ///
+    /// # Example
+    /// ```
+    /// use bumpalo::Bump;
+    /// use exp_rs::expression::Expression;
+    /// 
+    /// let arena = Bump::new();
+    /// let mut expr = Expression::new(&arena);
+    /// expr.register_expression_function("distance", &["x1", "y1", "x2", "y2"], 
+    ///                                   "sqrt((x2-x1)^2 + (y2-y1)^2)").unwrap();
+    /// ```
+    pub fn register_expression_function(&mut self, name: &str, params: &[&str], body: &str) -> Result<(), ExprError> {
+        use crate::types::{ExpressionFunction, ExpressionFunctionMap, TryIntoFunctionName};
+        
+        // Lazy initialization - only allocate map when first function is added
+        if self.local_functions.is_none() {
+            let map = self.arena.alloc(RefCell::new(ExpressionFunctionMap::new()));
+            self.local_functions = Some(map);
+        }
+        
+        // Create the function
+        let func_name = name.try_into_function_name()?;
+        let expr_func = ExpressionFunction {
+            name: func_name.clone(),
+            params: params.iter().map(|s| s.to_string()).collect(),
+            expression: body.to_string(),
+            description: None,
+        };
+        
+        // Add to map through RefCell
+        self.local_functions.unwrap().borrow_mut()
+            .insert(func_name, expr_func)
+            .map_err(|_| ExprError::Other("Too many expression functions".to_string()))?;
+        Ok(())
+    }
+    
+    /// Remove a local expression function from this batch
+    ///
+    /// # Arguments
+    /// * `name` - Function name to remove
+    ///
+    /// # Returns
+    /// * `Ok(true)` if the function was removed
+    /// * `Ok(false)` if the function didn't exist
+    /// * `Err` if the name is invalid
+    pub fn unregister_expression_function(&mut self, name: &str) -> Result<bool, ExprError> {
+        use crate::types::TryIntoFunctionName;
+        
+        if let Some(map) = self.local_functions {
+            let func_name = name.try_into_function_name()?;
+            Ok(map.borrow_mut().remove(&func_name).is_some())
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 // Default implementation removed - requires arena parameter
@@ -343,6 +416,9 @@ pub struct ArenaBatchBuilder<'arena> {
 
     /// Reusable evaluation engine
     engine: EvalEngine<'arena>,
+    
+    /// Optional arena-allocated expression functions (lazy-initialized)
+    local_functions: Option<&'arena RefCell<crate::types::ExpressionFunctionMap>>,
 }
 
 impl<'arena> ArenaBatchBuilder<'arena> {
@@ -354,6 +430,7 @@ impl<'arena> ArenaBatchBuilder<'arena> {
             params: Vec::new(),
             results: Vec::new(),
             engine: EvalEngine::new_with_arena(arena),
+            local_functions: None,
         }
     }
 
@@ -428,6 +505,9 @@ impl<'arena> ArenaBatchBuilder<'arena> {
 
         // Set parameter overrides in engine
         self.engine.set_param_overrides(param_map);
+        
+        // Set local functions in engine
+        self.engine.set_local_functions(self.local_functions);
 
         // Evaluate each expression with the original context
         for (i, (_, ast)) in self.expressions.iter().enumerate() {
@@ -466,6 +546,60 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     pub fn expression_count(&self) -> usize {
         self.expressions.len()
     }
+    
+    /// Register a local expression function for this batch
+    ///
+    /// Expression functions are mathematical expressions that can call other functions.
+    /// They are specific to this batch and take precedence over context functions.
+    ///
+    /// # Arguments
+    /// * `name` - Function name
+    /// * `params` - Parameter names
+    /// * `body` - Expression string defining the function
+    pub fn register_expression_function(&mut self, name: &str, params: &[&str], body: &str) -> Result<(), ExprError> {
+        use crate::types::{ExpressionFunction, ExpressionFunctionMap, TryIntoFunctionName};
+        
+        // Lazy initialization - only allocate map when first function is added
+        if self.local_functions.is_none() {
+            let map = self.arena.alloc(RefCell::new(ExpressionFunctionMap::new()));
+            self.local_functions = Some(map);
+        }
+        
+        // Create the function
+        let func_name = name.try_into_function_name()?;
+        let expr_func = ExpressionFunction {
+            name: func_name.clone(),
+            params: params.iter().map(|s| s.to_string()).collect(),
+            expression: body.to_string(),
+            description: None,
+        };
+        
+        // Add to map through RefCell
+        self.local_functions.unwrap().borrow_mut()
+            .insert(func_name, expr_func)
+            .map_err(|_| ExprError::Other("Too many expression functions".to_string()))?;
+        Ok(())
+    }
+    
+    /// Remove a local expression function from this batch
+    ///
+    /// # Arguments
+    /// * `name` - Function name to remove
+    ///
+    /// # Returns
+    /// * `Ok(true)` if the function was removed
+    /// * `Ok(false)` if the function didn't exist
+    /// * `Err` if the name is invalid
+    pub fn unregister_expression_function(&mut self, name: &str) -> Result<bool, ExprError> {
+        use crate::types::TryIntoFunctionName;
+        
+        if let Some(map) = self.local_functions {
+            let func_name = name.try_into_function_name()?;
+            Ok(map.borrow_mut().remove(&func_name).is_some())
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -473,6 +607,62 @@ mod tests {
     use super::*;
     use bumpalo::Bump;
     use proptest::prelude::*;
+    
+    #[test]
+    fn test_local_expression_functions() {
+        let arena = Bump::new();
+        let mut expr = Expression::new(&arena);
+        
+        // Register a local function
+        expr.register_expression_function("double", &["x"], "x * 2").unwrap();
+        expr.register_expression_function("add_one", &["x"], "x + 1").unwrap();
+        
+        // Use the functions in expressions
+        expr.add_expression("double(5)").unwrap();
+        expr.add_expression("add_one(10)").unwrap();
+        expr.add_expression("double(add_one(3))").unwrap(); // Nested
+        
+        // Evaluate
+        let ctx = Rc::new(EvalContext::new());
+        expr.eval(&ctx).unwrap();
+        
+        // Check results
+        assert_eq!(expr.get_result(0), Some(10.0)); // double(5) = 10
+        assert_eq!(expr.get_result(1), Some(11.0)); // add_one(10) = 11
+        assert_eq!(expr.get_result(2), Some(8.0));  // double(add_one(3)) = double(4) = 8
+        
+        // Test removing a function
+        assert!(expr.unregister_expression_function("double").unwrap());
+        assert!(!expr.unregister_expression_function("double").unwrap()); // Already removed
+    }
+    
+    #[test]
+    fn test_local_functions_override_context() {
+        let arena = Bump::new();
+        
+        // Create context with a function
+        let mut ctx = EvalContext::new();
+        ctx.register_expression_function("calc", &["x"], "x * 2").unwrap();
+        let ctx = Rc::new(ctx);
+        
+        // Test 1: Use context function
+        {
+            let mut expr = Expression::new(&arena);
+            expr.add_expression("calc(5)").unwrap();
+            expr.eval(&ctx).unwrap();
+            assert_eq!(expr.get_result(0), Some(10.0)); // x * 2 = 10
+        }
+        
+        // Test 2: Local function overrides context function
+        {
+            let mut expr = Expression::new(&arena);
+            // Register local function with same name (should override)
+            expr.register_expression_function("calc", &["x"], "x * 3").unwrap();
+            expr.add_expression("calc(5)").unwrap();
+            expr.eval(&ctx).unwrap();
+            assert_eq!(expr.get_result(0), Some(15.0)); // x * 3 = 15
+        }
+    }
 
     #[test]
     fn test_batch_builder_basic() {

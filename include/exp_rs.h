@@ -57,18 +57,18 @@ typedef double Real;
 typedef Real (*NativeFunc)(const Real *args, uintptr_t n_args);
 
 /**
- * Opaque type for memory arena
- */
-typedef struct ExprArena {
-  uint8_t _private[0];
-} ExprArena;
-
-/**
  * Opaque type for expression batch
  */
 typedef struct ExprBatch {
   uint8_t _private[0];
 } ExprBatch;
+
+/**
+ * Opaque type for memory arena
+ */
+typedef struct ExprArena {
+  uint8_t _private[0];
+} ExprArena;
 
 /**
  * Opaque type for expression session (single expression evaluation)
@@ -173,6 +173,43 @@ int32_t expr_context_add_expression_function(struct ExprContext *ctx,
 __attribute__((aligned(8)))
 int32_t expr_context_remove_expression_function(struct ExprContext *ctx,
                                                 const char *name);
+
+/**
+ * Add an expression function to a batch
+ *
+ * Expression functions are mathematical expressions that can call other functions.
+ * They are specific to this batch and take precedence over context functions.
+ *
+ * # Parameters
+ * - `batch`: The batch
+ * - `name`: Function name (must be valid UTF-8)
+ * - `params`: Comma-separated parameter names (e.g., "x,y,z")
+ * - `expression`: The expression string defining the function
+ *
+ * # Returns
+ * 0 on success, non-zero on error
+ */
+__attribute__((aligned(8)))
+int32_t expr_batch_add_expression_function(struct ExprBatch *batch,
+                                           const char *name,
+                                           const char *params,
+                                           const char *expression);
+
+/**
+ * Remove an expression function from a batch
+ *
+ * # Parameters
+ * - `batch`: The batch
+ * - `name`: Function name to remove
+ *
+ * # Returns
+ * - 1 if the function was removed
+ * - 0 if the function didn't exist
+ * - negative error code on failure
+ */
+__attribute__((aligned(8)))
+int32_t expr_batch_remove_expression_function(struct ExprBatch *batch,
+                                              const char *name);
 
 /**
  * Create a new memory arena

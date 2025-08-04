@@ -106,7 +106,93 @@ int main() {
     Real scaled = expr_batch_get_result(batch, 4);
     printf("   - scale(10, my_factor) where my_factor=2.5 = %.1f (expected 25.0)\n", scaled);
     
+    // Test 7: Batch-local expression functions
+    printf("\n7. Batch-local expression functions:\n");
+    
+    // Add a context function
+    result = expr_context_add_expression_function(ctx, "double", "x", "x*2");
+    printf("   - Added context function 'double': %s\n", result == 0 ? "success" : "failed");
+    
+    // Add a batch-local function with the same name (should override)
+    result = expr_batch_add_expression_function(batch, "double", "x", "x*3");
+    printf("   - Added batch function 'double' (overrides context): %s\n", result == 0 ? "success" : "failed");
+    
+    // Add a batch-only function
+    result = expr_batch_add_expression_function(batch, "triple", "x", "x*3");
+    printf("   - Added batch function 'triple': %s\n", result == 0 ? "success" : "failed");
+    
+    // Test that batch function overrides context function
+    expr_batch_add_expression(batch, "double(5)");
+    expr_batch_evaluate(batch, ctx);
+    Real doubled = expr_batch_get_result(batch, 5);
+    printf("   - double(5) = %.1f (expected 15.0, batch overrides context)\n", doubled);
+    
+    // Test batch-only function
+    expr_batch_add_expression(batch, "triple(4)");
+    expr_batch_evaluate(batch, ctx);
+    Real tripled = expr_batch_get_result(batch, 6);
+    printf("   - triple(4) = %.1f (expected 12.0)\n", tripled);
+    
+    // Test 8: Multiple batches with different functions
+    printf("\n8. Multiple batches with different functions:\n");
+    
+    ExprBatch* batch2 = expr_batch_new(arena);
+    
+    // Add different function to batch2
+    result = expr_batch_add_expression_function(batch2, "quadruple", "x", "x*4");
+    printf("   - Added 'quadruple' to batch2: %s\n", result == 0 ? "success" : "failed");
+    
+    // batch2 should not have access to batch1's functions
+    expr_batch_add_expression(batch2, "double(5)");
+    expr_batch_evaluate(batch2, ctx);
+    Real ctx_double = expr_batch_get_result(batch2, 0);
+    printf("   - batch2: double(5) = %.1f (expected 10.0, uses context function)\n", ctx_double);
+    
+    // But batch2 has its own function
+    expr_batch_add_expression(batch2, "quadruple(5)");
+    expr_batch_evaluate(batch2, ctx);
+    Real quad = expr_batch_get_result(batch2, 1);
+    printf("   - batch2: quadruple(5) = %.1f (expected 20.0)\n", quad);
+    
+    // Test 9: Remove batch-local functions
+    printf("\n9. Removing batch-local functions:\n");
+    
+    result = expr_batch_remove_expression_function(batch, "double");
+    printf("   - Removed batch function 'double': %s (result=%d)\n", 
+           result == 1 ? "found and removed" : "not found", result);
+    
+    // Now should use context function again
+    expr_batch_add_expression(batch, "double(5)");
+    expr_batch_evaluate(batch, ctx);
+    Real ctx_double2 = expr_batch_get_result(batch, 7);
+    printf("   - double(5) after removal = %.1f (expected 10.0, back to context)\n", ctx_double2);
+    
+    // Try to remove non-existent function
+    result = expr_batch_remove_expression_function(batch, "nonexistent");
+    printf("   - Remove non-existent batch function: %s (result=%d)\n", 
+           result == 0 ? "not found" : "error", result);
+    
+    // Test 10: Error handling for batch functions
+    printf("\n10. Batch function error handling:\n");
+    
+    result = expr_batch_add_expression_function(NULL, "test", "x", "x");
+    printf("   - Add to NULL batch: %s (result=%d)\n",
+           result < 0 ? "error" : "unexpected", result);
+    
+    result = expr_batch_add_expression_function(batch, NULL, "x", "x");
+    printf("   - Add with NULL name: %s (result=%d)\n",
+           result < 0 ? "error" : "unexpected", result);
+    
+    result = expr_batch_add_expression_function(batch, "test", NULL, "x");
+    printf("   - Add with NULL params: %s (result=%d)\n",
+           result < 0 ? "error" : "unexpected", result);
+    
+    result = expr_batch_add_expression_function(batch, "test", "x", NULL);
+    printf("   - Add with NULL expression: %s (result=%d)\n",
+           result < 0 ? "error" : "unexpected", result);
+    
     // Clean up
+    expr_batch_free(batch2);
     expr_batch_free(batch);
     expr_arena_free(arena);
     expr_context_free(ctx);
