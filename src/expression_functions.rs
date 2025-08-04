@@ -50,7 +50,6 @@ mod tests {
     use crate::TryIntoFunctionName;
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_simple_expression_function() {
         let mut ctx = EvalContext::new();
 
@@ -62,7 +61,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_nested_expression_functions() {
         let mut ctx = EvalContext::new();
 
@@ -124,7 +122,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_expression_function_with_multiple_params() {
         let mut ctx = EvalContext::new();
 
@@ -165,7 +162,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_expression_function_with_context_variables() {
         let mut ctx = EvalContext::new();
 
@@ -223,7 +219,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_recursive_expression_function() {
         let mut ctx = EvalContext::new();
 
@@ -293,7 +288,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_expression_function_with_constants() {
         let mut ctx = EvalContext::new();
 
@@ -316,7 +310,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_expression_function_error_handling() {
         let mut ctx = EvalContext::new();
 

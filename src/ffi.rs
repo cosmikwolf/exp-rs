@@ -55,12 +55,12 @@
 extern crate alloc;
 use crate::context::EvalContext;
 use crate::engine::interp;
+use crate::expression::ArenaBatchBuilder;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::ffi::{CStr, c_char};
-use crate::batch_builder::ArenaBatchBuilder;
 
 // Type alias for FFI compatibility
 type BatchBuilder<'a> = ArenaBatchBuilder<'a>;
@@ -542,7 +542,7 @@ pub extern "C" fn exp_rs_context_register_expression_function(
     }
 
     let ctx_mut = alloc::rc::Rc::make_mut(ctx_handle);
-    
+
     // Always perform validation for FFI users
     match ctx_mut.register_expression_function_validated(
         name_str,
@@ -555,8 +555,11 @@ pub extern "C" fn exp_rs_context_register_expression_function(
             if !report.syntax_valid {
                 let msg = CString::new(format!(
                     "Expression syntax error: {}",
-                    report.syntax_error.unwrap_or_else(|| "Unknown syntax error".to_string())
-                )).unwrap();
+                    report
+                        .syntax_error
+                        .unwrap_or_else(|| "Unknown syntax error".to_string())
+                ))
+                .unwrap();
                 let ptr = msg.into_raw();
                 return EvalResult {
                     status: 7,
@@ -564,7 +567,7 @@ pub extern "C" fn exp_rs_context_register_expression_function(
                     error: ptr,
                 };
             }
-            
+
             // Check for semantic errors (but still register the function)
             if !report.undefined_functions.is_empty() {
                 let msg = CString::new(format!(
@@ -573,17 +576,23 @@ pub extern "C" fn exp_rs_context_register_expression_function(
                 )).unwrap();
                 let ptr = msg.into_raw();
                 return EvalResult {
-                    status: 0, // Success with warning
+                    status: 0,  // Success with warning
                     value: 1.0, // Indicate warning
                     error: ptr,
                 };
             }
-            
+
             if !report.arity_warnings.is_empty() {
-                let warnings: Vec<String> = report.arity_warnings.iter()
+                let warnings: Vec<String> = report
+                    .arity_warnings
+                    .iter()
                     .map(|(name, used, expected)| {
-                        format!("{} (used {} args, expected {})", 
-                                name, used, expected.map_or("?".to_string(), |e| e.to_string()))
+                        format!(
+                            "{} (used {} args, expected {})",
+                            name,
+                            used,
+                            expected.map_or("?".to_string(), |e| e.to_string())
+                        )
                     })
                     .collect();
                 let msg = CString::new(format!(
@@ -592,12 +601,12 @@ pub extern "C" fn exp_rs_context_register_expression_function(
                 )).unwrap();
                 let ptr = msg.into_raw();
                 return EvalResult {
-                    status: 0, // Success with warning
+                    status: 0,  // Success with warning
                     value: 2.0, // Indicate warning type
                     error: ptr,
                 };
             }
-            
+
             if !report.undefined_variables.is_empty() {
                 let msg = CString::new(format!(
                     "Warning: Undefined variables: {}. Function registered but may fail at evaluation.",
@@ -605,32 +614,33 @@ pub extern "C" fn exp_rs_context_register_expression_function(
                 )).unwrap();
                 let ptr = msg.into_raw();
                 return EvalResult {
-                    status: 0, // Success with warning
+                    status: 0,  // Success with warning
                     value: 3.0, // Indicate warning type
                     error: ptr,
                 };
             }
-            
+
             if !report.unused_parameters.is_empty() {
                 let msg = CString::new(format!(
                     "Info: Unused parameters: {}. Function registered successfully.",
                     report.unused_parameters.join(", ")
-                )).unwrap();
+                ))
+                .unwrap();
                 let ptr = msg.into_raw();
                 return EvalResult {
-                    status: 0, // Success with info
+                    status: 0,  // Success with info
                     value: 4.0, // Indicate info type
                     error: ptr,
                 };
             }
-            
+
             // All good, no warnings
             EvalResult {
                 status: 0,
                 value: 0.0,
                 error: ptr::null(),
             }
-        },
+        }
         Err(e) => {
             let msg =
                 CString::new(format!("Failed to register expression function: {}", e)).unwrap();
@@ -749,13 +759,9 @@ pub extern "C" fn exp_rs_context_register_expression_function_unsafe(
     }
 
     let ctx_mut = alloc::rc::Rc::make_mut(ctx_handle);
-    
+
     // Use the non-validated registration
-    match ctx_mut.register_expression_function(
-        name_str,
-        &param_vec,
-        expr_str,
-    ) {
+    match ctx_mut.register_expression_function(name_str, &param_vec, expr_str) {
         Ok(_) => EvalResult {
             status: 0,
             value: 0.0,
@@ -1230,7 +1236,7 @@ pub extern "C" fn exp_rs_batch_eval(
 
     // Create a single arena for all expressions
     let expr_arena = Bump::new();
-    
+
     // Parse all expressions once
     let mut parsed_asts = Vec::with_capacity(request.expression_count);
     let mut parse_errors = Vec::with_capacity(request.expression_count);
@@ -1744,7 +1750,6 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
 pub struct BatchBuilderOpaque {
     _data: [u8; 0],
 }
-
 
 /// Frees a batch builder.
 ///
@@ -2275,9 +2280,7 @@ fn estimate_ast_nodes(expr: &str) -> usize {
 /// exp_rs_arena_free(arena);
 /// ```
 #[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_batch_builder_new(
-    arena: *mut ArenaOpaque,
-) -> *mut BatchBuilderOpaque {
+pub extern "C" fn exp_rs_batch_builder_new(arena: *mut ArenaOpaque) -> *mut BatchBuilderOpaque {
     if arena.is_null() {
         eprintln!("exp_rs_batch_builder_new: arena is null");
         return ptr::null_mut();
@@ -2287,7 +2290,7 @@ pub extern "C" fn exp_rs_batch_builder_new(
         eprintln!("exp_rs_batch_builder_new: arena = {:?}", arena);
         let arena = &*(arena as *const Bump);
         eprintln!("exp_rs_batch_builder_new: cast to Bump succeeded");
-        let builder = Box::new(crate::batch_builder::ArenaBatchBuilder::new(arena));
+        let builder = Box::new(crate::expression::ArenaBatchBuilder::new(arena));
         eprintln!("exp_rs_batch_builder_new: created ArenaBatchBuilder");
         let result = Box::into_raw(builder) as *mut BatchBuilderOpaque;
         eprintln!("exp_rs_batch_builder_new: returning {:?}", result);

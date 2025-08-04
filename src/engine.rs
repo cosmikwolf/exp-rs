@@ -989,6 +989,7 @@ pub fn parse_expression_arena_with_context<'arena>(
 /// ```
 pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::error::Result<Real> {
     use alloc::rc::Rc;
+    use crate::expression::Expression;
 
     // Create a new context if none provided
     let eval_ctx = match ctx {
@@ -1001,12 +1002,9 @@ pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::erro
         }
     };
 
-    // Create a temporary arena for parsing
+    // Use Expression for consistent implementation
     let arena = Bump::new();
-    match parse_expression(expression, &arena) {
-        Ok(ast) => eval_ast(&ast, Some(Rc::clone(&eval_ctx))),
-        Err(err) => Err(err),
-    }
+    Expression::eval_with_context(expression, &eval_ctx, &arena)
 }
 
 #[cfg(test)]

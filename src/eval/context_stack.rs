@@ -135,6 +135,7 @@ impl ContextStack {
     /// Look up a variable, checking parent contexts if needed
     pub fn lookup_variable(&self, ctx_id: usize, name: &HString) -> Option<Real> {
         let mut current_id = Some(ctx_id);
+        let mut visited_contexts = Vec::new();
         
         while let Some(id) = current_id {
             if let Some(ctx) = self.get_context(id) {
@@ -150,10 +151,37 @@ impl ContextStack {
                 if let Some(&value) = ctx.constants.get(name) {
                     return Some(value);
                 }
+                
+                // Check the context's own parent chain
+                visited_contexts.push(id);
+                if let Some(ref parent_ctx) = ctx.parent {
+                    // Follow the context's parent chain
+                    return self.lookup_in_context_chain(parent_ctx.as_ref(), name, &visited_contexts);
+                }
             }
             
-            // Move to parent context
+            // Move to parent context in the stack
             current_id = self.parent_map.get(&id).and_then(|&parent| parent);
+        }
+        
+        None
+    }
+    
+    /// Helper to look up a variable in a context chain
+    fn lookup_in_context_chain(&self, ctx: &EvalContext, name: &HString, visited: &[usize]) -> Option<Real> {
+        // Check variables
+        if let Some(&value) = ctx.variables.get(name) {
+            return Some(value);
+        }
+        
+        // Check constants
+        if let Some(&value) = ctx.constants.get(name) {
+            return Some(value);
+        }
+        
+        // Follow parent chain
+        if let Some(ref parent) = ctx.parent {
+            return self.lookup_in_context_chain(parent.as_ref(), name, visited);
         }
         
         None

@@ -476,6 +476,9 @@ impl<'arena> EvalEngine<'arena> {
             // Copy function registry
             func_ctx.function_registry = ctx.function_registry.clone();
             
+            // Set parent context to inherit variables and constants
+            func_ctx.parent = Some(ctx.clone());
+            
             // Parse expression function on-demand if we have an arena
             if let Some(arena) = self.arena {
                 // Check if we've already parsed this function

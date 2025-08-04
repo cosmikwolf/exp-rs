@@ -35,20 +35,16 @@ mod tests {
     use crate::AstExpr;
     use crate::Real;
     use crate::context::EvalContext;
-    use crate::context::FunctionRegistry;
-    use crate::engine::{interp, parse_expression};
+    use crate::engine::interp;
     use crate::error::ExprError;
     use std::sync::atomic::Ordering;
-    // Use std HashMap for tests
-    use crate::abs;
-    use crate::cos;
-    use crate::max;
-    use crate::min;
-    use crate::neg;
-    use crate::pow;
-    use crate::sin;
-    // Removed - using heapless instead
     use std::rc::Rc;
+    use crate::parse_expression;
+    use crate::FunctionRegistry;
+    
+    // Import functions used in tests
+    #[cfg(feature = "libm")]
+    use crate::{abs, cos, max, min, neg, pow, sin};
 
     // Helper functions for tests that need to call eval functions directly
     fn test_eval_variable(name: &str, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
@@ -56,68 +52,16 @@ mod tests {
         super::eval_variable(name, ctx, &mut var_cache)
     }
 
-    fn test_eval_function(
-        name: &str,
-        args: &[AstExpr],
-        ctx: Option<Rc<EvalContext>>,
-        func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
-    ) -> Result<Real, ExprError> {
-        let mut var_cache = BTreeMap::new();
-        super::eval_function(name, args, ctx, func_cache, &mut var_cache)
-    }
-
-    fn test_eval_array(
-        name: &str,
-        index: &AstExpr,
-        ctx: Option<Rc<EvalContext>>,
-        func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
-    ) -> Result<Real, ExprError> {
-        let mut var_cache = BTreeMap::new();
-        super::eval_array(name, index, ctx, func_cache, &mut var_cache)
-    }
-
-    fn test_eval_custom_function<F>(
-        name: &str,
-        args: &[AstExpr],
-        ctx: Option<Rc<EvalContext>>,
-        func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
-        func: &F,
-    ) -> Result<Real, ExprError>
-    where
-        F: super::CustomFunction,
-    {
-        let mut var_cache = BTreeMap::new();
-        super::eval_custom_function(name, args, ctx, func_cache, &mut var_cache, func)
-    }
-
-    fn test_eval_native_function(
-        name: &str,
-        args: &[AstExpr],
-        ctx: Option<Rc<EvalContext>>,
-        func_cache: &mut BTreeMap<String, Option<FunctionCacheEntry>>,
-        native_fn: &OwnedNativeFunction,
-    ) -> Result<Real, ExprError> {
-        let mut var_cache = BTreeMap::new();
-        eval_native_function(name, args, ctx, func_cache, &mut var_cache, native_fn)
-    }
+    // Test helper functions removed - tests now use the public API (interp) directly
+    // which uses the iterative evaluator path
 
     #[test]
     fn test_eval_user_function_polynomial() {
         let mut ctx = create_test_context();
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
-        let mut func_cache = std::collections::BTreeMap::new();
-        // Previously used test_utils for manual AST construction - removed
-        // Avoid simultaneous mutable and immutable borrow of ctx
-        let expr_fn = ctx.get_expression_function("polynomial").unwrap().clone();
-        let val = test_eval_custom_function(
-            "polynomial",
-            &[AstExpr::Constant(3.0)],
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache,
-            &expr_fn,
-        )
-        .unwrap();
+        // Use the public API instead of internal functions
+        let val = interp("polynomial(3)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val, 58.0); // 3^3 + 2*3^2 + 3*3 + 4 = 27 + 18 + 9 + 4 = 58
     }
 
@@ -126,17 +70,8 @@ mod tests {
         let mut ctx = EvalContext::new();
         ctx.register_expression_function("double", &["x"], "x*2")
             .unwrap();
-        let mut func_cache = std::collections::BTreeMap::new();
-        // Avoid simultaneous mutable and immutable borrow of ctx
-        let expr_fn = ctx.get_expression_function("double").unwrap().clone();
-        let val = test_eval_custom_function(
-            "double",
-            &[AstExpr::Constant(7.0)],
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache,
-            &expr_fn,
-        )
-        .unwrap();
+        // Use the public API instead of internal functions
+        let val = interp("double(7)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val, 14.0);
     }
 
@@ -162,11 +97,13 @@ mod tests {
         };
         // At this point, the immutable borrow is dropped
 
-        let val = test_eval_native_function(
+        let mut var_cache = std::collections::BTreeMap::new();
+        let val = eval_native_function(
             "triple",
             &[AstExpr::Constant(4.0)],
             Some(Rc::new(ctx.clone())),
             &mut func_cache,
+            &mut var_cache,
             &native_fn,
         )
         .unwrap();
@@ -278,29 +215,14 @@ mod tests {
     #[test]
     fn test_eval_function_native_and_expression() {
         let mut ctx = create_test_context();
-        // Native function
-        // Don't use the ast variable if we're not going to use it
-        let mut func_cache = std::collections::BTreeMap::new();
-        let val = test_eval_function(
-            "sin",
-            &[AstExpr::Constant(0.0)],
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache,
-        )
-        .unwrap();
+        // Native function - use the public API
+        let val = interp("sin(0)", Some(Rc::new(ctx.clone()))).unwrap();
         assert!((val - 0.0).abs() < 1e-10);
 
         // Expression function
         ctx.register_expression_function("double", &["x"], "x*2")
             .unwrap();
-        // No need for ast2 since we're not using it
-        let val2 = test_eval_function(
-            "double",
-            &[AstExpr::Constant(5.0)],
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache,
-        )
-        .unwrap();
+        let val2 = interp("double(5)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val2, 10.0);
     }
 
@@ -309,14 +231,8 @@ mod tests {
         let mut ctx = create_test_context();
         ctx.register_expression_function("inc", &["x"], "x+1")
             .unwrap();
-        let mut func_cache = std::collections::BTreeMap::new();
-        let val = test_eval_function(
-            "inc",
-            &[AstExpr::Constant(41.0)],
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache,
-        )
-        .unwrap();
+        // Use the public API instead of internal functions
+        let val = interp("inc(41)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val, 42.0);
     }
 
@@ -324,21 +240,24 @@ mod tests {
     fn test_eval_function_builtin_fallback() {
         let ctx = create_test_context();
         let mut func_cache = std::collections::BTreeMap::new();
+        let mut var_cache = std::collections::BTreeMap::new();
         // Built-in fallback: pow(2,3)
-        let val = test_eval_function(
+        let val = eval_function(
             "pow",
             &[AstExpr::Constant(2.0), AstExpr::Constant(3.0)],
             Some(Rc::new(ctx.clone())),
             &mut func_cache,
+            &mut var_cache,
         )
         .unwrap();
         assert_eq!(val, 8.0);
         // Built-in fallback: abs(-5)
-        let val2 = test_eval_function(
+        let val2 = eval_function(
             "abs",
             &[AstExpr::Constant(-5.0)],
             Some(Rc::new(ctx.clone())),
             &mut func_cache,
+            &mut var_cache,
         )
         .unwrap();
         assert_eq!(val2, 5.0);
@@ -353,25 +272,29 @@ mod tests {
 
         // Create separate caches for each call to avoid borrowing issues
         let mut func_cache1 = std::collections::BTreeMap::new();
+        let mut var_cache1 = std::collections::BTreeMap::new();
         let mut func_cache2 = std::collections::BTreeMap::new();
+        let mut var_cache2 = std::collections::BTreeMap::new();
 
         let idx_expr = AstExpr::Constant(1.0);
-        let val = test_eval_array(
+        let val = eval_array(
             "arr",
             &idx_expr,
             Some(Rc::new(ctx.clone())),
             &mut func_cache1,
+            &mut var_cache1,
         )
         .unwrap();
         assert_eq!(val, 2.0);
 
         // Out of bounds
         let idx_expr2 = AstExpr::Constant(10.0);
-        let err = test_eval_array(
+        let err = eval_array(
             "arr",
             &idx_expr2,
             Some(Rc::new(ctx.clone())),
             &mut func_cache2,
+            &mut var_cache2,
         )
         .unwrap_err();
         assert!(matches!(err, ExprError::ArrayIndexOutOfBounds { .. }));
@@ -381,12 +304,14 @@ mod tests {
     fn test_eval_array_unknown() {
         let ctx = EvalContext::new();
         let mut func_cache = std::collections::BTreeMap::new();
+        let mut var_cache = std::collections::BTreeMap::new();
         let idx_expr = AstExpr::Constant(0.0);
-        let err = test_eval_array(
+        let err = eval_array(
             "nosucharr",
             &idx_expr,
             Some(Rc::new(ctx.clone())),
             &mut func_cache,
+            &mut var_cache,
         )
         .unwrap_err();
         assert!(matches!(err, ExprError::UnknownVariable { .. }));

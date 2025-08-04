@@ -28,7 +28,11 @@
       "mcp__tree-sitter__run_query",
       "mcp__tree-sitter__register_project_tool",
       "mcp__tree-sitter__find_text",
-      "mcp__tree-sitter__get_ast"
+      "mcp__tree-sitter__get_ast",
+      "Bash(chmod:*)",
+      "Bash(./enable_expression_tests.sh:*)",
+      "Bash(SKIP_FFI_BUILD=1 cargo test --lib expression_functions::tests::test_expression_function_with_context_variables -- --nocapture)",
+      "Bash(SKIP_FFI_BUILD=1 cargo test --lib expression_functions::tests::test_expression_function_with_context_variables -- --nocapture --exact)"
     ],
     "deny": []
   },

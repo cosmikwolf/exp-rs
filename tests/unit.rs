@@ -3,7 +3,7 @@ mod test_helpers;
 #[cfg(test)]
 mod unit {
     use exp_rs::context::EvalContext;
-    use exp_rs::engine::{interp, parse_expression_arena};
+    use exp_rs::engine::interp;
     use exp_rs::error::ExprError;
     use bumpalo::Bump;
     use exp_rs::functions::{
@@ -26,7 +26,7 @@ mod unit {
         
         TEST_ARENA.with(|arena| {
             let arena = arena.borrow();
-            let ast = parse_expression_arena(expr, &*arena)?;
+            let ast = exp_rs::engine::parse_expression(expr, &*arena)?;
             // SAFETY: We're extending the lifetime for tests only. The arena is thread-local
             // and will live for the duration of the test.
             Ok(unsafe { std::mem::transmute::<AstExpr<'_>, AstExpr<'static>>(ast) })

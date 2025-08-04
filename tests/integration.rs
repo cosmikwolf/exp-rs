@@ -5,7 +5,7 @@ extern crate alloc;
 
 #[cfg(test)]
 use exp_rs::context::EvalContext;
-use exp_rs::engine::{interp, parse_expression_arena, parse_expression_arena_with_reserved};
+use exp_rs::engine::interp;
 use exp_rs::eval::{eval_ast, get_recursion_depth, reset_recursion_depth};
 use bumpalo::Bump;
 use exp_rs::{assert_approx_eq, constants};
@@ -33,7 +33,7 @@ fn parse_expression(expr: &str) -> Result<exp_rs::types::AstExpr<'static>, exp_r
     
     TEST_ARENA.with(|arena| {
         let arena = arena.borrow();
-        let ast = parse_expression_arena(expr, &*arena)?;
+        let ast = exp_rs::engine::parse_expression(expr, &*arena)?;
         // SAFETY: We're extending the lifetime for tests only. The arena is thread-local
         // and will live for the duration of the test.
         Ok(unsafe { std::mem::transmute::<exp_rs::types::AstExpr<'_>, exp_rs::types::AstExpr<'static>>(ast) })
@@ -48,7 +48,7 @@ fn parse_expression_with_reserved(expr: &str, reserved: Option<&[String]>) -> Re
     
     TEST_ARENA.with(|arena| {
         let arena = arena.borrow();
-        let ast = parse_expression_arena_with_reserved(expr, &*arena, reserved)?;
+        let ast = exp_rs::engine::parse_expression_arena_with_context(expr, &*arena, reserved, None)?;
         // SAFETY: We're extending the lifetime for tests only. The arena is thread-local
         // and will live for the duration of the test.
         Ok(unsafe { std::mem::transmute::<exp_rs::types::AstExpr<'_>, exp_rs::types::AstExpr<'static>>(ast) })

@@ -72,7 +72,7 @@
 //!
 //! ## Built-in Functions
 //!
-//! The following functions are available by default when the `libm` feature is enabled. Without the `libm` feature, 
+//! The following functions are available by default when the `libm` feature is enabled. Without the `libm` feature,
 //! these functions will not be automatically registered and must be defined by the user with native or expression functions:
 //!
 //! - Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
@@ -106,7 +106,7 @@
 //! - Meson build system integration for cross-compilation
 //! - QEMU test harness for validating on ARM hardware
 //! - Optional C FFI for calling from non-Rust code
-//! 
+//!
 //! # Using Variables and Constants
 //!
 //! ```rust
@@ -389,24 +389,23 @@ pub use alloc::vec::Vec;
 
 // Ensure core::result::Result, core::result::Result::Ok, and core::result::Result::Err are in scope for no_std/serde
 
-pub mod batch_builder;
 pub mod context;
 pub mod engine;
 pub mod error;
 pub mod eval;
 pub mod evaluator;
+pub mod expression;
 pub mod expression_functions;
 pub mod ffi;
-#[cfg(test)]
-mod test_expr_func_arena;
 pub mod functions;
 pub mod lexer;
+#[cfg(test)]
+mod test_expr_func_arena;
 pub mod types;
 
-
-pub use batch_builder::{BatchBuilder, Param};
 pub use context::*;
 pub use engine::*;
+pub use expression::{Expression, Param};
 pub use functions::*;
 pub use types::*;
 
@@ -417,7 +416,7 @@ pub use ffi::*;
 pub use eval::recursion::{get_recursion_depth, reset_recursion_depth, set_max_recursion_depth};
 
 // Re-export iterative evaluation components for batch processing
-pub use eval::iterative::{eval_with_engine, EvalEngine};
+pub use eval::iterative::{EvalEngine, eval_with_engine};
 
 // Compile-time check: only one of f32 or f64 can be enabled
 /// Define the floating-point type based on feature flags
