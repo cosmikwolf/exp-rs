@@ -46,6 +46,12 @@ test_programs = {
   'test_expression_functions': {
     'sources': ['test_expression_functions.c'],
     'deps': [exp_rs_dep, m_dep]
+  },
+
+  # Pattern isolation tests
+  'test_pattern_isolation': {
+    'sources': ['test_pattern_isolation.c'],
+    'deps': [exp_rs_dep, m_dep]
   }
 }
 
