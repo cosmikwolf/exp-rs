@@ -53,22 +53,22 @@ int main() {
     printf("=== Expression Evaluation Microbenchmark ===\n\n");
     
     // Create context with native functions
-    EvalContextOpaque* ctx = exp_rs_context_new();
+    ExprContext* ctx = expr_context_new();
     
     // Register native functions
-    exp_rs_context_register_native_function(ctx, "sin", 1, native_sin);
-    exp_rs_context_register_native_function(ctx, "cos", 1, native_cos);
-    exp_rs_context_register_native_function(ctx, "sqrt", 1, native_sqrt);
-    exp_rs_context_register_native_function(ctx, "exp", 1, native_exp);
-    exp_rs_context_register_native_function(ctx, "log", 1, native_log);
-    exp_rs_context_register_native_function(ctx, "log10", 1, native_log10);
-    exp_rs_context_register_native_function(ctx, "pow", 2, native_pow);
-    exp_rs_context_register_native_function(ctx, "atan2", 2, native_atan2);
-    exp_rs_context_register_native_function(ctx, "abs", 1, native_abs);
-    exp_rs_context_register_native_function(ctx, "sign", 1, native_sign);
-    exp_rs_context_register_native_function(ctx, "min", 2, native_min);
-    exp_rs_context_register_native_function(ctx, "max", 2, native_max);
-    exp_rs_context_register_native_function(ctx, "fmod", 2, native_fmod);
+    expr_context_add_function(ctx, "sin", 1, native_sin);
+    expr_context_add_function(ctx, "cos", 1, native_cos);
+    expr_context_add_function(ctx, "sqrt", 1, native_sqrt);
+    expr_context_add_function(ctx, "exp", 1, native_exp);
+    expr_context_add_function(ctx, "log", 1, native_log);
+    expr_context_add_function(ctx, "log10", 1, native_log10);
+    expr_context_add_function(ctx, "pow", 2, native_pow);
+    expr_context_add_function(ctx, "atan2", 2, native_atan2);
+    expr_context_add_function(ctx, "abs", 1, native_abs);
+    expr_context_add_function(ctx, "sign", 1, native_sign);
+    expr_context_add_function(ctx, "min", 2, native_min);
+    expr_context_add_function(ctx, "max", 2, native_max);
+    expr_context_add_function(ctx, "fmod", 2, native_fmod);
     
     // Test expressions
     const char* expressions[] = {
@@ -91,34 +91,34 @@ int main() {
         int iterations = 1000;
         
         // Create arena once for all iterations
-        ArenaOpaque* arena = exp_rs_arena_new(32768); // 32KB arena
+        ExprArena* arena = expr_arena_new(32768); // 32KB arena
         
         uint64_t start = get_time_ns();
         
         for (int i = 0; i < iterations; i++) {
             // Reset arena for reuse
             if (i > 0) {
-                exp_rs_arena_reset(arena);
+                expr_arena_reset(arena);
             }
             
-            BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
+            ExprBatch* builder = expr_batch_new(arena);
             
             // Add parameters
             for (int p = 0; p < 10; p++) {
-                exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
+                expr_batch_add_variable(builder, param_names[p], param_values[p]);
             }
             
             // Add and parse expressions
             for (int e = 0; e < num_expressions; e++) {
-                exp_rs_batch_builder_add_expression(builder, expressions[e]);
+                expr_batch_add_expression(builder, expressions[e]);
             }
             
-            exp_rs_batch_builder_free(builder);
+            expr_batch_free(builder);
         }
         
         uint64_t elapsed = get_time_ns() - start;
         
-        exp_rs_arena_free(arena);
+        expr_arena_free(arena);
         
         printf("  Total: %.2f us for %d iterations\n", ns_to_us(elapsed), iterations);
         printf("  Per iteration: %.2f us\n", ns_to_us(elapsed) / iterations);
@@ -131,37 +131,37 @@ int main() {
         int iterations = 1000;
         
         // Create arena once for all iterations
-        ArenaOpaque* arena = exp_rs_arena_new(32768); // 32KB arena
+        ExprArena* arena = expr_arena_new(32768); // 32KB arena
         
         uint64_t start = get_time_ns();
         
         for (int i = 0; i < iterations; i++) {
             // Reset arena for reuse
             if (i > 0) {
-                exp_rs_arena_reset(arena);
+                expr_arena_reset(arena);
             }
             
-            BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
+            ExprBatch* builder = expr_batch_new(arena);
             
             // Add parameters
             for (int p = 0; p < 10; p++) {
-                exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
+                expr_batch_add_variable(builder, param_names[p], param_values[p]);
             }
             
             // Add expressions
             for (int e = 0; e < num_expressions; e++) {
-                exp_rs_batch_builder_add_expression(builder, expressions[e]);
+                expr_batch_add_expression(builder, expressions[e]);
             }
             
             // Evaluate
-            exp_rs_batch_builder_eval(builder, ctx);
+            expr_batch_evaluate(builder, ctx);
             
-            exp_rs_batch_builder_free(builder);
+            expr_batch_free(builder);
         }
         
         uint64_t elapsed = get_time_ns() - start;
         
-        exp_rs_arena_free(arena);
+        expr_arena_free(arena);
         
         printf("  Total: %.2f us for %d iterations\n", ns_to_us(elapsed), iterations);
         printf("  Per iteration: %.2f us\n", ns_to_us(elapsed) / iterations);
@@ -171,15 +171,15 @@ int main() {
     // Test 3: Parameter setting timing
     printf("3. Parameter Setting\n");
     {
-        ArenaOpaque* arena = exp_rs_arena_new(32768);
-        BatchBuilderOpaque* test_builder = exp_rs_batch_builder_new(arena);
+        ExprArena* arena = expr_arena_new(32768);
+        ExprBatch* test_builder = expr_batch_new(arena);
         
         // Add parameters and expressions first
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_add_parameter(test_builder, param_names[p], param_values[p]);
+            expr_batch_add_variable(test_builder, param_names[p], param_values[p]);
         }
         for (int e = 0; e < num_expressions; e++) {
-            exp_rs_batch_builder_add_expression(test_builder, expressions[e]);
+            expr_batch_add_expression(test_builder, expressions[e]);
         }
         
         int iterations = 10000;
@@ -188,7 +188,7 @@ int main() {
         for (int i = 0; i < iterations; i++) {
             // Set parameters by index (fastest method)
             for (int p = 0; p < 10; p++) {
-                exp_rs_batch_builder_set_param(test_builder, p, param_values[p] + i * 0.001);
+                expr_batch_set_variable(test_builder, p, param_values[p] + i * 0.001);
             }
         }
         
@@ -198,29 +198,29 @@ int main() {
         printf("  Per iteration: %.2f us\n", ns_to_us(elapsed) / iterations);
         printf("  Per parameter: %.2f us\n\n", ns_to_us(elapsed) / (iterations * 10));
         
-        exp_rs_batch_builder_free(test_builder);
-        exp_rs_arena_free(arena);
+        expr_batch_free(test_builder);
+        expr_arena_free(arena);
     }
     
     // Test 4: Pure evaluation timing (no parsing)
     printf("4. Pure Evaluation (Pre-parsed)\n");
     {
-        ArenaOpaque* arena = exp_rs_arena_new(32768);
-        BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
+        ExprArena* arena = expr_arena_new(32768);
+        ExprBatch* builder = expr_batch_new(arena);
         
         // Setup
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
+            expr_batch_add_variable(builder, param_names[p], param_values[p]);
         }
         for (int e = 0; e < num_expressions; e++) {
-            exp_rs_batch_builder_add_expression(builder, expressions[e]);
+            expr_batch_add_expression(builder, expressions[e]);
         }
         
         int iterations = 10000;
         uint64_t start = get_time_ns();
         
         for (int i = 0; i < iterations; i++) {
-            exp_rs_batch_builder_eval(builder, ctx);
+            expr_batch_evaluate(builder, ctx);
         }
         
         uint64_t elapsed = get_time_ns() - start;
@@ -229,29 +229,29 @@ int main() {
         printf("  Per iteration: %.2f us\n", ns_to_us(elapsed) / iterations);
         printf("  Per expression: %.2f us\n\n", ns_to_us(elapsed) / (iterations * num_expressions));
         
-        exp_rs_batch_builder_free(builder);
-        exp_rs_arena_free(arena);
+        expr_batch_free(builder);
+        expr_arena_free(arena);
     }
     
     // Test 5: Individual expression timing
     printf("5. Individual Expression Performance\n");
     {
-        ArenaOpaque* arena = exp_rs_arena_new(32768);
+        ExprArena* arena = expr_arena_new(32768);
         
         for (int e = 0; e < num_expressions; e++) {
-            BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
+            ExprBatch* builder = expr_batch_new(arena);
             
             // Setup
             for (int p = 0; p < 10; p++) {
-                exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
+                expr_batch_add_variable(builder, param_names[p], param_values[p]);
             }
-            exp_rs_batch_builder_add_expression(builder, expressions[e]);
+            expr_batch_add_expression(builder, expressions[e]);
             
             int iterations = 10000;
             uint64_t start = get_time_ns();
             
             for (int i = 0; i < iterations; i++) {
-                exp_rs_batch_builder_eval(builder, ctx);
+                expr_batch_evaluate(builder, ctx);
             }
             
             uint64_t elapsed = get_time_ns() - start;
@@ -260,15 +260,15 @@ int main() {
                    expressions[e], 
                    ns_to_us(elapsed) / iterations);
             
-            exp_rs_batch_builder_free(builder);
-            exp_rs_arena_reset(arena);
+            expr_batch_free(builder);
+            expr_arena_reset(arena);
         }
         
-        exp_rs_arena_free(arena);
+        expr_arena_free(arena);
     }
     
     // Cleanup
-    exp_rs_context_free(ctx);
+    expr_context_free(ctx);
     
     return 0;
 }

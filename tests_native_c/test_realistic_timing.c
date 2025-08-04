@@ -26,23 +26,23 @@ Real native_max(const Real* args, uintptr_t nargs) { (void)nargs; return args[0]
 Real native_fmod(const Real* args, uintptr_t nargs) { (void)nargs; return fmod(args[0], args[1]); }
 
 // Create and configure a context
-EvalContextOpaque* create_test_context() {
-    EvalContextOpaque* ctx = exp_rs_context_new();
+ExprContext* create_test_context() {
+    ExprContext* ctx = expr_context_new();
     
     // Register functions
-    exp_rs_context_register_native_function(ctx, "sin", 1, native_sin);
-    exp_rs_context_register_native_function(ctx, "cos", 1, native_cos);
-    exp_rs_context_register_native_function(ctx, "sqrt", 1, native_sqrt);
-    exp_rs_context_register_native_function(ctx, "exp", 1, native_exp);
-    exp_rs_context_register_native_function(ctx, "log", 1, native_log);
-    exp_rs_context_register_native_function(ctx, "log10", 1, native_log10);
-    exp_rs_context_register_native_function(ctx, "pow", 2, native_pow);
-    exp_rs_context_register_native_function(ctx, "atan2", 2, native_atan2);
-    exp_rs_context_register_native_function(ctx, "abs", 1, native_abs);
-    exp_rs_context_register_native_function(ctx, "sign", 1, native_sign);
-    exp_rs_context_register_native_function(ctx, "min", 2, native_min);
-    exp_rs_context_register_native_function(ctx, "max", 2, native_max);
-    exp_rs_context_register_native_function(ctx, "fmod", 2, native_fmod);
+    expr_context_add_function(ctx, "sin", 1, native_sin);
+    expr_context_add_function(ctx, "cos", 1, native_cos);
+    expr_context_add_function(ctx, "sqrt", 1, native_sqrt);
+    expr_context_add_function(ctx, "exp", 1, native_exp);
+    expr_context_add_function(ctx, "log", 1, native_log);
+    expr_context_add_function(ctx, "log10", 1, native_log10);
+    expr_context_add_function(ctx, "pow", 2, native_pow);
+    expr_context_add_function(ctx, "atan2", 2, native_atan2);
+    expr_context_add_function(ctx, "abs", 1, native_abs);
+    expr_context_add_function(ctx, "sign", 1, native_sign);
+    expr_context_add_function(ctx, "min", 2, native_min);
+    expr_context_add_function(ctx, "max", 2, native_max);
+    expr_context_add_function(ctx, "fmod", 2, native_fmod);
     
     return ctx;
 }
@@ -69,40 +69,40 @@ int main() {
     
     // Warm up
     {
-        EvalContextOpaque* ctx = create_test_context();
+        ExprContext* ctx = create_test_context();
         
         // Create arena and builder
-        ArenaOpaque* arena = exp_rs_arena_new(32768);
-        BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
+        ExprArena* arena = expr_arena_new(32768);
+        ExprBatch* builder = expr_batch_new(arena);
         
         // Add parameters
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
+            expr_batch_add_variable(builder, param_names[p], param_values[p]);
         }
         
         // Add expressions
         for (int e = 0; e < 7; e++) {
-            exp_rs_batch_builder_add_expression(builder, expressions[e]);
+            expr_batch_add_expression(builder, expressions[e]);
         }
         
         // Evaluate
-        exp_rs_batch_builder_eval(builder, ctx);
+        expr_batch_evaluate(builder, ctx);
         
         // Cleanup
-        exp_rs_batch_builder_free(builder);
-        exp_rs_arena_free(arena);
-        exp_rs_context_free(ctx);
+        expr_batch_free(builder);
+        expr_arena_free(arena);
+        expr_context_free(ctx);
     }
     
     // Create context
-    EvalContextOpaque* ctx = create_test_context();
+    ExprContext* ctx = create_test_context();
     
     printf("\n1. Context Creation (100 times)\n");
     uint64_t start = nanotime_now();
     
     for (int i = 0; i < 100; i++) {
-        EvalContextOpaque* temp_ctx = create_test_context();
-        exp_rs_context_free(temp_ctx);
+        ExprContext* temp_ctx = create_test_context();
+        expr_context_free(temp_ctx);
     }
     
     uint64_t elapsed = nanotime_interval(start, nanotime_now(), now_max);
@@ -112,51 +112,51 @@ int main() {
     printf("\n2. Full Setup (Parse + Build) with Arena Reuse (10000 times)\n");
     
     // Create a reusable arena
-    ArenaOpaque* setup_arena = exp_rs_arena_new(32768);
+    ExprArena* setup_arena = expr_arena_new(32768);
     start = nanotime_now();
     
     for (int i = 0; i < 10000; i++) {
-        if (i > 0) exp_rs_arena_reset(setup_arena);
-        BatchBuilderOpaque* builder = exp_rs_batch_builder_new(setup_arena);
+        if (i > 0) expr_arena_reset(setup_arena);
+        ExprBatch* builder = expr_batch_new(setup_arena);
         
         // Add parameters first
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
+            expr_batch_add_variable(builder, param_names[p], param_values[p]);
         }
         
         // Add expressions
         for (int e = 0; e < 7; e++) {
-            exp_rs_batch_builder_add_expression(builder, expressions[e]);
+            expr_batch_add_expression(builder, expressions[e]);
         }
         
-        exp_rs_batch_builder_free(builder);
+        expr_batch_free(builder);
     }
     
     elapsed = nanotime_interval(start, nanotime_now(), now_max);
-    exp_rs_arena_free(setup_arena);
+    expr_arena_free(setup_arena);
     
     printf("   Total: %.3f ms\n", elapsed / 1000000.0);
     printf("   Average: %.3f µs per setup\n", elapsed / 1000.0 / 10000.0);
     
     printf("\n3. Parameter Setup Only with Arena Reuse (10000 times)\n");
     
-    ArenaOpaque* param_arena = exp_rs_arena_new(32768);
+    ExprArena* param_arena = expr_arena_new(32768);
     start = nanotime_now();
     
     for (int i = 0; i < 10000; i++) {
-        if (i > 0) exp_rs_arena_reset(param_arena);
-        BatchBuilderOpaque* builder = exp_rs_batch_builder_new(param_arena);
+        if (i > 0) expr_arena_reset(param_arena);
+        ExprBatch* builder = expr_batch_new(param_arena);
         
         // Add parameters only
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_add_parameter(builder, param_names[p], param_values[p]);
+            expr_batch_add_variable(builder, param_names[p], param_values[p]);
         }
         
-        exp_rs_batch_builder_free(builder);
+        expr_batch_free(builder);
     }
     
     elapsed = nanotime_interval(start, nanotime_now(), now_max);
-    exp_rs_arena_free(param_arena);
+    expr_arena_free(param_arena);
     
     printf("   Total: %.3f ms\n", elapsed / 1000000.0);
     printf("   Average: %.3f µs per param setup\n", elapsed / 1000.0 / 10000.0);
@@ -166,20 +166,20 @@ int main() {
     printf("\n4. Runtime Performance (100000 iterations)\n");
     
     // Setup once with arena
-    ArenaOpaque* eval_arena = exp_rs_arena_new(32768);
-    BatchBuilderOpaque* eval_builder = exp_rs_batch_builder_new(eval_arena);
+    ExprArena* eval_arena = expr_arena_new(32768);
+    ExprBatch* eval_builder = expr_batch_new(eval_arena);
     for (int p = 0; p < 10; p++) {
-        exp_rs_batch_builder_add_parameter(eval_builder, param_names[p], param_values[p]);
+        expr_batch_add_variable(eval_builder, param_names[p], param_values[p]);
     }
     for (int e = 0; e < 7; e++) {
-        exp_rs_batch_builder_add_expression(eval_builder, expressions[e]);
+        expr_batch_add_expression(eval_builder, expressions[e]);
     }
     
     // Eval only
     start = nanotime_now();
     
     for (int i = 0; i < 100000; i++) {
-        exp_rs_batch_builder_eval(eval_builder, ctx);
+        expr_batch_evaluate(eval_builder, ctx);
     }
     
     elapsed = nanotime_interval(start, nanotime_now(), now_max);
@@ -195,11 +195,11 @@ int main() {
     for (int i = 0; i < 100000; i++) {
         // Update parameters
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_set_param(eval_builder, p, param_values[p] + (i % 100) * 0.01);
+            expr_batch_set_variable(eval_builder, p, param_values[p] + (i % 100) * 0.01);
         }
         
         // Evaluate
-        exp_rs_batch_builder_eval(eval_builder, ctx);
+        expr_batch_evaluate(eval_builder, ctx);
     }
     
     elapsed = nanotime_interval(start, nanotime_now(), now_max);
@@ -208,8 +208,8 @@ int main() {
     printf("   Average: %.3f µs per cycle\n", elapsed / 1000.0 / 100000.0);
     
     // Cleanup eval builder
-    exp_rs_batch_builder_free(eval_builder);
-    exp_rs_arena_free(eval_arena);
+    expr_batch_free(eval_builder);
+    expr_arena_free(eval_arena);
     
     // Test at different batch sizes
     printf("\n6. Batch Size Scaling\n");
@@ -220,15 +220,15 @@ int main() {
         int iterations = 100000 / batch_size;  // Keep total operations constant
         
         // Create arena and builder for this batch size
-        ArenaOpaque* batch_arena = exp_rs_arena_new(32768);
-        BatchBuilderOpaque* batch_builder = exp_rs_batch_builder_new(batch_arena);
+        ExprArena* batch_arena = expr_arena_new(32768);
+        ExprBatch* batch_builder = expr_batch_new(batch_arena);
         
         // Setup
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_add_parameter(batch_builder, param_names[p], param_values[p]);
+            expr_batch_add_variable(batch_builder, param_names[p], param_values[p]);
         }
         for (int e = 0; e < 7; e++) {
-            exp_rs_batch_builder_add_expression(batch_builder, expressions[e]);
+            expr_batch_add_expression(batch_builder, expressions[e]);
         }
         
         start = nanotime_now();
@@ -238,12 +238,12 @@ int main() {
             for (int j = 0; j < batch_size; j++) {
                 // Update params for each item
                 for (int p = 0; p < 10; p++) {
-                    exp_rs_batch_builder_set_param(batch_builder, p, 
+                    expr_batch_set_variable(batch_builder, p, 
                         param_values[p] + (i * batch_size + j) * 0.001);
                 }
                 
                 // Evaluate
-                exp_rs_batch_builder_eval(batch_builder, ctx);
+                expr_batch_evaluate(batch_builder, ctx);
             }
         }
         
@@ -254,12 +254,12 @@ int main() {
                elapsed / 1000.0 / (iterations * batch_size),
                elapsed / 1000000.0);
         
-        exp_rs_batch_builder_free(batch_builder);
-        exp_rs_arena_free(batch_arena);
+        expr_batch_free(batch_builder);
+        expr_arena_free(batch_arena);
     }
     
     // Cleanup
-    exp_rs_context_free(ctx);
+    expr_context_free(ctx);
     
     return 0;
 }

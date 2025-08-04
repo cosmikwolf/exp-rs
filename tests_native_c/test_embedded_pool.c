@@ -76,48 +76,46 @@ int embedded_pool_init(void) {
     }
     
     // Create context and batch builder
-    g_pool.eval_context = exp_rs_context_new();
+    g_pool.eval_context = expr_context_new();
     if (!g_pool.eval_context) {
         printf("Failed to create context\n");
         return -1;
     }
     
     // Register required math functions
-    EvalResult reg_result;
+    int32_t result;
     
-    reg_result = exp_rs_context_register_native_function(g_pool.eval_context, "sin", 1, native_sin);
-    if (reg_result.status != 0) {
-        printf("Failed to register sin function: %s\n", reg_result.error);
-        exp_rs_free_error((char*)reg_result.error);
+    result = expr_context_add_function(g_pool.eval_context, "sin", 1, native_sin);
+    if (result != 0) {
+        printf("Failed to register sin function: %d\n", result);
         return -1;
     }
     
-    reg_result = exp_rs_context_register_native_function(g_pool.eval_context, "sqrt", 1, native_sqrt);
-    if (reg_result.status != 0) {
-        printf("Failed to register sqrt function: %s\n", reg_result.error);
-        exp_rs_free_error((char*)reg_result.error);
+    result = expr_context_add_function(g_pool.eval_context, "sqrt", 1, native_sqrt);
+    if (result != 0) {
+        printf("Failed to register sqrt function: %d\n", result);
         return -1;
     }
     
     // Create arena for zero-allocation expression evaluation
-    g_pool.arena = exp_rs_arena_new(16384); // 16KB arena for embedded system
+    g_pool.arena = expr_arena_new(16384); // 16KB arena for embedded system
     if (!g_pool.arena) {
         printf("Failed to create arena\n");
-        exp_rs_context_free(g_pool.eval_context);
+        expr_context_free(g_pool.eval_context);
         return -1;
     }
     
-    g_pool.batch_builder = exp_rs_batch_builder_new(g_pool.arena);
+    g_pool.batch_builder = expr_batch_new(g_pool.arena);
     if (!g_pool.batch_builder) {
         printf("Failed to create batch builder\n");
-        exp_rs_arena_free(g_pool.arena);
-        exp_rs_context_free(g_pool.eval_context);
+        expr_arena_free(g_pool.arena);
+        expr_context_free(g_pool.eval_context);
         return -1;
     }
     
     // Add expressions to batch builder (parsed once)
     for (int i = 0; i < NUM_EXPRESSIONS; i++) {
-        int32_t result = exp_rs_batch_builder_add_expression(
+        int32_t result = expr_batch_add_expression(
             g_pool.batch_builder, 
             g_pool.expressions[i]
         );
@@ -129,7 +127,7 @@ int embedded_pool_init(void) {
     
     // Add parameters to batch builder
     for (int i = 0; i < NUM_PARAMETERS; i++) {
-        int32_t result = exp_rs_batch_builder_add_parameter(
+        int32_t result = expr_batch_add_variable(
             g_pool.batch_builder,
             g_pool.param_names[i],
             0.0
@@ -174,7 +172,7 @@ int embedded_pool_process(void) {
     
     // Update parameters in batch builder
     for (int i = 0; i < NUM_PARAMETERS; i++) {
-        exp_rs_batch_builder_set_param(
+        expr_batch_set_variable(
             g_pool.batch_builder,
             i,
             g_pool.param_values_ring[idx][i]
@@ -182,7 +180,7 @@ int embedded_pool_process(void) {
     }
     
     // Evaluate all expressions
-    int32_t result = exp_rs_batch_builder_eval(
+    int32_t result = expr_batch_evaluate(
         g_pool.batch_builder,
         g_pool.eval_context
     );
@@ -194,7 +192,7 @@ int embedded_pool_process(void) {
     
     // Copy results to ring buffer
     for (int i = 0; i < NUM_EXPRESSIONS; i++) {
-        g_pool.results_ring[idx][i] = exp_rs_batch_builder_get_result(
+        g_pool.results_ring[idx][i] = expr_batch_get_result(
             g_pool.batch_builder,
             i
         );
@@ -239,17 +237,17 @@ int embedded_pool_get_results(uint32_t batch_offset, double* results) {
 // Cleanup - called at shutdown
 void embedded_pool_cleanup(void) {
     if (g_pool.batch_builder) {
-        exp_rs_batch_builder_free(g_pool.batch_builder);
+        expr_batch_free(g_pool.batch_builder);
         g_pool.batch_builder = NULL;
     }
     
     if (g_pool.arena) {
-        exp_rs_arena_free(g_pool.arena);
+        expr_arena_free(g_pool.arena);
         g_pool.arena = NULL;
     }
     
     if (g_pool.eval_context) {
-        exp_rs_context_free(g_pool.eval_context);
+        expr_context_free(g_pool.eval_context);
         g_pool.eval_context = NULL;
     }
 }

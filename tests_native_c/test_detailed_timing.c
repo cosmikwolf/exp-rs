@@ -35,25 +35,25 @@ int main() {
     printf("=== Detailed Timing Analysis ===\n\n");
     
     // Create arena and context
-    ArenaOpaque* arena = exp_rs_arena_new(512 * 1024);
-    EvalContextOpaque* ctx = exp_rs_context_new();
+    ExprArena* arena = expr_arena_new(512 * 1024);
+    ExprContext* ctx = expr_context_new();
     
     // Register all functions
-    exp_rs_context_register_native_function(ctx, "sin", 1, native_sin);
-    exp_rs_context_register_native_function(ctx, "cos", 1, native_cos);
-    exp_rs_context_register_native_function(ctx, "sqrt", 1, native_sqrt);
-    exp_rs_context_register_native_function(ctx, "exp", 1, native_exp);
-    exp_rs_context_register_native_function(ctx, "log", 1, native_log);
-    exp_rs_context_register_native_function(ctx, "log10", 1, native_log10);
-    exp_rs_context_register_native_function(ctx, "pow", 2, native_pow);
-    exp_rs_context_register_native_function(ctx, "atan2", 2, native_atan2);
-    exp_rs_context_register_native_function(ctx, "abs", 1, native_abs);
-    exp_rs_context_register_native_function(ctx, "sign", 1, native_sign);
-    exp_rs_context_register_native_function(ctx, "min", 2, native_min);
-    exp_rs_context_register_native_function(ctx, "max", 2, native_max);
-    exp_rs_context_register_native_function(ctx, "fmod", 2, native_fmod);
+    expr_context_add_function(ctx, "sin", 1, native_sin);
+    expr_context_add_function(ctx, "cos", 1, native_cos);
+    expr_context_add_function(ctx, "sqrt", 1, native_sqrt);
+    expr_context_add_function(ctx, "exp", 1, native_exp);
+    expr_context_add_function(ctx, "log", 1, native_log);
+    expr_context_add_function(ctx, "log10", 1, native_log10);
+    expr_context_add_function(ctx, "pow", 2, native_pow);
+    expr_context_add_function(ctx, "atan2", 2, native_atan2);
+    expr_context_add_function(ctx, "abs", 1, native_abs);
+    expr_context_add_function(ctx, "sign", 1, native_sign);
+    expr_context_add_function(ctx, "min", 2, native_min);
+    expr_context_add_function(ctx, "max", 2, native_max);
+    expr_context_add_function(ctx, "fmod", 2, native_fmod);
     
-    BatchBuilderOpaque* builder = exp_rs_batch_builder_new(arena);
+    ExprBatch* builder = expr_batch_new(arena);
     
     // Add the same 7 expressions
     const char* expressions[] = {
@@ -67,25 +67,25 @@ int main() {
     };
     
     for (int i = 0; i < 7; i++) {
-        exp_rs_batch_builder_add_expression(builder, expressions[i]);
+        expr_batch_add_expression(builder, expressions[i]);
     }
     
     // Add 10 parameters
     const char* param_names[] = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"};
     for (int i = 0; i < 10; i++) {
-        exp_rs_batch_builder_add_parameter(builder, param_names[i], (i + 1) * 1.5);
+        expr_batch_add_variable(builder, param_names[i], (i + 1) * 1.5);
     }
     
     // Initial evaluation
-    exp_rs_batch_builder_eval(builder, ctx);
+    expr_batch_evaluate(builder, ctx);
     
     printf("Warming up...\n");
     // Warm up
     for (int i = 0; i < 1000; i++) {
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_set_param(builder, p, (p + 1) * 1.5);
+            expr_batch_set_variable(builder, p, (p + 1) * 1.5);
         }
-        exp_rs_batch_builder_eval(builder, ctx);
+        expr_batch_evaluate(builder, ctx);
     }
     
     // Test 1: Time just the eval call
@@ -94,7 +94,7 @@ int main() {
     double start = get_time_us();
     
     for (int i = 0; i < eval_iterations; i++) {
-        exp_rs_batch_builder_eval(builder, ctx);
+        expr_batch_evaluate(builder, ctx);
     }
     
     double end = get_time_us();
@@ -109,7 +109,7 @@ int main() {
     
     for (int i = 0; i < eval_iterations; i++) {
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_set_param(builder, p, (p + 1) * 1.5 + i * 0.001);
+            expr_batch_set_variable(builder, p, (p + 1) * 1.5 + i * 0.001);
         }
     }
     
@@ -126,10 +126,10 @@ int main() {
     for (int i = 0; i < full_iterations; i++) {
         // Update all 10 parameters
         for (int p = 0; p < 10; p++) {
-            exp_rs_batch_builder_set_param(builder, p, (p + 1) * 1.5 + i * 0.001);
+            expr_batch_set_variable(builder, p, (p + 1) * 1.5 + i * 0.001);
         }
         // Evaluate
-        exp_rs_batch_builder_eval(builder, ctx);
+        expr_batch_evaluate(builder, ctx);
     }
     
     end = get_time_us();
@@ -143,9 +143,9 @@ int main() {
            eval_only_us, (eval_only_us / full_cycle_us) * 100);
     
     // Cleanup
-    exp_rs_batch_builder_free(builder);
-    exp_rs_context_free(ctx);
-    exp_rs_arena_free(arena);
+    expr_batch_free(builder);
+    expr_context_free(ctx);
+    expr_arena_free(arena);
     
     return 0;
 }

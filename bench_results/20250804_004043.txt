@@ -1,0 +1,1687 @@
+   Compiling exp-rs v0.1.0 (/Users/tenkai/Development/exp-rs)
+warning: unused import: `crate::engine::parse_expression`
+    --> src/ffi.rs:1542:13
+     |
+1542 |         use crate::engine::parse_expression;
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `eval_with_engine`
+    --> src/ffi.rs:1543:50
+     |
+1543 |         use crate::eval::iterative::{EvalEngine, eval_with_engine};
+     |                                                  ^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::rc::Rc`
+    --> src/ffi.rs:1545:13
+     |
+1545 |         use alloc::rc::Rc;
+     |             ^^^^^^^^^^^^^
+
+warning: unused import: `bumpalo::Bump`
+    --> src/ffi.rs:1546:13
+     |
+1546 |         use bumpalo::Bump;
+     |             ^^^^^^^^^^^^^
+
+warning: unused import: `Box`
+  --> src/types.rs:61:13
+   |
+61 | use crate::{Box, Real, String, Vec};
+   |             ^^^
+
+warning: unused import: `std::boxed::Box`
+    --> src/engine.rs:1008:5
+     |
+1008 | use std::boxed::Box;
+     |     ^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `std::vec`
+    --> src/engine.rs:1021:9
+     |
+1021 |     use std::vec; // Import functions from our own module
+     |         ^^^^^^^^
+
+warning: unexpected `cfg` condition value: `std`
+   --> src/eval/mod.rs:300:38
+    |
+300 |     #[cfg(all(not(feature = "libm"), feature = "std"))] // Test behavior when builtins are disabled but std is available
+    |                                      ^^^^^^^^^^^^^^^
+    |
+    = note: expected values for `feature` are: `custom_cbindgen_alloc`, `default`, `f32`, and `libm`
+    = help: consider adding `std` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unused import: `std::collections::BTreeMap`
+  --> src/eval/mod.rs:39:9
+   |
+39 |     use std::collections::BTreeMap;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::cell::RefCell`
+    --> src/eval/mod.rs:1102:13
+     |
+1102 |         use std::cell::RefCell;
+     |             ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::engine::parse_expression`
+    --> src/ffi.rs:1542:13
+     |
+1542 |         use crate::engine::parse_expression;
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::expression::ArenaBatchBuilder`
+ --> src/test_expr_func_arena.rs:5:9
+  |
+5 |     use crate::expression::ArenaBatchBuilder;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::boxed::Box`
+  --> src/types.rs:65:5
+   |
+65 | use std::boxed::Box;
+   |     ^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> src/context.rs:455:13
+    |
+455 |         let mut report = match parse_result {
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `name`
+   --> src/context.rs:590:34
+    |
+590 |                 AstExpr::Array { name, index } => {
+    |                                  ^^^^ help: try ignoring the field: `name: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `allow_comma`
+   --> src/engine.rs:654:9
+    |
+654 |         allow_comma: bool,
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_allow_comma`
+
+warning: unused variable: `args_needed`
+   --> src/eval/iterative.rs:519:9
+    |
+519 |         args_needed: usize,
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_args_needed`
+
+warning: unused variable: `leaked_buffers`
+    --> src/ffi.rs:1438:9
+     |
+1438 |     let leaked_buffers = Box::leak(result_buffers.into_boxed_slice());
+     |         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_leaked_buffers`
+
+warning: unused variable: `ctx_handle`
+    --> src/ffi.rs:1566:13
+     |
+1566 |         let ctx_handle = unsafe { &*(ctx as *const alloc::rc::Rc<EvalContext>) };
+     |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_ctx_handle`
+
+warning: unused variable: `param_map`
+    --> src/ffi.rs:1572:17
+     |
+1572 |         let mut param_map = FnvIndexMap::<HString, Real, 16>::new();
+     |                 ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_param_map`
+
+warning: unused variable: `expr_str`
+    --> src/ffi.rs:1601:17
+     |
+1601 |             let expr_str = match expr_cstr.to_str() {
+     |                 ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_expr_str`
+
+warning: unused variable: `request`
+    --> src/ffi.rs:1533:5
+     |
+1533 |     request: *const BatchEvalRequest,
+     |     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `ctx`
+    --> src/ffi.rs:1534:5
+     |
+1534 |     ctx: *const EvalContextOpaque,
+     |     ^^^ help: if this is intentional, prefix it with an underscore: `_ctx`
+
+warning: unused variable: `estimated_iterations`
+    --> src/ffi.rs:2186:5
+     |
+2186 |     estimated_iterations: usize,
+     |     ^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_estimated_iterations`
+
+warning: method `parse_juxtaposition` is never used
+   --> src/engine.rs:651:8
+    |
+62  | impl<'input, 'arena> PrattParser<'input, 'arena> {
+    | ------------------------------------------------ method in this implementation
+...
+651 |     fn parse_juxtaposition(
+    |        ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `is_owned` is never read
+  --> src/eval/context_stack.rs:32:5
+   |
+28 | struct ContextWrapper {
+   |        -------------- field in this struct
+...
+32 |     is_owned: bool,
+   |     ^^^^^^^^
+
+warning: static `PANIC_DEFAULT_MSG` is never used
+   --> src/ffi.rs:202:8
+    |
+202 | static PANIC_DEFAULT_MSG: &[u8] = b"Rust panic occurred\0";
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:741:9
+    |
+741 |         self.register_native_function("+", 2, |args| args[0] + args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+741 |         let _ = self.register_native_function("+", 2, |args| args[0] + args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:742:9
+    |
+742 |         self.register_native_function("-", 2, |args| args[0] - args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+742 |         let _ = self.register_native_function("-", 2, |args| args[0] - args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:743:9
+    |
+743 |         self.register_native_function("*", 2, |args| args[0] * args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+743 |         let _ = self.register_native_function("*", 2, |args| args[0] * args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:744:9
+    |
+744 |         self.register_native_function("/", 2, |args| args[0] / args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+744 |         let _ = self.register_native_function("/", 2, |args| args[0] / args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:745:9
+    |
+745 |         self.register_native_function("%", 2, |args| args[0] % args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+745 |         let _ = self.register_native_function("%", 2, |args| args[0] % args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:749:9
+    |
+749 |         self.register_native_function("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+749 |         let _ = self.register_native_function("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:750:9
+    |
+750 |         self.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+750 |         let _ = self.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:751:9
+    |
+751 |         self.register_native_function("<=", 2, |args| if args[0] <= args[1] { 1.0 } else { 0.0 });
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+751 |         let _ = self.register_native_function("<=", 2, |args| if args[0] <= args[1] { 1.0 } else { 0.0 });
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:752:9
+    |
+752 |         self.register_native_function(">=", 2, |args| if args[0] >= args[1] { 1.0 } else { 0.0 });
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+752 |         let _ = self.register_native_function(">=", 2, |args| if args[0] >= args[1] { 1.0 } else { 0.0 });
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:753:9
+    |
+753 |         self.register_native_function("==", 2, |args| if args[0] == args[1] { 1.0 } else { 0.0 });
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+753 |         let _ = self.register_native_function("==", 2, |args| if args[0] == args[1] { 1.0 } else { 0.0 });
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:754:9
+    |
+754 |         self.register_native_function("!=", 2, |args| if args[0] != args[1] { 1.0 } else { 0.0 });
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+754 |         let _ = self.register_native_function("!=", 2, |args| if args[0] != args[1] { 1.0 } else { 0.0 });
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:757:9
+    |
+757 | /         self.register_native_function("&&", 2, |args| {
+758 | |             if args[0] != 0.0 && args[1] != 0.0 {
+759 | |                 1.0
+760 | |             } else {
+...   |
+763 | |         });
+    | |__________^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+757 |         let _ = self.register_native_function("&&", 2, |args| {
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:764:9
+    |
+764 | /         self.register_native_function("||", 2, |args| {
+765 | |             if args[0] != 0.0 || args[1] != 0.0 {
+766 | |                 1.0
+767 | |             } else {
+...   |
+770 | |         });
+    | |__________^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+764 |         let _ = self.register_native_function("||", 2, |args| {
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:773:9
+    |
+773 |         self.register_native_function("add", 2, |args| args[0] + args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+773 |         let _ = self.register_native_function("add", 2, |args| args[0] + args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:774:9
+    |
+774 |         self.register_native_function("sub", 2, |args| args[0] - args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+774 |         let _ = self.register_native_function("sub", 2, |args| args[0] - args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:775:9
+    |
+775 |         self.register_native_function("mul", 2, |args| args[0] * args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+775 |         let _ = self.register_native_function("mul", 2, |args| args[0] * args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:776:9
+    |
+776 |         self.register_native_function("div", 2, |args| args[0] / args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+776 |         let _ = self.register_native_function("div", 2, |args| args[0] / args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:777:9
+    |
+777 |         self.register_native_function("fmod", 2, |args| args[0] % args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+777 |         let _ = self.register_native_function("fmod", 2, |args| args[0] % args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:779:9
+    |
+779 |         self.register_native_function("neg", 1, |args| -args[0]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+779 |         let _ = self.register_native_function("neg", 1, |args| -args[0]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:782:9
+    |
+782 |         self.register_native_function(",", 2, |args| args[1]); // The actual comma operator
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+782 |         let _ = self.register_native_function(",", 2, |args| args[1]); // The actual comma operator
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:783:9
+    |
+783 |         self.register_native_function("comma", 2, |args| args[1]); // Function alias for the comma operator
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+783 |         let _ = self.register_native_function("comma", 2, |args| args[1]); // Function alias for the comma operator
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:786:9
+    |
+786 |         self.register_native_function("abs", 1, |args| args[0].abs());
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+786 |         let _ = self.register_native_function("abs", 1, |args| args[0].abs());
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:787:9
+    |
+787 |         self.register_native_function("max", 2, |args| args[0].max(args[1]));
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+787 |         let _ = self.register_native_function("max", 2, |args| args[0].max(args[1]));
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:788:9
+    |
+788 |         self.register_native_function("min", 2, |args| args[0].min(args[1]));
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+788 |         let _ = self.register_native_function("min", 2, |args| args[0].min(args[1]));
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:789:9
+    |
+789 | /         self.register_native_function("sign", 1, |args| {
+790 | |             if args[0] > 0.0 {
+791 | |                 1.0
+792 | |             } else if args[0] < 0.0 {
+...   |
+797 | |         });
+    | |__________^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+789 |         let _ = self.register_native_function("sign", 1, |args| {
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:803:9
+    |
+803 |         self.register_native_function("e", 0, |_| core::f64::consts::E);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+803 |         let _ = self.register_native_function("e", 0, |_| core::f64::consts::E);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:808:9
+    |
+808 |         self.register_native_function("pi", 0, |_| core::f64::consts::PI);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+808 |         let _ = self.register_native_function("pi", 0, |_| core::f64::consts::PI);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:813:13
+    |
+813 |             self.register_native_function("acos", 1, |args| crate::functions::acos(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+813 |             let _ = self.register_native_function("acos", 1, |args| crate::functions::acos(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:814:13
+    |
+814 |             self.register_native_function("asin", 1, |args| crate::functions::asin(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+814 |             let _ = self.register_native_function("asin", 1, |args| crate::functions::asin(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:815:13
+    |
+815 |             self.register_native_function("atan", 1, |args| crate::functions::atan(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+815 |             let _ = self.register_native_function("atan", 1, |args| crate::functions::atan(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:816:13
+    |
+816 | /             self.register_native_function("atan2", 2, |args| {
+817 | |                 crate::functions::atan2(args[0], args[1])
+818 | |             });
+    | |______________^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+816 |             let _ = self.register_native_function("atan2", 2, |args| {
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:819:13
+    |
+819 |             self.register_native_function("ceil", 1, |args| crate::functions::ceil(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+819 |             let _ = self.register_native_function("ceil", 1, |args| crate::functions::ceil(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:820:13
+    |
+820 |             self.register_native_function("cos", 1, |args| crate::functions::cos(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+820 |             let _ = self.register_native_function("cos", 1, |args| crate::functions::cos(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:821:13
+    |
+821 |             self.register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+821 |             let _ = self.register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:822:13
+    |
+822 |             self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+822 |             let _ = self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:823:13
+    |
+823 |             self.register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+823 |             let _ = self.register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:825:13
+    |
+825 |             self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+825 |             let _ = self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:826:13
+    |
+826 |             self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+826 |             let _ = self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:827:13
+    |
+827 |             self.register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+827 |             let _ = self.register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:828:13
+    |
+828 |             self.register_native_function("sin", 1, |args| crate::functions::sin(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+828 |             let _ = self.register_native_function("sin", 1, |args| crate::functions::sin(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:829:13
+    |
+829 |             self.register_native_function("sinh", 1, |args| crate::functions::sinh(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+829 |             let _ = self.register_native_function("sinh", 1, |args| crate::functions::sinh(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:830:13
+    |
+830 |             self.register_native_function("sqrt", 1, |args| crate::functions::sqrt(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+830 |             let _ = self.register_native_function("sqrt", 1, |args| crate::functions::sqrt(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:831:13
+    |
+831 |             self.register_native_function("tan", 1, |args| crate::functions::tan(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+831 |             let _ = self.register_native_function("tan", 1, |args| crate::functions::tan(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/context.rs:832:13
+    |
+832 |             self.register_native_function("tanh", 1, |args| crate::functions::tanh(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+832 |             let _ = self.register_native_function("tanh", 1, |args| crate::functions::tanh(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/ffi.rs:921:5
+    |
+921 |     ctx_mut.register_native_function(name_str, arity, implementation);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+921 |     let _ = ctx_mut.register_native_function(name_str, arity, implementation);
+    |     +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/ffi.rs:980:5
+    |
+980 |     ctx_mut.set_parameter(name_str, value);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+980 |     let _ = ctx_mut.set_parameter(name_str, value);
+    |     +++++++
+
+warning: variable does not need to be mutable
+    --> src/engine.rs:1112:13
+     |
+1112 |         let mut ctx = EvalContext::new();
+     |             ----^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/engine.rs:1174:13
+     |
+1174 |         let mut ctx = EvalContext::new();
+     |             ----^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: unused variable: `ast`
+    --> src/engine.rs:1590:13
+     |
+1590 |         let ast = parse_test("sin(x).foo");
+     |             ^^^ help: if this is intentional, prefix it with an underscore: `_ast`
+
+warning: variable does not need to be mutable
+   --> src/eval/mod.rs:425:13
+    |
+425 |         let mut ctx = create_test_context(); // Gets defaults if enabled
+    |             ----^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/eval/mod.rs:538:13
+    |
+538 |         let mut ctx = create_test_context(); // Gets defaults if enabled
+    |             ----^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> src/eval/mod.rs:1059:13
+     |
+1059 |         let mut ctx = EvalContext::new();
+     |             ----^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: function `debug_ast` is never used
+    --> src/engine.rs:1210:8
+     |
+1210 |     fn debug_ast(expr: &AstExpr<'_>, indent: usize) -> String {
+     |        ^^^^^^^^^
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1079:9
+     |
+1079 |         parent_ctx.set_parameter("parent_only", 1.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1079 |         let _ = parent_ctx.set_parameter("parent_only", 1.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1080:9
+     |
+1080 |         parent_ctx.set_parameter("shadowed", 2.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1080 |         let _ = parent_ctx.set_parameter("shadowed", 2.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1084:9
+     |
+1084 |         child_ctx.set_parameter("child_only", 3.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1084 |         let _ = child_ctx.set_parameter("child_only", 3.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1085:9
+     |
+1085 |         child_ctx.set_parameter("shadowed", 4.0); // Shadows parent's value
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1085 |         let _ = child_ctx.set_parameter("shadowed", 4.0); // Shadows parent's value
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1105:9
+     |
+1105 |         grandparent_ctx.set_parameter("grandparent_var", 1.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1105 |         let _ = grandparent_ctx.set_parameter("grandparent_var", 1.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1106:9
+     |
+1106 |         grandparent_ctx.set_parameter("shadowed", 2.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1106 |         let _ = grandparent_ctx.set_parameter("shadowed", 2.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1110:9
+     |
+1110 |         parent_ctx.set_parameter("parent_var", 3.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1110 |         let _ = parent_ctx.set_parameter("parent_var", 3.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1111:9
+     |
+1111 |         parent_ctx.set_parameter("shadowed", 4.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1111 |         let _ = parent_ctx.set_parameter("shadowed", 4.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1116:9
+     |
+1116 |         child_ctx.set_parameter("child_var", 5.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1116 |         let _ = child_ctx.set_parameter("child_var", 5.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1117:9
+     |
+1117 |         child_ctx.set_parameter("shadowed", 6.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1117 |         let _ = child_ctx.set_parameter("shadowed", 6.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1132:9
+     |
+1132 |         ctx.set_parameter("x", 1.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1132 |         let _ = ctx.set_parameter("x", 1.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1145:9
+     |
+1145 |         ctx1.set_parameter("var1", 1.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1145 |         let _ = ctx1.set_parameter("var1", 1.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1146:9
+     |
+1146 |         ctx2.set_parameter("var2", 2.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1146 |         let _ = ctx2.set_parameter("var2", 2.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1163:9
+     |
+1163 |         ctx.set_parameter("x", 100.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1163 |         let _ = ctx.set_parameter("x", 100.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1167:9
+     |
+1167 |         func_ctx.set_parameter("x", 5.0); // Parameter value
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1167 |         let _ = func_ctx.set_parameter("x", 5.0); // Parameter value
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1190:9
+     |
+1190 |         root_ctx.set_parameter("x", 1.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1190 |         let _ = root_ctx.set_parameter("x", 1.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1191:9
+     |
+1191 |         root_ctx.set_parameter("y", 1.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1191 |         let _ = root_ctx.set_parameter("y", 1.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1194:9
+     |
+1194 |         mid_ctx.set_parameter("x", 2.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1194 |         let _ = mid_ctx.set_parameter("x", 2.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1198:9
+     |
+1198 |         leaf_ctx.set_parameter("x", 3.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1198 |         let _ = leaf_ctx.set_parameter("x", 3.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1240:9
+     |
+1240 |         ctx.set_parameter("x", 100.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1240 |         let _ = ctx.set_parameter("x", 100.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1244:9
+     |
+1244 |         func_ctx.set_parameter("x", 5.0); // Parameter value
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1244 |         let _ = func_ctx.set_parameter("x", 5.0); // Parameter value
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1265:9
+     |
+1265 |         ctx.set_parameter("x", 1.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1265 |         let _ = ctx.set_parameter("x", 1.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/context.rs:1279:9
+     |
+1279 |         temp_ctx.set_parameter("x", 2.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1279 |         let _ = temp_ctx.set_parameter("x", 2.0);
+     |         +++++++
+
+warning: `exp-rs` (lib) generated 65 warnings (run `cargo fix --lib -p exp-rs` to apply 6 suggestions)
+warning: unused `std::result::Result` that must be used
+    --> src/engine.rs:1092:9
+     |
+1092 |         ctx.set_parameter("x", 5.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1092 |         let _ = ctx.set_parameter("x", 5.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/engine.rs:1107:9
+     |
+1107 |         ctx.set_parameter("x", -5.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1107 |         let _ = ctx.set_parameter("x", -5.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+    --> src/engine.rs:1148:9
+     |
+1148 |         ctx.set_parameter("x", 0.0);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1148 |         let _ = ctx.set_parameter("x", 0.0);
+     |         +++++++
+
+warning: unused `std::result::Result` that must be used
+  --> src/eval/mod.rs:76:9
+   |
+76 |         ctx.register_native_function("triple", 1, |args| args[0] * 3.0);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+   |
+76 |         let _ = ctx.register_native_function("triple", 1, |args| args[0] * 3.0);
+   |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:130:13
+    |
+130 |             ctx.register_native_function("sin", 1, |args| sin(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+130 |             let _ = ctx.register_native_function("sin", 1, |args| sin(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:131:13
+    |
+131 |             ctx.register_native_function("cos", 1, |args| cos(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+131 |             let _ = ctx.register_native_function("cos", 1, |args| cos(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:132:13
+    |
+132 |             ctx.register_native_function("pow", 2, |args| pow(args[0], args[1]));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+132 |             let _ = ctx.register_native_function("pow", 2, |args| pow(args[0], args[1]));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:133:13
+    |
+133 |             ctx.register_native_function("^", 2, |args| pow(args[0], args[1]));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+133 |             let _ = ctx.register_native_function("^", 2, |args| pow(args[0], args[1]));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:134:13
+    |
+134 |             ctx.register_native_function("min", 2, |args| min(args[0], args[1]));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+134 |             let _ = ctx.register_native_function("min", 2, |args| min(args[0], args[1]));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:135:13
+    |
+135 |             ctx.register_native_function("max", 2, |args| max(args[0], args[1]));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+135 |             let _ = ctx.register_native_function("max", 2, |args| max(args[0], args[1]));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:136:13
+    |
+136 |             ctx.register_native_function("neg", 1, |args| neg(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+136 |             let _ = ctx.register_native_function("neg", 1, |args| neg(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:137:13
+    |
+137 |             ctx.register_native_function("abs", 1, |args| abs(args[0], 0.0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+137 |             let _ = ctx.register_native_function("abs", 1, |args| abs(args[0], 0.0));
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:161:9
+    |
+161 |         ctx.set_parameter("x", 42.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+161 |         let _ = ctx.set_parameter("x", 42.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:578:9
+    |
+578 |         ctx.register_native_function("sin", 1, |_args| 100.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+578 |         let _ = ctx.register_native_function("sin", 1, |_args| 100.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:580:9
+    |
+580 |         ctx.register_native_function("pow", 2, |args| args[0] + args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+580 |         let _ = ctx.register_native_function("pow", 2, |args| args[0] + args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:582:9
+    |
+582 |         ctx.register_native_function("^", 2, |args| args[0] + args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+582 |         let _ = ctx.register_native_function("^", 2, |args| args[0] + args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:794:9
+    |
+794 |         ctx.set_parameter("x", 2.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+794 |         let _ = ctx.set_parameter("x", 2.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:831:9
+    |
+831 |         ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+831 |         let _ = ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:832:9
+    |
+832 |         ctx.register_native_function("*", 2, |args| args[0] * args[1]);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+832 |         let _ = ctx.register_native_function("*", 2, |args| args[0] * args[1]);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:833:9
+    |
+833 |         ctx.register_native_function("^", 2, |args| args[0].powf(args[1]));
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+833 |         let _ = ctx.register_native_function("^", 2, |args| args[0].powf(args[1]));
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:868:9
+    |
+868 |         ctx.set_parameter("x", 2.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+868 |         let _ = ctx.set_parameter("x", 2.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:890:9
+    |
+890 |         ctx.set_parameter("z", 10.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+890 |         let _ = ctx.set_parameter("z", 10.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:898:9
+    |
+898 |         ctx.set_parameter("a", 5.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+898 |         let _ = ctx.set_parameter("a", 5.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:899:9
+    |
+899 |         ctx.set_parameter("b", 10.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+899 |         let _ = ctx.set_parameter("b", 10.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/eval/mod.rs:913:9
+    |
+913 |         ctx.set_parameter("x", 100.0); // Shadowing variable
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+913 |         let _ = ctx.set_parameter("x", 100.0); // Shadowing variable
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/evaluator.rs:108:9
+    |
+108 |         ctx.set_parameter("x", 5.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+108 |         let _ = ctx.set_parameter("x", 5.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/evaluator.rs:109:9
+    |
+109 |         ctx.set_parameter("y", 3.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+109 |         let _ = ctx.set_parameter("y", 3.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/expression.rs:563:9
+    |
+563 |         ctx.set_parameter("x", 10.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+563 |         let _ = ctx.set_parameter("x", 10.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/expression.rs:564:9
+    |
+564 |         ctx.set_parameter("y", 20.0);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+564 |         let _ = ctx.set_parameter("y", 20.0);
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/expression.rs:848:13
+    |
+848 |             ctx2.set_parameter("a", a);
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+848 |             let _ = ctx2.set_parameter("a", a);
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/expression.rs:849:13
+    |
+849 |             ctx2.set_parameter("b", b);
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+849 |             let _ = ctx2.set_parameter("b", b);
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/expression.rs:850:13
+    |
+850 |             ctx2.set_parameter("c", c);
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+850 |             let _ = ctx2.set_parameter("c", c);
+    |             +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/expression_functions.rs:351:9
+    |
+351 | /         ctx.register_native_function(
+352 | |             "max",
+353 | |             2,
+354 | |             |args| {
+355 | |                 if args[0] > args[1] { args[0] } else { args[1] }
+356 | |             },
+357 | |         );
+    | |_________^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+351 |         let _ = ctx.register_native_function(
+    |         +++++++
+
+warning: unused `std::result::Result` that must be used
+   --> src/types.rs:325:9
+    |
+325 |         ctx.register_native_function("sin", 1, |args| args[0].sin());
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+325 |         let _ = ctx.register_native_function("sin", 1, |args| args[0].sin());
+    |         +++++++
+
+warning: variable does not need to be mutable
+  --> benches/simple_arena_bench.rs:63:21
+   |
+63 |                 let mut expr_builder = Expression::parse(expr, &arena).unwrap();
+   |                     ----^^^^^^^^^^^^
+   |                     |
+   |                     help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: `exp-rs` (bench "simple_arena_bench") generated 1 warning (run `cargo fix --bench "simple_arena_bench"` to apply 1 suggestion)
+warning: `exp-rs` (lib test) generated 134 warnings (62 duplicates) (run `cargo fix --lib -p exp-rs --tests` to apply 12 suggestions)
+    Finished `bench` profile [unoptimized + debuginfo] target(s) in 1.73s
+     Running unittests src/lib.rs (target/release/deps/exp_rs-58fa319ed8cee1df)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 155 filtered out; finished in 0.00s
+
+     Running benches/arena_consolidated_benchmark.rs (target/release/deps/arena_consolidated_benchmark-59335c95a6fc9a78)
+
+=== CPU Utilization Test ===
+Simulating 1000Hz operation with 7 expressions and 10 parameters
+
+Test 1: Individual evaluation (context clone per evaluation)
+  Running 30000 iterations...
+  Completed: 30000 iterations in 8.32s
+  Rate: 3608 Hz
+  Time per iteration: 277.2 µs (all 7 expressions)
+  Time per expression: 39.6 µs
+  CPU efficiency: 360.8%
+  Expressions/second: 25254
+
+Test 2: Arena BatchBuilder (zero allocations)
+  Running 30000 iterations...
+  Completed: 30000 iterations in 3.03s
+  Rate: 9894 Hz
+  Time per iteration: 101.1 µs (all 7 expressions)
+  Time per expression: 14.4 µs
+  CPU efficiency: 989.4%
+  Expressions/second: 69259
+
+=== Performance Summary ===
+Individual approach: 3608 Hz (360.8% of target)
+Arena BatchBuilder: 9894 Hz (989.4% of target)
+Arena is 2.74x faster
+
+Timing improvements:
+  Per iteration: 176.1 µs saved (63.5%)
+  Per expression: 39.6 µs → 14.4 µs
+
+At 1000Hz target:
+  Time budget per iteration: 1000 µs
+  Individual uses: 277.2 µs (27.7% of budget)
+  Arena uses: 101.1 µs (10.1% of budget)
+  Time available for other tasks: 898.9 µs
+
+Memory impact:
+  Without arena: 34.5 MB/s allocation traffic
+  With arena: 0 MB/s (all allocations eliminated)
+     Running benches/arena_memory_bench.rs (target/release/deps/arena_memory_bench-75658fe285e40aae)
+=== Arena Memory Usage Benchmark ===
+
+Arena capacity: 128 KB
+Arena bytes after setup: 131 KB
+
+Simulating 1 second at 1000Hz (1000 evaluations)...
+
+Results:
+- Time for 1000 evaluations: 101 ms
+- Arena bytes after 1000 evals: 131 KB
+- Additional bytes allocated: 0 bytes
+- CPU usage at 1000Hz: 10.2%
+
+=== Memory Savings ===
+Without arena: ~9,550 bytes × 1000 = 9.55 MB allocated/freed
+With arena: 0 bytes allocated
+Savings: 9.55 MB per second at 1000Hz!
+     Running benches/consolidated_benchmark.rs (target/release/deps/consolidated_benchmark-8c58d3a3612e7c3f)
+
+
+
+=== Memory Allocation Analysis ===
+Simulating 7 expressions, 10 parameters at 1000Hz for 100 seconds
+
+Stage                                         Bytes     Allocations
+──────────────────────────────────────────────────────────────────────
+Creating context                              14.7K bytes in     59 allocations
+Parsing 7 expressions                          7.9K bytes in    341 allocations
+
+--- Individual Evaluation Approach ---
+First evaluation (individual)                    64 bytes in    575 allocations
+Subsequent 999 evaluations                        0 bytes in 574.4K allocations
+Total (1 sec @ 1000Hz)                           64 bytes in 575.0K allocations
+
+Per-evaluation cost after first: ~0 bytes
+
+--- Batch Evaluation Approach ---
+Setting up BatchBuilder                       20.4K bytes in    368 allocations
+First batch evaluation                            0 bytes in    166 allocations
+Subsequent 999 batch evaluations                  0 bytes in 167.8K allocations
+Total (1 sec @ 1000Hz)                            0 bytes in 168.0K allocations
+
+Per-evaluation cost after first: ~0 bytes
+
+--- Direct Engine Evaluation (No Context Clone) ---
+Creating evaluation engine                     3.3K bytes in      3 allocations
+1000 evaluations with engine                   3.3K bytes in 169.0K allocations
+
+Per-evaluation cost: ~0 bytes
+
+=== AST Size Analysis ===
+
+Expression Type    | Total Size | Shallow Size | Expression
+-------------------|------------|--------------|------------
+simple             |        123 |           40 | a + b
+medium             |        581 |           40 | sin(a) * cos(b) + sqrt(c*c + d*d)
+complex            |       1069 |           40 | a*sin(b*3.14159/180) + c*cos(d*3.14159/180) + sqrt(e*e + f*f)
+conditional        |        406 |           40 | a > 5 ? b * 2 : c / 3
+logical            |        777 |           40 | ((a > 5) && (b < 10)) * c + ((d >= e) || (f != g)) * h
+
+=== Real World Expression Sizes ===
+
+Expression 1: 1069 bytes
+Expression 2: 618 bytes
+Expression 3: 943 bytes
+Expression 4: 1074 bytes
+Expression 5: 954 bytes
+Expression 6: 1358 bytes
+Expression 7: 862 bytes
+
+Total AST size for 7 expressions: 6878 bytes
+Average size per expression: 982 bytes
+
+=== Memory Traffic at 1000Hz ===
+Memory traffic per second: 6 MB
+Memory traffic per minute: 412 MB
+Memory traffic per hour: 24.7608 GB
+
+=== CPU Utilization Test ===
+Simulating 1000Hz operation with 7 expressions and 10 parameters
+
+Test 1: Individual evaluation (context clone per evaluation)
+  Running 30000 iterations...
+  Completed: 30000 iterations in 9.87s
+  Rate: 3039 Hz
+  Time per iteration: 329.0 µs (all 7 expressions)
+  Time per expression: 47.0 µs
+  CPU efficiency: 303.9%
+  Expressions/second: 21275
+
+Test 2: BatchBuilder (with parameter overrides)
+  Running 30000 iterations...
+  Completed: 30000 iterations in 3.55s
+  Rate: 8452 Hz
+  Time per iteration: 118.3 µs (all 7 expressions)
+  Time per expression: 16.9 µs
+  CPU efficiency: 845.2%
+  Expressions/second: 59164
+
+=== Performance Summary ===
+Individual approach: 3039 Hz (303.9% of target)
+BatchBuilder approach: 8452 Hz (845.2% of target)
+BatchBuilder is 2.78x faster
+
+Timing improvements:
+  Per iteration: 210.7 µs saved (64.0%)
+  Per expression: 47.0 µs → 16.9 µs
+
+At 1000Hz target:
+  Time budget per iteration: 1000 µs
+  Individual uses: 329.0 µs (32.9% of budget)
+  BatchBuilder uses: 118.3 µs (11.8% of budget)
+  Time available for other tasks: 881.7 µs
+
+Memory bandwidth (estimated):
+  AST cloning traffic: 29.0 MB/s
+  Cache misses likely: 212753/second
+
+Projected with Bumpalo optimization:
+  Expected time per iteration: 82.8 µs
+  Expected rate: 12074 Hz
+  Expected CPU usage at 1000Hz: 8.3%
+
+=== Summary ===
+The ~250 byte estimate was incorrect. Actual cost is ~1,364 bytes per evaluation.
+This results in ~10 MB/second of memory traffic at 1000Hz.
+     Running benches/simple_arena_bench.rs (target/release/deps/simple_arena_bench-3664681c60538f12)

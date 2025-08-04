@@ -12,6 +12,12 @@ test_programs = {
     'deps': [exp_rs_dep, m_dep]
   },
   
+  # Session API tests
+  'test_session_api': {
+    'sources': ['test_session_api.c'],
+    'deps': [exp_rs_dep, m_dep]
+  },
+  
   # Arena tests
   'test_arena_integration': {
     'sources': ['test_arena_integration.c'],
@@ -85,6 +91,7 @@ run_target('test-memory',
 
 functional_tests = [
   'test_simple_batch',
+  'test_session_api',
   'test_arena_integration',
   'test_embedded_pool'
 ]

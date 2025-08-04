@@ -35,6 +35,13 @@
 
 #define EXP_RS_MAX_FUNCTION_NAME_LENGTH 32
 
+/**
+ * Opaque type for evaluation context
+ */
+typedef struct ExprContext {
+  uint8_t _private[0];
+} ExprContext;
+
 #if defined(USE_F32)
 /**
  * Define the floating-point type based on feature flags
@@ -47,190 +54,30 @@ typedef double Real;
 #endif
 
 /**
- * Result structure returned by evaluation functions.
- *
- * This structure returns either a successful result value or an error message.
- * When status is 0, the value field contains the result of the expression evaluation.
- * When status is non-zero, the error field contains a null-terminated string with
- * the error message, which must be freed using exp_rs_free_error.
+ * Native function signature
  */
-typedef struct EvalResult {
-  /**
-   * Status code: 0 for success, non-zero for errors
-   */
-  int32_t status;
-  /**
-   * The result value (valid when status is 0)
-   */
-  Real value;
-  /**
-   * Error message (valid when status is non-zero, must be freed by caller)
-   */
-  const char *error;
-} EvalResult;
+typedef Real (*NativeFunc)(const Real *args, uintptr_t n_args);
 
 /**
- * Opaque handle to an evaluation context for C code.
- *
- * This is an opaque type that C code can use to reference an EvalContext.
- * C code should only store and pass this pointer, never dereferencing it directly.
+ * Opaque type for memory arena
  */
-typedef struct EvalContextOpaque {
+typedef struct ExprArena {
   uint8_t _private[0];
-} EvalContextOpaque;
+} ExprArena;
 
 /**
- * Status information for individual batch evaluation results.
- *
- * This structure tracks the outcome of each expression evaluation in a batch,
- * allowing detailed error reporting when processing multiple expressions.
+ * Opaque type for expression batch
  */
-typedef struct BatchStatus {
-  /**
-   * Error code: 0 = success, non-zero = error
-   */
-  int32_t code;
-  /**
-   * Index of the expression that produced this result (0-based)
-   */
-  uintptr_t expr_index;
-  /**
-   * Index of the batch item that produced this result (0-based)
-   */
-  uintptr_t batch_index;
-} BatchStatus;
-
-/**
- * Request structure for batch evaluation of multiple expressions.
- *
- * This structure allows efficient evaluation of multiple expressions with
- * different parameter values, reusing parsed ASTs and evaluation engines
- * for significant performance improvements.
- *
- * # Memory Layout
- *
- * - `expressions`: Array of C strings containing the expressions to evaluate
- * - `param_values`: 2D array where param_values[i] points to an array of values for parameter i
- * - `results`: 2D array where results[i] points to an array to store results for expression i
- *
- * # Memory Ownership
- *
- * The caller owns all memory passed to this structure and is responsible for:
- * - Keeping all pointers valid for the duration of the evaluation
- * - Freeing the memory after the evaluation completes
- * - Pre-allocating result arrays unless using exp_rs_batch_eval_alloc
- *
- * For embedded systems, consider pre-allocating all arrays at startup to avoid
- * runtime allocations. See test_embedded_pool.c for an example.
- *
- * # Example
- *
- * ```c
- * // Evaluate 3 expressions with 2 parameters over 1000 data points
- * const char* exprs[] = {"a + b", "a * sin(b)", "sqrt(a*a + b*b)"};
- * const char* params[] = {"a", "b"};
- * Real a_values[1000] = {...};
- * Real b_values[1000] = {...};
- * Real* param_vals[] = {a_values, b_values};
- * Real results1[1000], results2[1000], results3[1000];
- * Real* results[] = {results1, results2, results3};
- *
- * BatchEvalRequest req = {
- *     .expressions = exprs,
- *     .expression_count = 3,
- *     .param_names = params,
- *     .param_count = 2,
- *     .param_values = param_vals,
- *     .batch_size = 1000,
- *     .results = results,
- *     .allocate_results = false,
- *     .stop_on_error = false,
- *     .statuses = NULL
- * };
- *
- * int status = exp_rs_batch_eval(&req, ctx);
- * ```
- */
-typedef struct BatchEvalRequest {
-  /**
-   * Array of expression strings to evaluate
-   */
-  const char *const *expressions;
-  /**
-   * Number of expressions in the array
-   */
-  uintptr_t expression_count;
-  /**
-   * Array of parameter names (shared across all evaluations)
-   */
-  const char *const *param_names;
-  /**
-   * Number of parameters
-   */
-  uintptr_t param_count;
-  /**
-   * 2D array of parameter values: param_values[param_idx][batch_idx]
-   */
-  const Real *const *param_values;
-  /**
-   * Number of items in each parameter array (batch size)
-   */
-  uintptr_t batch_size;
-  /**
-   * 2D array for results: results[expr_idx][batch_idx]
-   * Must point to pre-allocated buffers
-   */
-  Real **results;
-  /**
-   * If true, stop evaluation on first error
-   */
-  bool stop_on_error;
-  /**
-   * Optional array for detailed error tracking
-   * Size should be expression_count * batch_size
-   * Can be NULL if detailed error tracking is not needed
-   */
-  struct BatchStatus *statuses;
-} BatchEvalRequest;
-
-/**
- * Result structure for batch evaluation when using library allocation.
- *
- * This structure is returned when the library allocates the result arrays,
- * providing both the results and allocation metadata.
- */
-typedef struct BatchEvalResult {
-  /**
-   * Allocated 2D result array: results[expr_idx][batch_idx]
-   */
-  Real **results;
-  /**
-   * Number of expressions (rows in results)
-   */
-  uintptr_t expression_count;
-  /**
-   * Number of batch items (columns in results)
-   */
-  uintptr_t batch_size;
-  /**
-   * Overall status: 0 = success, non-zero = error
-   */
-  int32_t status;
-} BatchEvalResult;
-
-/**
- * Opaque type for BatchBuilder
- */
-typedef struct BatchBuilderOpaque {
-  uint8_t _data[0];
-} BatchBuilderOpaque;
-
-/**
- * Opaque arena type for C
- */
-typedef struct ArenaOpaque {
+typedef struct ExprBatch {
   uint8_t _private[0];
-} ArenaOpaque;
+} ExprBatch;
+
+/**
+ * Opaque type for expression session (single expression evaluation)
+ */
+typedef struct ExprSession {
+  uint8_t _private[0];
+} ExprSession;
 
 #if defined(USE_F32)
 #define TEST_PRECISION 1e-6
@@ -244,774 +91,297 @@ typedef struct ArenaOpaque {
 extern "C" {
 #endif // __cplusplus
 
-extern int32_t *EXP_RS_PANIC_FLAG;
-
-extern const void *EXP_RS_LOG_FUNCTION;
-
-__attribute__((aligned(8)))
-void exp_rs_register_panic_handler(int32_t *flag_ptr,
-                                   const void *log_func);
-
 /**
- * Frees a string allocated by exp_rs FFI functions.
- *
- * This function should be called to free the error message string in an EvalResult
- * when status is non-zero. Not calling this function will result in a memory leak.
- *
- * # Parameters
- *
- * * `ptr` - Pointer to the string to free. Must be a pointer returned in an EvalResult error field.
+ * Free an error message string
  *
  * # Safety
- *
- * This function is unsafe because it dereferences a raw pointer. The caller must ensure that:
- * 1. The pointer is valid and was allocated by one of the exp_rs FFI functions
- * 2. The pointer is not used after calling this function
- * 3. The pointer is not freed more than once
+ * The pointer must have been returned by an expr_* function
  */
-__attribute__((aligned(8))) void exp_rs_free_error(char *ptr);
+__attribute__((aligned(8))) void expr_free_error(char *ptr);
 
 /**
- * Evaluates a mathematical expression without a context.
+ * Create a new evaluation context
  *
- * This function evaluates a mathematical expression string and returns the result.
- * Without a context, only built-in functions and constants are available.
- *
- * # Parameters
- *
- * * `expr` - Null-terminated string containing the expression to evaluate
+ * The context holds function definitions and can be reused across evaluations.
  *
  * # Returns
- *
- * An EvalResult structure containing either the result value or an error message.
- *
- * # Safety
- *
- * This function is unsafe because it dereferences a raw pointer. The caller must ensure that:
- * 1. The pointer is valid and points to a null-terminated string
- * 2. The string contains valid UTF-8 data
- */
-__attribute__((aligned(8))) struct EvalResult exp_rs_eval(const char *expr);
-
-/**
- * Creates a new evaluation context.
- *
- * This function creates a new evaluation context that can be used to store
- * variables, constants, and functions for use in expressions. The context
- * must be freed with exp_rs_context_free when no longer needed.
- *
- * # Returns
- *
- * A pointer to the new context, or NULL if allocation failed.
+ * Pointer to new context, or NULL on allocation failure
  *
  * # Safety
- *
- * This function is safe to call from C code. The returned pointer must be
- * passed to exp_rs_context_free when no longer needed to avoid memory leaks.
+ * The returned pointer must be freed with expr_context_free()
  */
-__attribute__((aligned(8))) struct EvalContextOpaque *exp_rs_context_new(void);
+__attribute__((aligned(8))) struct ExprContext *expr_context_new(void);
 
 /**
- * Frees an evaluation context previously created by exp_rs_context_new.
+ * Free an evaluation context
  *
- * This function releases all resources associated with the given context.
- * After calling this function, the context pointer is no longer valid and
- * should not be used.
+ * # Safety
+ * - The pointer must have been created by expr_context_new()
+ * - The pointer must not be used after calling this function
+ */
+__attribute__((aligned(8))) void expr_context_free(struct ExprContext *ctx);
+
+/**
+ * Add a native function to the context
  *
  * # Parameters
- *
- * * `ctx` - Pointer to the context to free, as returned by exp_rs_context_new
- *
- * # Safety
- *
- * This function is unsafe because it dereferences a raw pointer. The caller must ensure that:
- * 1. The pointer was returned by exp_rs_context_new
- * 2. The pointer has not already been freed
- * 3. The pointer is not used after calling this function
- */
-__attribute__((aligned(8))) void exp_rs_context_free(struct EvalContextOpaque *ctx);
-
-/**
- * Register an expression function with mandatory validation.
- *
- * This function registers a new function defined by an expression string
- * that can be called in future expression evaluations. The expression is
- * fully validated for both syntax and semantic correctness.
- *
- * Validation includes:
- * - Syntax checking (balanced parentheses, valid operators)
- * - Function existence checking (warns if undefined functions are used)
- * - Function arity checking (warns if wrong number of arguments)
- * - Variable existence checking (warns if undefined variables are used)
- * - Parameter usage analysis (info if parameters are unused)
- *
- * # Parameters
- *
- * * `ctx` - Pointer to the context, as returned by exp_rs_context_new
- * * `name` - The name of the function to register
- * * `params` - Array of parameter names the function will accept
- * * `param_count` - Number of parameters in the array
- * * `expression` - The expression string that defines the function behavior
+ * - `ctx`: The context
+ * - `name`: Function name (must be valid UTF-8)
+ * - `arity`: Number of arguments the function expects
+ * - `func`: Function pointer
  *
  * # Returns
- *
- * An EvalResult structure with:
- * - status=0, value=0.0: Success, no issues found
- * - status=0, value=1.0: Success with undefined function warnings
- * - status=0, value=2.0: Success with function arity warnings
- * - status=0, value=3.0: Success with undefined variable warnings
- * - status=0, value=4.0: Success with unused parameter info
- * - status=7: Syntax error (function NOT registered)
- * - status=1-6: Other errors (null pointers, invalid UTF-8, capacity exceeded)
- *
- * IMPORTANT: Even when status=0, check if error is non-null for warning messages.
- * All error messages must be freed with exp_rs_free_error.
+ * 0 on success, non-zero on error
  */
 __attribute__((aligned(8)))
-struct EvalResult exp_rs_context_register_expression_function(struct EvalContextOpaque *ctx,
-                                                              const char *name,
-                                                              const char *const *params,
-                                                              uintptr_t param_count,
-                                                              const char *expression);
+int32_t expr_context_add_function(struct ExprContext *ctx,
+                                  const char *name,
+                                  uintptr_t arity,
+                                  NativeFunc func);
 
 /**
- * Register an expression function without validation (unsafe).
- *
- * This function is identical to exp_rs_context_register_expression_function
- * but skips all validation checks. Use this only if:
- * - You need to register mutually dependent functions
- * - You are certain the expression is valid
- * - Performance during registration is critical
- *
- * WARNING: Invalid expressions will cause errors during evaluation that could
- * have been caught at registration time.
+ * Create a new memory arena
  *
  * # Parameters
- *
- * Same as exp_rs_context_register_expression_function
+ * - `size_hint`: Suggested size in bytes (0 for default)
  *
  * # Returns
+ * Pointer to new arena, or NULL on allocation failure
  *
- * An EvalResult structure with:
- * - status=0 on success (syntax parse succeeded)
- * - status=1-6: Various registration errors
- *
- * No validation warnings are provided with this function.
+ * # Safety
+ * The returned pointer must be freed with expr_arena_free()
  */
-__attribute__((aligned(8)))
-struct EvalResult exp_rs_context_register_expression_function_unsafe(struct EvalContextOpaque *ctx,
-                                                                     const char *name,
-                                                                     const char *const *params,
-                                                                     uintptr_t param_count,
-                                                                     const char *expression);
+__attribute__((aligned(8))) struct ExprArena *expr_arena_new(uintptr_t size_hint);
 
 /**
- * Unregister an expression function from the given context.
+ * Free a memory arena
  *
- * This function removes an expression function that was previously registered
- * with exp_rs_context_register_expression_function. It only affects the current
- * context and does not modify parent contexts.
+ * # Safety
+ * - The pointer must have been created by expr_arena_new()
+ * - All batches using this arena must be freed first
+ */
+__attribute__((aligned(8))) void expr_arena_free(struct ExprArena *arena);
+
+/**
+ * Reset an arena for reuse
  *
- * # Warning
+ * This clears all allocations but keeps the memory for reuse.
  *
- * Unregistering a function that is used by other expression functions may cause
- * runtime errors when those expressions are evaluated later. The AST cache is
- * cleared when a function is unregistered to prevent some issues.
+ * # Safety
+ * No references to arena-allocated data must exist
+ */
+__attribute__((aligned(8))) void expr_arena_reset(struct ExprArena *arena);
+
+/**
+ * Create a new expression batch
  *
  * # Parameters
- *
- * * `ctx` - Pointer to the context, as returned by exp_rs_context_new
- * * `name` - The name of the expression function to unregister
+ * - `arena`: Memory arena for allocations
  *
  * # Returns
+ * Pointer to new batch, or NULL on failure
  *
- * An EvalResult structure with:
- * - status=0 and value=1.0 if the function was found and removed
- * - status=0 and value=0.0 if the function was not found in this context
- * - non-zero status with an error message on failure
- *
- * When status is non-zero, the error message must be freed with exp_rs_free_error.
+ * # Safety
+ * - The arena must remain valid for the batch's lifetime
+ * - The returned pointer must be freed with expr_batch_free()
  */
-__attribute__((aligned(8)))
-struct EvalResult exp_rs_context_unregister_expression_function(struct EvalContextOpaque *ctx,
-                                                                const char *name);
+__attribute__((aligned(8))) struct ExprBatch *expr_batch_new(struct ExprArena *arena);
 
 /**
- * Register a native function with the given context.
+ * Free an expression batch
  *
- * This function registers a Rust function to be invoked from C expressions.
- * The native function will be available for use in expressions evaluated with this context.
+ * # Safety
+ * The pointer must have been created by expr_batch_new()
+ */
+__attribute__((aligned(8))) void expr_batch_free(struct ExprBatch *batch);
+
+/**
+ * Add an expression to the batch
  *
  * # Parameters
- *
- * * `ctx` - Pointer to the context, as returned by exp_rs_context_new
- * * `name` - The name of the function to register
- * * `arity` - Number of parameters the function accepts
- * * `func_ptr` - Function pointer to the implementation (C callback)
+ * - `batch`: The batch
+ * - `expr`: Expression string (must be valid UTF-8)
  *
  * # Returns
- *
- * An EvalResult structure with:
- * - status=0 on success
- * - non-zero status with an error message on failure
- *
- * When status is non-zero, the error message must be freed with exp_rs_free_error.
+ * Expression index on success, negative error code on failure
  */
 __attribute__((aligned(8)))
-struct EvalResult exp_rs_context_register_native_function(struct EvalContextOpaque *ctx,
-                                                          const char *name,
-                                                          uintptr_t arity,
-                                                          Real (*func_ptr)(const Real*, uintptr_t));
+int32_t expr_batch_add_expression(struct ExprBatch *batch,
+                                  const char *expr);
 
 /**
- * Set a parameter value in the context.
- *
- * This function adds or updates a variable in the evaluation context that can be
- * referenced in expressions evaluated with this context.
+ * Add a variable to the batch
  *
  * # Parameters
- *
- * * `ctx` - Pointer to the context, as returned by exp_rs_context_new
- * * `name` - The name of the parameter to set
- * * `value` - The value to assign to the parameter
+ * - `batch`: The batch
+ * - `name`: Variable name (must be valid UTF-8)
+ * - `value`: Initial value
  *
  * # Returns
- *
- * An EvalResult structure with:
- * - status=0 on success
- * - non-zero status with an error message on failure
- *
- * When status is non-zero, the error message must be freed with exp_rs_free_error.
+ * Variable index on success, negative error code on failure
  */
 __attribute__((aligned(8)))
-struct EvalResult exp_rs_context_set_parameter(struct EvalContextOpaque *ctx,
-                                               const char *name,
-                                               Real value);
+int32_t expr_batch_add_variable(struct ExprBatch *batch,
+                                const char *name,
+                                Real value);
 
 /**
- * Evaluates a mathematical expression using the given context.
- *
- * This function evaluates a mathematical expression string using the specified context,
- * which can contain variables, constants, and custom functions.
+ * Update a variable value by index
  *
  * # Parameters
- *
- * * `expr` - Null-terminated string containing the expression to evaluate
- * * `ctx` - Pointer to the context to use, as returned by exp_rs_context_new
+ * - `batch`: The batch
+ * - `index`: Variable index from expr_batch_add_variable()
+ * - `value`: New value
  *
  * # Returns
- *
- * An EvalResult structure containing either the result value or an error message.
- *
- * # Safety
- *
- * This function is unsafe because it dereferences raw pointers. The caller must ensure that:
- * 1. The expression pointer is valid and points to a null-terminated string
- * 2. The string contains valid UTF-8 data
- * 3. The context pointer was returned by exp_rs_context_new and has not been freed
+ * 0 on success, negative error code on failure
  */
 __attribute__((aligned(8)))
-struct EvalResult exp_rs_context_eval(const char *expr,
-                                      struct EvalContextOpaque *ctx);
+int32_t expr_batch_set_variable(struct ExprBatch *batch,
+                                uintptr_t index,
+                                Real value);
 
 /**
- * Evaluates multiple expressions with multiple parameter sets in a batch.
- *
- * This function provides high-performance batch evaluation by:
- * - Parsing each expression only once
- * - Reusing a single evaluation engine for all evaluations
- * - Minimizing FFI overhead
+ * Evaluate all expressions in the batch
  *
  * # Parameters
- *
- * * `request` - Pointer to a BatchEvalRequest structure containing:
- *   - `expressions`: Array of expression strings to evaluate
- *   - `expression_count`: Number of expressions
- *   - `param_names`: Array of parameter names
- *   - `param_count`: Number of parameters
- *   - `param_values`: 2D array of parameter values [param_idx][batch_idx]
- *   - `batch_size`: Number of items to evaluate
- *   - `results`: 2D array to store results [expr_idx][batch_idx]
- *   - `allocate_results`: Whether to allocate result arrays
- *   - `stop_on_error`: Whether to stop on first error
- *   - `statuses`: Optional array for error tracking
- * * `ctx` - Pointer to the evaluation context
+ * - `batch`: The batch
+ * - `ctx`: Optional context with functions (can be NULL)
  *
  * # Returns
- *
- * 0 on success, non-zero error code on failure:
- * - 1: NULL request or context
- * - 2: Invalid request (zero expressions or batch size)
- * - 3: NULL expression pointer
- * - 4: Invalid UTF-8 in expression
- * - 5: Expression parsing error
- * - 6: Evaluation error (when stop_on_error is true)
- * - 7: Memory allocation error
- *
- * # Safety
- *
- * This function is unsafe because it:
- * 1. Dereferences raw pointers
- * 2. Performs pointer arithmetic for array access
- * 3. Assumes arrays are properly sized as specified
- *
- * The caller must ensure:
- * - All pointers are valid and properly aligned
- * - Arrays have the specified dimensions
- * - The context is valid and not freed during evaluation
+ * 0 on success, negative error code on failure
  */
 __attribute__((aligned(8)))
-int32_t exp_rs_batch_eval(const struct BatchEvalRequest *request,
-                          struct EvalContextOpaque *ctx);
+int32_t expr_batch_evaluate(struct ExprBatch *batch,
+                            struct ExprContext *ctx);
 
 /**
- * Evaluates multiple expressions with batch allocation of results.
- *
- * This is a convenience wrapper around exp_rs_batch_eval that handles
- * result allocation for you. The allocated results must be freed using
- * exp_rs_batch_free_results.
- *
- * # Memory Management
- *
- * This function allocates memory for results in the following pattern:
- * 1. Creates Vec<Vec<Real>> for result buffers
- * 2. Converts to Box<[Vec<Real>]> and leaks it
- * 3. Creates Vec<*mut Real> for pointer array
- * 4. Converts to Box<[*mut Real]> and leaks it
- *
- * The exp_rs_batch_free_results function must be called to properly
- * deallocate this memory. Do not attempt to free the memory manually.
+ * Get the result of an expression
  *
  * # Parameters
- *
- * * `request` - Pointer to a BatchEvalRequest structure
- * * `ctx` - Pointer to the evaluation context
- * * `result` - Pointer to a BatchEvalResult structure to receive results
+ * - `batch`: The batch
+ * - `index`: Expression index from expr_batch_add_expression()
  *
  * # Returns
- *
- * 0 on success, non-zero error code on failure (same as exp_rs_batch_eval)
- *
- * # Safety
- *
- * This function has the same safety requirements as exp_rs_batch_eval.
- * Additionally, the caller must ensure that `result` points to valid memory.
+ * Result value, or NaN if index is invalid
  */
 __attribute__((aligned(8)))
-int32_t exp_rs_batch_eval_alloc(const struct BatchEvalRequest *request,
-                                struct EvalContextOpaque *ctx,
-                                struct BatchEvalResult *result);
+Real expr_batch_get_result(const struct ExprBatch *batch,
+                           uintptr_t index);
 
 /**
- * Frees results allocated by exp_rs_batch_eval_alloc.
- *
- * This function releases memory allocated by the batch evaluation functions
- * when allocate_results was true or when using exp_rs_batch_eval_alloc.
+ * Initialize the arena pool
  *
  * # Parameters
- *
- * * `result` - Pointer to a BatchEvalResult structure containing allocated results
- *
- * # Safety
- *
- * This function is unsafe because it:
- * 1. Dereferences a raw pointer
- * 2. Assumes the results were allocated by this library
- *
- * The caller must ensure:
- * - The result pointer is valid
- * - The results were allocated by exp_rs_batch_eval_alloc
- * - The results have not already been freed
- */
-__attribute__((aligned(8))) void exp_rs_batch_free_results(struct BatchEvalResult *result);
-
-/**
- * Batch evaluate multiple expressions with a pre-existing context
- *
- * TODO: This function needs to be refactored to work properly with arena allocation.
- * Currently it creates temporary arenas that don't live long enough.
- * Use exp_rs_batch_builder_new for proper arena-based evaluation.
- */
-__attribute__((aligned(8)))
-int32_t exp_rs_batch_eval_with_context(const struct BatchEvalRequest *request,
-                                       const struct EvalContextOpaque *ctx);
-
-/**
- * Frees a batch builder.
- *
- * # Safety
- *
- * This function is unsafe because it:
- * - Dereferences a raw pointer
- * - Frees memory allocated by Rust
- *
- * The caller must ensure:
- * - The pointer was allocated by `exp_rs_batch_builder_new`
- * - The pointer is not used after this call
- * - The pointer is not freed multiple times
- */
-__attribute__((aligned(8))) void exp_rs_batch_builder_free(struct BatchBuilderOpaque *builder);
-
-/**
- * Adds an expression to the batch builder.
- *
- * The expression is parsed immediately and cached for efficient evaluation.
- *
- * # Parameters
- *
- * * `builder` - Pointer to the batch builder
- * * `expr` - The expression string to add
+ * - `max_arenas`: Maximum number of arenas in the pool
  *
  * # Returns
- *
- * The index of the added expression (>= 0) on success, or negative error code:
- * - `-1`: NULL pointer
- * - `-2`: Parse error
- * - `-3`: Invalid UTF-8 in expression
- *
- * # Safety
- *
- * This function is unsafe because it dereferences raw pointers.
- * The caller must ensure all pointers are valid.
+ * true on success, false if already initialized
  */
-__attribute__((aligned(8)))
-int32_t exp_rs_batch_builder_add_expression(struct BatchBuilderOpaque *builder,
-                                            const char *expr);
+__attribute__((aligned(8))) bool expr_pool_init(uintptr_t max_arenas);
 
 /**
- * Adds a parameter to the batch builder.
+ * Create a new expression session
  *
- * # Parameters
- *
- * * `builder` - Pointer to the batch builder
- * * `name` - The parameter name
- * * `initial_value` - Initial value for the parameter
+ * Automatically gets an arena from the pool.
  *
  * # Returns
- *
- * The index of the added parameter (>= 0) on success, or negative error code:
- * - `-1`: NULL pointer
- * - `-2`: Duplicate parameter name or other error
- * - `-3`: Invalid UTF-8 in parameter name
+ * Pointer to new session, or NULL if no arenas available
  *
  * # Safety
- *
- * This function is unsafe because it dereferences raw pointers.
- * The caller must ensure all pointers are valid.
+ * The returned pointer must be freed with expr_session_free()
  */
-__attribute__((aligned(8)))
-int32_t exp_rs_batch_builder_add_parameter(struct BatchBuilderOpaque *builder,
-                                           const char *name,
-                                           Real initial_value);
+__attribute__((aligned(8))) struct ExprSession *expr_session_new(void);
 
 /**
- * Sets a parameter value by index.
+ * Free an expression session
  *
- * This is the fastest way to update parameter values.
+ * This returns the arena to the pool for reuse.
+ *
+ * # Safety
+ * The pointer must have been created by expr_session_new()
+ */
+__attribute__((aligned(8))) void expr_session_free(struct ExprSession *session);
+
+/**
+ * Parse an expression in the session
  *
  * # Parameters
- *
- * * `builder` - Pointer to the batch builder
- * * `idx` - Parameter index (from `add_parameter`)
- * * `value` - New value for the parameter
+ * - `session`: The session
+ * - `expr`: Expression string (must be valid UTF-8)
  *
  * # Returns
- *
- * 0 on success, negative error code on failure:
- * - `-1`: NULL pointer
- * - `-2`: Invalid parameter index
- *
- * # Safety
- *
- * This function is unsafe because it dereferences raw pointers.
+ * 0 on success, negative error code on failure
  */
 __attribute__((aligned(8)))
-int32_t exp_rs_batch_builder_set_param(struct BatchBuilderOpaque *builder,
-                                       uintptr_t idx,
-                                       Real value);
+int32_t expr_session_parse(struct ExprSession *session,
+                           const char *expr);
 
 /**
- * Sets a parameter value by name.
- *
- * This is more convenient but slower than setting by index.
+ * Add a variable to the session
  *
  * # Parameters
- *
- * * `builder` - Pointer to the batch builder
- * * `name` - Parameter name
- * * `value` - New value for the parameter
+ * - `session`: The session
+ * - `name`: Variable name (must be valid UTF-8)
+ * - `value`: Initial value
  *
  * # Returns
- *
- * 0 on success, negative error code on failure:
- * - `-1`: NULL pointer
- * - `-2`: Unknown parameter name
- * - `-3`: Invalid UTF-8 in parameter name
- *
- * # Safety
- *
- * This function is unsafe because it dereferences raw pointers.
+ * Variable index on success, negative error code on failure
  */
 __attribute__((aligned(8)))
-int32_t exp_rs_batch_builder_set_param_by_name(struct BatchBuilderOpaque *builder,
-                                               const char *name,
-                                               Real value);
+int32_t expr_session_add_variable(struct ExprSession *session,
+                                  const char *name,
+                                  Real value);
 
 /**
- * Evaluates all expressions with current parameter values.
- *
- * This function updates the context with current parameter values and
- * evaluates all expressions using cached ASTs and a reusable engine.
+ * Update a variable value by name
  *
  * # Parameters
- *
- * * `builder` - Pointer to the batch builder
- * * `ctx` - Pointer to the evaluation context
+ * - `session`: The session
+ * - `name`: Variable name
+ * - `value`: New value
  *
  * # Returns
- *
- * 0 on success, negative error code on failure:
- * - `-1`: NULL pointer
- * - `-2`: Evaluation error
- *
- * # Safety
- *
- * This function is unsafe because it dereferences raw pointers.
+ * 0 on success, negative error code on failure
  */
 __attribute__((aligned(8)))
-int32_t exp_rs_batch_builder_eval(struct BatchBuilderOpaque *builder,
-                                  struct EvalContextOpaque *ctx);
+int32_t expr_session_set_variable(struct ExprSession *session,
+                                  const char *name,
+                                  Real value);
 
 /**
- * Gets the result of a specific expression by index.
+ * Evaluate the expression
  *
  * # Parameters
- *
- * * `builder` - Pointer to the batch builder
- * * `expr_idx` - Expression index (from `add_expression`)
+ * - `session`: The session
+ * - `ctx`: Optional context with functions (can be NULL)
+ * - `result`: Pointer to store the result
  *
  * # Returns
- *
- * The result value, or NaN if the index is invalid.
- *
- * # Safety
- *
- * This function is unsafe because it dereferences raw pointers.
+ * 0 on success, negative error code on failure
  */
 __attribute__((aligned(8)))
-Real exp_rs_batch_builder_get_result(const struct BatchBuilderOpaque *builder,
-                                     uintptr_t expr_idx);
+int32_t expr_session_evaluate(struct ExprSession *session,
+                              struct ExprContext *ctx,
+                              Real *result);
 
 /**
- * Gets the number of parameters in the batch builder.
+ * Estimate arena size needed for expressions
  *
  * # Parameters
- *
- * * `builder` - Pointer to the batch builder
+ * - `expression_count`: Number of expressions
+ * - `total_expr_length`: Total length of all expression strings
+ * - `param_count`: Number of parameters
+ * - `estimated_iterations`: Estimated evaluation iterations
  *
  * # Returns
- *
- * The number of parameters, or 0 if the pointer is NULL.
- *
- * # Safety
- *
- * This function is unsafe because it dereferences raw pointers.
+ * Recommended arena size in bytes
  */
 __attribute__((aligned(8)))
-uintptr_t exp_rs_batch_builder_param_count(const struct BatchBuilderOpaque *builder);
-
-/**
- * Gets the number of expressions in the batch builder.
- *
- * # Parameters
- *
- * * `builder` - Pointer to the batch builder
- *
- * # Returns
- *
- * The number of expressions, or 0 if the pointer is NULL.
- *
- * # Safety
- *
- * This function is unsafe because it dereferences raw pointers.
- */
-__attribute__((aligned(8)))
-uintptr_t exp_rs_batch_builder_expression_count(const struct BatchBuilderOpaque *builder);
-
-/**
- * Creates a new arena for zero-allocation expression evaluation.
- *
- * The arena pre-allocates memory based on the size hint to avoid allocations
- * during expression parsing and evaluation. Memory is allocated using the
- * global allocator (which uses exp_rs_malloc in embedded environments).
- *
- * # Parameters
- *
- * * `size_hint` - Suggested size in bytes for the arena. The actual allocation
- *                 may be larger to accommodate bumpalo's internal requirements.
- *
- * # Returns
- *
- * A pointer to the new arena, or NULL on allocation failure.
- *
- * # Safety
- *
- * The returned pointer must be freed with `exp_rs_arena_free`.
- *
- * # Example (C)
- *
- * ```c
- * Arena* arena = exp_rs_arena_new(256 * 1024); // 256KB arena
- * // ... use arena ...
- * exp_rs_arena_free(arena);
- * ```
- */
-__attribute__((aligned(8))) struct ArenaOpaque *exp_rs_arena_new(uintptr_t size_hint);
-
-/**
- * Frees an arena previously created by exp_rs_arena_new.
- *
- * This releases all memory associated with the arena back to the allocator.
- *
- * # Parameters
- *
- * * `arena` - Pointer to the arena to free
- *
- * # Safety
- *
- * This function is unsafe because it:
- * - Dereferences a raw pointer
- * - Frees memory allocated by Rust
- *
- * The caller must ensure:
- * - The pointer was allocated by `exp_rs_arena_new`
- * - The pointer is not used after this call
- * - No references to arena-allocated data exist
- */
-__attribute__((aligned(8))) void exp_rs_arena_free(struct ArenaOpaque *arena);
-
-/**
- * Resets an arena, clearing all allocations.
- *
- * This efficiently resets the arena to its initial state, allowing
- * memory to be reused for new allocations. This is much faster than
- * freeing and recreating the arena.
- *
- * # Parameters
- *
- * * `arena` - Pointer to the arena to reset
- *
- * # Safety
- *
- * This function is unsafe because it dereferences a raw pointer.
- * All references to arena-allocated data become invalid after reset.
- *
- * # Example (C)
- *
- * ```c
- * // Process batch 1
- * exp_rs_batch_builder_eval(builder, ctx);
- *
- * // Reset arena for next batch
- * exp_rs_arena_reset(arena);
- *
- * // Process batch 2 with clean arena
- * exp_rs_batch_builder_eval(builder, ctx);
- * ```
- */
-__attribute__((aligned(8))) void exp_rs_arena_reset(struct ArenaOpaque *arena);
-
-/**
- * Estimates the arena size needed for a set of expressions.
- *
- * This function helps determine the appropriate arena size to allocate
- * for a given set of expressions, preventing frequent reallocations.
- *
- * # Parameters
- *
- * * `expressions` - Array of expression strings to estimate
- * * `num_expressions` - Number of expressions in the array
- * * `estimated_iterations` - Estimated number of evaluation iterations
- *
- * # Returns
- *
- * Estimated arena size in bytes
- *
- * # Safety
- *
- * The expressions pointer must be valid and point to at least num_expressions
- * null-terminated C strings.
- *
- * # Example
- *
- * ```c
- * const char* exprs[] = {"x + y", "sin(x) * cos(y)", "sqrt(x*x + y*y)"};
- * size_t arena_size = exp_rs_estimate_arena_size(exprs, 3, 1000);
- * Arena* arena = exp_rs_arena_new(arena_size);
- * ```
- */
-__attribute__((aligned(8)))
-uintptr_t exp_rs_estimate_arena_size(const char *const *expressions,
-                                     uintptr_t num_expressions,
-                                     uintptr_t estimated_iterations);
-
-/**
- * Creates a new batch builder with an arena for zero-allocation evaluation.
- *
- * This function creates a batch builder that uses the provided arena for all
- * AST allocations, eliminating dynamic memory allocation during evaluation.
- *
- * # Parameters
- *
- * * `arena` - Arena created with exp_rs_arena_new
- *
- * # Returns
- *
- * Pointer to a new batch builder, or NULL on failure
- *
- * # Safety
- *
- * - The arena pointer must be valid and created by exp_rs_arena_new
- * - The returned pointer must be freed with exp_rs_batch_builder_free
- * - The arena must outlive the batch builder
- *
- * # Example
- *
- * ```c
- * // Create arena
- * Arena* arena = exp_rs_arena_new(256 * 1024);
- *
- * // Create batch builder with arena
- * BatchBuilder* builder = exp_rs_batch_builder_new(arena);
- *
- * // Add expressions (parsed into arena)
- * exp_rs_batch_builder_add_expression(builder, "x + y");
- *
- * // ... use builder ...
- *
- * // Clean up
- * exp_rs_batch_builder_free(builder);
- * exp_rs_arena_free(arena);
- * ```
- */
-__attribute__((aligned(8)))
-struct BatchBuilderOpaque *exp_rs_batch_builder_new(struct ArenaOpaque *arena);
-
-#if defined(EXP_RS_CUSTOM_ALLOC)
-extern void *exp_rs_malloc(uintptr_t size);
-#endif
-
-#if defined(EXP_RS_CUSTOM_ALLOC)
-extern void exp_rs_free(void *ptr);
-#endif
-
-#if !defined(EXP_RS_CUSTOM_ALLOC)
-extern void *malloc(uintptr_t size);
-#endif
-
-#if !defined(EXP_RS_CUSTOM_ALLOC)
-extern void free(void *ptr);
-#endif
+uintptr_t expr_estimate_arena_size(uintptr_t expression_count,
+                                   uintptr_t total_expr_length,
+                                   uintptr_t param_count,
+                                   uintptr_t _estimated_iterations);
 
 #ifdef __cplusplus
 }  // extern "C"
