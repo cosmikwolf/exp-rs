@@ -94,7 +94,7 @@ use crate::{EvalContext, Real};
 use crate::expression::{Expression, ArenaBatchBuilder};
 use alloc::boxed::Box;
 use alloc::ffi::CString;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::ffi::{c_char, c_void, CStr};
@@ -104,6 +104,86 @@ use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 // Re-export for external visibility
 pub use crate::expression::ArenaBatchBuilder as ArenaBatchBuilderExport;
 pub use crate::expression::Expression as ExpressionExport;
+
+// ============================================================================
+// Global Allocator for no_std ARM
+// ============================================================================
+
+#[cfg(all(not(test), target_arch = "arm"))]
+mod allocator {
+    use core::alloc::{GlobalAlloc, Layout};
+    
+    struct CAllocator;
+    
+    // External C functions for memory allocation
+    extern "C" {
+        fn malloc(size: usize) -> *mut core::ffi::c_void;
+        fn free(ptr: *mut core::ffi::c_void);
+    }
+    
+    unsafe impl GlobalAlloc for CAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            let size = layout.size();
+            let align = layout.align();
+            
+            if size == 0 {
+                return align as *mut u8;
+            }
+            
+            // Standard malloc typically provides 8-byte alignment
+            // For higher alignment requirements, we need to allocate extra space
+            if align > 8 {
+                // Allocate extra space for alignment
+                let total_size = size + align;
+                let ptr = malloc(total_size) as *mut u8;
+                
+                if ptr.is_null() {
+                    return ptr;
+                }
+                
+                // Calculate aligned address
+                let addr = ptr as usize;
+                let aligned_addr = (addr + align - 1) & !(align - 1);
+                let offset = aligned_addr - addr;
+                
+                // Store the original pointer just before the aligned address
+                // so we can free it later
+                if offset >= core::mem::size_of::<*mut u8>() {
+                    let meta_ptr = (aligned_addr - core::mem::size_of::<*mut u8>()) as *mut *mut u8;
+                    *meta_ptr = ptr;
+                    aligned_addr as *mut u8
+                } else {
+                    // Not enough space for metadata, fail
+                    free(ptr as *mut core::ffi::c_void);
+                    core::ptr::null_mut()
+                }
+            } else {
+                malloc(size) as *mut u8
+            }
+        }
+        
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            if layout.size() == 0 {
+                return;
+            }
+            
+            let align = layout.align();
+            
+            if align > 8 {
+                // For aligned allocations, retrieve the original pointer
+                let addr = ptr as usize;
+                let meta_ptr = (addr - core::mem::size_of::<*mut u8>()) as *mut *mut u8;
+                let original_ptr = *meta_ptr;
+                free(original_ptr as *mut core::ffi::c_void);
+            } else {
+                free(ptr as *mut core::ffi::c_void);
+            }
+        }
+    }
+    
+    #[global_allocator]
+    static ALLOCATOR: CAllocator = CAllocator;
+}
 
 // ============================================================================
 // Panic Handler Support
@@ -1254,6 +1334,17 @@ mod tests {
             // If arena was properly reset, this should succeed
         }
     }
+}
+
+// ============================================================================
+// Test-only Panic Trigger
+// ============================================================================
+
+/// Force a panic for testing purposes (only available in debug builds)
+#[cfg(debug_assertions)]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_test_trigger_panic() {
+    panic!("Test panic triggered from C");
 }
 
 // ============================================================================

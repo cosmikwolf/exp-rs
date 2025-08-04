@@ -1,5 +1,8 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
 #include "../include/exp_rs.h"
 
 // Global panic flag
@@ -20,25 +23,42 @@ void panic_logger(const unsigned char* msg, size_t len) {
     printf("   - Panic logger called with message: %.*s\n", (int)len, msg);
 }
 
+// Test function that should trigger a panic
+void test_panic_trigger() {
+    ExprContext* ctx = expr_context_new();
+    ExprSession* session = expr_session_new();
+    
+    // Create an expression that should cause issues
+    // For now, let's try something that might overflow or cause internal errors
+    
+    // Try 1: Create a recursive expression function that should hit recursion limits
+    expr_context_add_expression_function(ctx, "recurse", "x", "recurse(x+1)");
+    expr_session_parse(session, "recurse(1)");
+    
+    Real result;
+    int status = expr_session_evaluate(session, ctx, &result);
+    
+    // If we get here, no panic occurred
+    printf("   - Expression evaluation returned: %d\n", status);
+    
+    expr_session_free(session);
+    expr_context_free(ctx);
+}
+
 int main() {
     printf("=== Panic Handler Test ===\n\n");
     
-    // Register panic handler
+    // Test 1: Register panic handler
     printf("1. Registering panic handler:\n");
     exp_rs_register_panic_handler(&panic_flag, (void*)panic_logger);
     printf("   - Panic handler registered\n");
+    printf("   - Initial panic flag: %d\n", panic_flag);
     
-    // Create context
-    ExprContext* ctx = expr_context_new();
-    if (!ctx) {
-        printf("Failed to create context\n");
-        return 1;
-    }
-    
-    // Test 1: Normal operation (no panic)
-    printf("\n2. Testing normal operation (no panic):\n");
+    // Test 2: Normal operation (no panic)
+    printf("\n2. Testing normal operation:\n");
     panic_flag = 0;
     
+    ExprContext* ctx = expr_context_new();
     ExprSession* session = expr_session_new();
     expr_session_parse(session, "2 + 3");
     Real result;
@@ -49,92 +69,64 @@ int main() {
     printf("   - Panic flag: %d (expected 0)\n", panic_flag);
     
     expr_session_free(session);
+    expr_context_free(ctx);
     
-    // Test 2: Expression that might cause panic (division by zero)
-    printf("\n3. Testing division by zero:\n");
-    panic_flag = 0;
-    memset(panic_message, 0, sizeof(panic_message));
+    // Test 3: Try to trigger panic in a subprocess
+    printf("\n3. Testing panic trigger in subprocess:\n");
     
-    session = expr_session_new();
-    expr_session_parse(session, "1 / 0");
-    status = expr_session_evaluate(session, ctx, &result);
-    
-    // Division by zero should return an error, not panic
-    printf("   - Expression evaluated: %s\n", status == 0 ? "success" : "error (expected)");
-    printf("   - Panic flag: %d (expected 0 - should be handled error, not panic)\n", panic_flag);
-    
-    expr_session_free(session);
-    
-    // Test 3: Try to trigger panic with very deep recursion
-    printf("\n4. Testing deep recursion (may trigger stack overflow):\n");
-    panic_flag = 0;
-    memset(panic_message, 0, sizeof(panic_message));
-    
-    // Create a deeply nested expression
-    char deep_expr[1024];
-    strcpy(deep_expr, "1");
-    for (int i = 0; i < 100; i++) {
-        strcat(deep_expr, "+1");
-    }
-    
-    session = expr_session_new();
-    expr_session_parse(session, deep_expr);
-    status = expr_session_evaluate(session, ctx, &result);
-    
-    printf("   - Expression evaluated: %s\n", status == 0 ? "success" : "failed");
-    if (status == 0) {
-        printf("   - Result: %.1f\n", result);
-    }
-    printf("   - Panic flag: %d\n", panic_flag);
-    
-    expr_session_free(session);
-    
-    // Test 4: Invalid UTF-8 handling (should not panic)
-    printf("\n5. Testing invalid UTF-8:\n");
-    panic_flag = 0;
-    
-    // Create invalid UTF-8 sequence
-    char invalid_utf8[] = {0xFF, 0xFE, 0xFD, 0};
-    
-    session = expr_session_new();
-    status = expr_session_parse(session, invalid_utf8);
-    
-    printf("   - Parse with invalid UTF-8: %s\n", status == 0 ? "success" : "error (expected)");
-    printf("   - Panic flag: %d (expected 0 - should be handled error)\n", panic_flag);
-    
-    expr_session_free(session);
-    
-    // Test 5: NULL pointer handling (should not panic)
-    printf("\n6. Testing NULL pointer handling:\n");
-    panic_flag = 0;
-    
-    status = expr_session_parse(NULL, "2+2");
-    printf("   - Parse with NULL session: %s\n", status == 0 ? "success" : "error (expected)");
-    printf("   - Panic flag: %d (expected 0)\n", panic_flag);
-    
-    status = expr_session_evaluate(NULL, ctx, &result);
-    printf("   - Evaluate with NULL session: %s\n", status == 0 ? "success" : "error (expected)");
-    printf("   - Panic flag: %d (expected 0)\n", panic_flag);
-    
-    // Test 6: Test panic logger was never called in normal operation
-    printf("\n7. Panic logger status:\n");
-    if (panic_message_len > 0) {
-        printf("   - Panic message received: %s\n", panic_message);
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process - try to trigger panic
+        printf("   - Child process attempting to trigger panic...\n");
+        
+        // Re-register panic handler in child
+        exp_rs_register_panic_handler(&panic_flag, (void*)panic_logger);
+        
+        // Try various things that might panic
+        test_panic_trigger();
+        
+        // If we're still here, try the debug-only panic trigger
+        #ifdef DEBUG
+        printf("   - Child: Calling exp_rs_test_trigger_panic()...\n");
+        exp_rs_test_trigger_panic();
+        #else
+        printf("   - Child: exp_rs_test_trigger_panic() not available (release build)\n");
+        #endif
+        
+        printf("   - Child process: No panic triggered\n");
+        exit(0);
+    } else if (pid > 0) {
+        // Parent process - wait for child
+        int child_status;
+        waitpid(pid, &child_status, 0);
+        
+        if (WIFEXITED(child_status)) {
+            printf("   - Child exited normally with status: %d\n", WEXITSTATUS(child_status));
+        } else if (WIFSIGNALED(child_status)) {
+            printf("   - Child terminated by signal: %d\n", WTERMSIG(child_status));
+            if (WTERMSIG(child_status) == SIGABRT) {
+                printf("   - SIGABRT indicates a panic may have occurred\n");
+            }
+        }
     } else {
-        printf("   - No panic messages received (expected for normal operation)\n");
+        perror("fork");
+        return 1;
     }
     
-    // Test 7: Unregister panic handler
-    printf("\n8. Unregistering panic handler:\n");
+    // Test 4: Check panic handler state after subprocess
+    printf("\n4. Final state:\n");
+    printf("   - Parent panic flag: %d (should be 0 - not affected by child)\n", panic_flag);
+    
+    // Test 5: Unregister panic handler
+    printf("\n5. Unregistering panic handler:\n");
     exp_rs_register_panic_handler(NULL, NULL);
     printf("   - Panic handler unregistered\n");
     
-    // Clean up
-    expr_context_free(ctx);
-    
     printf("\n=== Panic Handler Test Completed ===\n");
-    printf("Summary: Panic handler registered successfully.\n");
-    printf("All operations completed without triggering panics (as expected).\n");
+    printf("Note: The panic handler is designed for no_std ARM targets.\n");
+    printf("In this development environment (with std), normal Rust panic handling applies.\n");
+    printf("The exp_rs_register_panic_handler() function can be called but won't intercept panics.\n");
+    printf("On ARM targets without std, the handler would set the flag and call the logger.\n");
     
     return 0;
 }

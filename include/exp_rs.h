@@ -469,6 +469,15 @@ uintptr_t expr_estimate_arena_size(uintptr_t expression_count,
                                    uintptr_t param_count,
                                    uintptr_t _estimated_iterations);
 
+/**
+ * Force a panic for testing purposes (only available in debug builds)
+ */
+__attribute__((aligned(8))) void exp_rs_test_trigger_panic(void);
+
+extern void *malloc(uintptr_t size);
+
+extern void free(void *ptr);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
