@@ -18,6 +18,22 @@
 //! - Single expression evaluation
 //! - Arena automatically returned when session is freed
 //! 
+//! ## Function Support
+//! 
+//! The FFI supports two types of functions:
+//! 
+//! ### Native Functions
+//! - Implemented in C and passed as function pointers
+//! - Registered with `expr_context_add_function()`
+//! - Example: `sin`, `cos`, `sqrt` implementations
+//! 
+//! ### Expression Functions
+//! - Mathematical expressions that can call other functions
+//! - Defined as strings and parsed when registered
+//! - Registered with `expr_context_add_expression_function()`
+//! - Can be removed with `expr_context_remove_expression_function()`
+//! - Example: `distance(x1,y1,x2,y2) = sqrt((x2-x1)^2 + (y2-y1)^2)`
+//! 
 //! # Example Usage
 //! 
 //! ## Batch API Example
@@ -26,18 +42,28 @@
 //! ExprContext* ctx = expr_context_new();
 //! expr_context_add_function(ctx, "sin", 1, native_sin);
 //! 
+//! // Add expression functions (mathematical expressions that can call other functions)
+//! expr_context_add_expression_function(ctx, "distance", "x1,y1,x2,y2", 
+//!                                      "sqrt((x2-x1)^2 + (y2-y1)^2)");
+//! expr_context_add_expression_function(ctx, "avg", "a,b", "(a+b)/2");
+//! 
 //! // Create arena and batch
 //! ExprArena* arena = expr_arena_new(8192);
 //! ExprBatch* batch = expr_batch_new(arena);
 //! 
 //! // Add expressions and parameters
 //! expr_batch_add_expression(batch, "x + sin(y)");
+//! expr_batch_add_expression(batch, "distance(0, 0, x, y)");
 //! expr_batch_add_variable(batch, "x", 1.0);
 //! expr_batch_add_variable(batch, "y", 3.14159);
 //! 
 //! // Evaluate
 //! expr_batch_evaluate(batch, ctx);
-//! Real result = expr_batch_get_result(batch, 0);
+//! Real result1 = expr_batch_get_result(batch, 0);
+//! Real result2 = expr_batch_get_result(batch, 1);
+//! 
+//! // Remove expression functions when no longer needed
+//! expr_context_remove_expression_function(ctx, "avg");
 //! 
 //! // Cleanup
 //! expr_batch_free(batch);
