@@ -115,25 +115,27 @@ int embedded_pool_init(void) {
     
     // Add expressions to batch builder (parsed once)
     for (int i = 0; i < NUM_EXPRESSIONS; i++) {
-        int32_t result = expr_batch_add_expression(
+        ExprResult result = expr_batch_add_expression(
             g_pool.batch_builder, 
             g_pool.expressions[i]
         );
-        if (result < 0) {
-            printf("Failed to add expression %d: %s\n", i, g_pool.expressions[i]);
+        if (result.status != 0) {
+            printf("Failed to add expression %d: %s (error: %s)\n", i, g_pool.expressions[i], result.error);
+            expr_free_error(result.error);
             return -1;
         }
     }
     
     // Add parameters to batch builder
     for (int i = 0; i < NUM_PARAMETERS; i++) {
-        int32_t result = expr_batch_add_variable(
+        ExprResult result = expr_batch_add_variable(
             g_pool.batch_builder,
             g_pool.param_names[i],
             0.0
         );
-        if (result < 0) {
-            printf("Failed to add parameter %s\n", g_pool.param_names[i]);
+        if (result.status != 0) {
+            printf("Failed to add parameter %s (error: %s)\n", g_pool.param_names[i], result.error);
+            expr_free_error(result.error);
             return -1;
         }
     }

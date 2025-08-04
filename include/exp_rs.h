@@ -11,6 +11,17 @@
 #include <stdlib.h>
 
 
+/**
+ * FFI error codes (negative to distinguish from ExprError codes)
+ */
+#define FFI_ERROR_NULL_POINTER -1
+
+#define FFI_ERROR_INVALID_UTF8 -2
+
+#define FFI_ERROR_NO_ARENA_AVAILABLE -3
+
+#define FFI_ERROR_CANNOT_GET_MUTABLE_ACCESS -4
+
 #define EXP_RS_MAX_VARIABLES 16
 
 #define EXP_RS_MAX_CONSTANTS 8
@@ -69,6 +80,28 @@ typedef struct ExprBatch {
 typedef struct ExprArena {
   uint8_t _private[0];
 } ExprArena;
+
+/**
+ * Result structure for FFI operations
+ */
+typedef struct ExprResult {
+  /**
+   * Error code: 0 for success, positive for ExprError, negative for FFI errors
+   */
+  int32_t status;
+  /**
+   * Result value (valid only if status == 0)
+   */
+  Real value;
+  /**
+   * Result index (for functions that return an index)
+   */
+  int32_t index;
+  /**
+   * Error message (NULL on success, must be freed with expr_free_error)
+   */
+  char *error;
+} ExprResult;
 
 /**
  * Opaque type for expression session (single expression evaluation)
@@ -289,11 +322,11 @@ __attribute__((aligned(8))) void expr_batch_free(struct ExprBatch *batch);
  * - `expr`: Expression string (must be valid UTF-8)
  *
  * # Returns
- * Expression index on success, negative error code on failure
+ * ExprResult with index on success, or error details on failure
  */
 __attribute__((aligned(8)))
-int32_t expr_batch_add_expression(struct ExprBatch *batch,
-                                  const char *expr);
+struct ExprResult expr_batch_add_expression(struct ExprBatch *batch,
+                                            const char *expr);
 
 /**
  * Add a variable to the batch
@@ -304,12 +337,12 @@ int32_t expr_batch_add_expression(struct ExprBatch *batch,
  * - `value`: Initial value
  *
  * # Returns
- * Variable index on success, negative error code on failure
+ * ExprResult with index on success, or error details on failure
  */
 __attribute__((aligned(8)))
-int32_t expr_batch_add_variable(struct ExprBatch *batch,
-                                const char *name,
-                                Real value);
+struct ExprResult expr_batch_add_variable(struct ExprBatch *batch,
+                                          const char *name,
+                                          Real value);
 
 /**
  * Update a variable value by index
@@ -354,6 +387,20 @@ int32_t expr_batch_evaluate(struct ExprBatch *batch,
 __attribute__((aligned(8)))
 Real expr_batch_get_result(const struct ExprBatch *batch,
                            uintptr_t index);
+
+/**
+ * Evaluate all expressions in the batch with detailed error reporting
+ *
+ * # Parameters
+ * - `batch`: The batch
+ * - `ctx`: Optional context with functions (can be NULL)
+ *
+ * # Returns
+ * ExprResult with status 0 on success, or error details on failure
+ */
+__attribute__((aligned(8)))
+struct ExprResult expr_batch_evaluate_ex(struct ExprBatch *batch,
+                                         struct ExprContext *ctx);
 
 /**
  * Initialize the arena pool
@@ -404,6 +451,20 @@ int32_t expr_session_parse(struct ExprSession *session,
                            const char *expr);
 
 /**
+ * Parse an expression in the session with detailed error reporting
+ *
+ * # Parameters
+ * - `session`: The session
+ * - `expr`: Expression string (must be valid UTF-8)
+ *
+ * # Returns
+ * ExprResult with status 0 on success, or error details on failure
+ */
+__attribute__((aligned(8)))
+struct ExprResult expr_session_parse_ex(struct ExprSession *session,
+                                        const char *expr);
+
+/**
  * Add a variable to the session
  *
  * # Parameters
@@ -450,6 +511,20 @@ __attribute__((aligned(8)))
 int32_t expr_session_evaluate(struct ExprSession *session,
                               struct ExprContext *ctx,
                               Real *result);
+
+/**
+ * Evaluate the expression with detailed error reporting
+ *
+ * # Parameters
+ * - `session`: The session
+ * - `ctx`: Optional context with functions (can be NULL)
+ *
+ * # Returns
+ * ExprResult with value on success, or error details on failure
+ */
+__attribute__((aligned(8)))
+struct ExprResult expr_session_evaluate_ex(struct ExprSession *session,
+                                           struct ExprContext *ctx);
 
 /**
  * Estimate arena size needed for expressions

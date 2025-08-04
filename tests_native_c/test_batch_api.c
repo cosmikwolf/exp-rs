@@ -30,25 +30,33 @@ int main() {
     }
     
     // Add simple expression
-    int32_t expr_idx = expr_batch_add_expression(builder, "a + b");
-    if (expr_idx < 0) {
-        printf("Failed to add expression: %d\n", expr_idx);
+    ExprResult expr_res = expr_batch_add_expression(builder, "a + b");
+    if (expr_res.status != 0) {
+        printf("Failed to add expression: %s\n", expr_res.error);
+        expr_free_error(expr_res.error);
         expr_batch_free(builder);
         expr_arena_free(arena);
         expr_context_free(ctx);
         return 1;
     }
+    int32_t expr_idx = expr_res.index;
     
     // Add parameters
-    int32_t a_idx = expr_batch_add_variable(builder, "a", 2.0);
-    int32_t b_idx = expr_batch_add_variable(builder, "b", 3.0);
-    if (a_idx < 0 || b_idx < 0) {
-        printf("Failed to add parameters: a=%d, b=%d\n", a_idx, b_idx);
+    ExprResult a_res = expr_batch_add_variable(builder, "a", 2.0);
+    ExprResult b_res = expr_batch_add_variable(builder, "b", 3.0);
+    if (a_res.status != 0 || b_res.status != 0) {
+        printf("Failed to add parameters: a=%s, b=%s\n", 
+               a_res.status != 0 ? a_res.error : "OK",
+               b_res.status != 0 ? b_res.error : "OK");
+        if (a_res.status != 0) expr_free_error(a_res.error);
+        if (b_res.status != 0) expr_free_error(b_res.error);
         expr_batch_free(builder);
         expr_arena_free(arena);
         expr_context_free(ctx);
         return 1;
     }
+    int32_t a_idx = a_res.index;
+    int32_t b_idx = b_res.index;
     
     // Evaluate
     int32_t result = expr_batch_evaluate(builder, ctx);

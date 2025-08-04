@@ -269,13 +269,76 @@ pub unsafe extern "C" fn exp_rs_register_panic_handler(
 /// Result structure for FFI operations
 #[repr(C)]
 pub struct ExprResult {
-    /// 0 for success, non-zero for error
+    /// Error code: 0 for success, positive for ExprError, negative for FFI errors
     status: i32,
-    /// Result value (NaN on error)
+    /// Result value (valid only if status == 0)
     value: Real,
+    /// Result index (for functions that return an index)
+    index: i32,
     /// Error message (NULL on success, must be freed with expr_free_error)
     error: *mut c_char,
 }
+
+impl ExprResult {
+    /// Create a success result with a value
+    fn success_value(value: Real) -> Self {
+        ExprResult {
+            status: 0,
+            value,
+            index: 0,
+            error: ptr::null_mut(),
+        }
+    }
+    
+    /// Create a success result with an index
+    fn success_index(index: usize) -> Self {
+        ExprResult {
+            status: 0,
+            value: 0.0,
+            index: index as i32,
+            error: ptr::null_mut(),
+        }
+    }
+    
+    /// Create an error result from an ExprError
+    fn from_expr_error(err: crate::error::ExprError) -> Self {
+        let error_code = err.error_code();
+        let error_msg = err.to_string(); // Use Display trait
+        
+        let c_string = match CString::new(error_msg) {
+            Ok(s) => s,
+            Err(_) => CString::new("Error creating error message").unwrap(),
+        };
+        
+        ExprResult {
+            status: error_code,
+            value: Real::NAN,
+            index: -1,
+            error: c_string.into_raw(),
+        }
+    }
+    
+    /// Create an error result for FFI-specific errors
+    fn from_ffi_error(code: i32, msg: &str) -> Self {
+        let c_string = match CString::new(msg) {
+            Ok(s) => s,
+            Err(_) => CString::new("Error creating error message").unwrap(),
+        };
+        
+        ExprResult {
+            status: code,
+            value: Real::NAN,
+            index: -1,
+            error: c_string.into_raw(),
+        }
+    }
+}
+
+/// FFI error codes (negative to distinguish from ExprError codes)
+pub const FFI_ERROR_NULL_POINTER: i32 = -1;
+pub const FFI_ERROR_INVALID_UTF8: i32 = -2;
+pub const FFI_ERROR_NO_ARENA_AVAILABLE: i32 = -3;
+pub const FFI_ERROR_CANNOT_GET_MUTABLE_ACCESS: i32 = -4;
 
 /// Free an error message string
 ///
@@ -717,11 +780,11 @@ pub extern "C" fn expr_batch_free(batch: *mut ExprBatch) {
 /// - `expr`: Expression string (must be valid UTF-8)
 ///
 /// # Returns
-/// Expression index on success, negative error code on failure
+/// ExprResult with index on success, or error details on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_batch_add_expression(batch: *mut ExprBatch, expr: *const c_char) -> i32 {
+pub extern "C" fn expr_batch_add_expression(batch: *mut ExprBatch, expr: *const c_char) -> ExprResult {
     if batch.is_null() || expr.is_null() {
-        return -1;
+        return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null pointer passed to expr_batch_add_expression");
     }
 
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
@@ -729,12 +792,12 @@ pub extern "C" fn expr_batch_add_expression(batch: *mut ExprBatch, expr: *const 
     let expr_cstr = unsafe { CStr::from_ptr(expr) };
     let expr_str = match expr_cstr.to_str() {
         Ok(s) => s,
-        Err(_) => return -2, // Invalid UTF-8
+        Err(_) => return ExprResult::from_ffi_error(FFI_ERROR_INVALID_UTF8, "Invalid UTF-8 in expression string"),
     };
 
     match builder.add_expression(expr_str) {
-        Ok(idx) => idx as i32,
-        Err(_) => -3, // Parse error
+        Ok(idx) => ExprResult::success_index(idx),
+        Err(e) => ExprResult::from_expr_error(e),
     }
 }
 
@@ -746,15 +809,15 @@ pub extern "C" fn expr_batch_add_expression(batch: *mut ExprBatch, expr: *const 
 /// - `value`: Initial value
 ///
 /// # Returns
-/// Variable index on success, negative error code on failure
+/// ExprResult with index on success, or error details on failure
 #[unsafe(no_mangle)]
 pub extern "C" fn expr_batch_add_variable(
     batch: *mut ExprBatch,
     name: *const c_char,
     value: Real,
-) -> i32 {
+) -> ExprResult {
     if batch.is_null() || name.is_null() {
-        return -1;
+        return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null pointer passed to expr_batch_add_variable");
     }
 
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
@@ -762,12 +825,12 @@ pub extern "C" fn expr_batch_add_variable(
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
-        Err(_) => return -2, // Invalid UTF-8
+        Err(_) => return ExprResult::from_ffi_error(FFI_ERROR_INVALID_UTF8, "Invalid UTF-8 in variable name"),
     };
 
     match builder.add_parameter(name_str, value) {
-        Ok(idx) => idx as i32,
-        Err(_) => -3, // Error (e.g., duplicate name)
+        Ok(idx) => ExprResult::success_index(idx),
+        Err(e) => ExprResult::from_expr_error(e),
     }
 }
 
@@ -841,6 +904,37 @@ pub extern "C" fn expr_batch_get_result(batch: *const ExprBatch, index: usize) -
 
     let builder = unsafe { &*(batch as *const ArenaBatchBuilder) };
     builder.get_result(index).unwrap_or(Real::NAN)
+}
+
+/// Evaluate all expressions in the batch with detailed error reporting
+///
+/// # Parameters
+/// - `batch`: The batch
+/// - `ctx`: Optional context with functions (can be NULL)
+///
+/// # Returns
+/// ExprResult with status 0 on success, or error details on failure
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_batch_evaluate_ex(batch: *mut ExprBatch, ctx: *mut ExprContext) -> ExprResult {
+    if batch.is_null() {
+        return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null batch pointer");
+    }
+
+    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+
+    let eval_ctx = if ctx.is_null() {
+        alloc::rc::Rc::new(EvalContext::new())
+    } else {
+        unsafe {
+            let ctx_rc = &*(ctx as *const alloc::rc::Rc<EvalContext>);
+            ctx_rc.clone()
+        }
+    };
+
+    match builder.eval(&eval_ctx) {
+        Ok(_) => ExprResult::success_value(0.0), // No specific value for batch eval
+        Err(e) => ExprResult::from_expr_error(e),
+    }
 }
 
 // ============================================================================
@@ -1155,6 +1249,47 @@ pub extern "C" fn expr_session_parse(session: *mut ExprSession, expr: *const c_c
     }
 }
 
+/// Parse an expression in the session with detailed error reporting
+///
+/// # Parameters
+/// - `session`: The session
+/// - `expr`: Expression string (must be valid UTF-8)
+///
+/// # Returns
+/// ExprResult with status 0 on success, or error details on failure
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_session_parse_ex(session: *mut ExprSession, expr: *const c_char) -> ExprResult {
+    if session.is_null() || expr.is_null() {
+        return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null pointer passed to expr_session_parse_ex");
+    }
+
+    // Parse C string
+    let expr_cstr = unsafe { CStr::from_ptr(expr) };
+    let expr_str = match expr_cstr.to_str() {
+        Ok(s) => s,
+        Err(_) => return ExprResult::from_ffi_error(FFI_ERROR_INVALID_UTF8, "Invalid UTF-8 in expression string"),
+    };
+
+    // Get the wrapper
+    let wrapper = unsafe { &mut *(session as *mut ExpressionWrapper) };
+
+    // Store the expression string and add a result slot
+    wrapper.expressions.push(expr_str.to_string());
+    wrapper.results.push(0.0);
+
+    // Validate by trying to parse with a temporary Expression
+    let ctx = alloc::rc::Rc::new(EvalContext::new());
+    match wrapper.with_expression(&ctx, |_| Ok(())) {
+        Ok(_) => ExprResult::success_value(0.0),
+        Err(e) => {
+            // Remove the invalid expression
+            wrapper.expressions.pop();
+            wrapper.results.pop();
+            ExprResult::from_expr_error(e)
+        }
+    }
+}
+
 /// Add a variable to the session
 ///
 /// # Parameters
@@ -1273,6 +1408,43 @@ pub extern "C" fn expr_session_evaluate(
             0
         }
         Err(_) => -2, // Evaluation error
+    }
+}
+
+/// Evaluate the expression with detailed error reporting
+///
+/// # Parameters
+/// - `session`: The session
+/// - `ctx`: Optional context with functions (can be NULL)
+///
+/// # Returns
+/// ExprResult with value on success, or error details on failure
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_session_evaluate_ex(
+    session: *mut ExprSession,
+    ctx: *mut ExprContext,
+) -> ExprResult {
+    if session.is_null() {
+        return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null session pointer");
+    }
+
+    // Get the wrapper
+    let wrapper = unsafe { &mut *(session as *mut ExpressionWrapper) };
+
+    // Create or use context
+    let eval_ctx = if ctx.is_null() {
+        alloc::rc::Rc::new(EvalContext::new())
+    } else {
+        unsafe {
+            let ctx_rc = &*(ctx as *const alloc::rc::Rc<EvalContext>);
+            ctx_rc.clone()
+        }
+    };
+
+    // Evaluate using the wrapper
+    match wrapper.with_expression(&eval_ctx, |expr| expr.eval_single(&eval_ctx)) {
+        Ok(value) => ExprResult::success_value(value),
+        Err(e) => ExprResult::from_expr_error(e),
     }
 }
 

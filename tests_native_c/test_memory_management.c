@@ -64,21 +64,31 @@ void test_batch_builder_with_arena() {
     printf("✓ Batch builder created with arena\n");
     
     // Add expressions
-    int32_t expr1_idx = expr_batch_add_expression(builder, "x + y");
+    ExprResult expr1_res = expr_batch_add_expression(builder, "x + y");
+    assert(expr1_res.status == 0);
+    int32_t expr1_idx = expr1_res.index;
     assert(expr1_idx == 0);
     
-    int32_t expr2_idx = expr_batch_add_expression(builder, "x * y");
+    ExprResult expr2_res = expr_batch_add_expression(builder, "x * y");
+    assert(expr2_res.status == 0);
+    int32_t expr2_idx = expr2_res.index;
     assert(expr2_idx == 1);
     
-    int32_t expr3_idx = expr_batch_add_expression(builder, "sqrt(x*x + y*y)");
+    ExprResult expr3_res = expr_batch_add_expression(builder, "sqrt(x*x + y*y)");
+    assert(expr3_res.status == 0);
+    int32_t expr3_idx = expr3_res.index;
     assert(expr3_idx == 2);
     printf("✓ Added 3 expressions\n");
     
     // Add parameters
-    int32_t x_idx = expr_batch_add_variable(builder, "x", 3.0);
+    ExprResult x_res = expr_batch_add_variable(builder, "x", 3.0);
+    assert(x_res.status == 0);
+    int32_t x_idx = x_res.index;
     assert(x_idx == 0);
     
-    int32_t y_idx = expr_batch_add_variable(builder, "y", 4.0);
+    ExprResult y_res = expr_batch_add_variable(builder, "y", 4.0);
+    assert(y_res.status == 0);
+    int32_t y_idx = y_res.index;
     assert(y_idx == 1);
     printf("✓ Added 2 parameters\n");
     
@@ -124,10 +134,14 @@ void test_arena_reset_reuse() {
     
     // First use
     ExprBatch* builder1 = expr_batch_new(arena);
-    expr_batch_add_expression(builder1, "a + b + c");
-    expr_batch_add_variable(builder1, "a", 1.0);
-    expr_batch_add_variable(builder1, "b", 2.0);
-    expr_batch_add_variable(builder1, "c", 3.0);
+    ExprResult res = expr_batch_add_expression(builder1, "a + b + c");
+    assert(res.status == 0);
+    res = expr_batch_add_variable(builder1, "a", 1.0);
+    assert(res.status == 0);
+    res = expr_batch_add_variable(builder1, "b", 2.0);
+    assert(res.status == 0);
+    res = expr_batch_add_variable(builder1, "c", 3.0);
+    assert(res.status == 0);
     expr_batch_evaluate(builder1, ctx);
     Real result1 = expr_batch_get_result(builder1, 0);
     assert(result1 == 6.0);
@@ -142,10 +156,14 @@ void test_arena_reset_reuse() {
     
     // Second use with same arena
     ExprBatch* builder2 = expr_batch_new(arena);
-    expr_batch_add_expression(builder2, "x * y * z");
-    expr_batch_add_variable(builder2, "x", 2.0);
-    expr_batch_add_variable(builder2, "y", 3.0);
-    expr_batch_add_variable(builder2, "z", 4.0);
+    res = expr_batch_add_expression(builder2, "x * y * z");
+    assert(res.status == 0);
+    res = expr_batch_add_variable(builder2, "x", 2.0);
+    assert(res.status == 0);
+    res = expr_batch_add_variable(builder2, "y", 3.0);
+    assert(res.status == 0);
+    res = expr_batch_add_variable(builder2, "z", 4.0);
+    assert(res.status == 0);
     expr_batch_evaluate(builder2, ctx);
     Real result2 = expr_batch_get_result(builder2, 0);
     assert(result2 == 24.0);
@@ -197,9 +215,10 @@ void test_benchmark_expressions() {
     
     // Add all expressions
     for (int i = 0; i < 7; i++) {
-        int32_t idx = expr_batch_add_expression(builder, expressions[i]);
-        if (idx < 0) {
-            printf("Failed to add expression %d: %s\n", i, expressions[i]);
+        ExprResult res = expr_batch_add_expression(builder, expressions[i]);
+        if (res.status != 0) {
+            printf("Failed to add expression %d: %s (error: %s)\n", i, expressions[i], res.error);
+            expr_free_error(res.error);
             return;
         }
     }
@@ -208,7 +227,8 @@ void test_benchmark_expressions() {
     // Add 10 parameters (a through j)
     const char* param_names[] = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"};
     for (int i = 0; i < 10; i++) {
-        expr_batch_add_variable(builder, param_names[i], (i + 1) * 1.5);
+        ExprResult res = expr_batch_add_variable(builder, param_names[i], (i + 1) * 1.5);
+        assert(res.status == 0);
     }
     printf("✓ Added 10 parameters (a-j)\n");
     
@@ -361,8 +381,9 @@ void test_arena_size_estimation() {
     // Test that we can actually use it
     ExprBatch* builder = expr_batch_new(arena);
     for (size_t i = 0; i < num_exprs; i++) {
-        int32_t idx = expr_batch_add_expression(builder, expressions[i]);
-        assert(idx == (int32_t)i);
+        ExprResult res = expr_batch_add_expression(builder, expressions[i]);
+        assert(res.status == 0);
+        assert(res.index == (int32_t)i);
     }
     printf("✓ Successfully added all expressions\n");
     
@@ -390,9 +411,11 @@ void test_error_handling() {
     // printf("✓ Invalid expression handled correctly\n");
     
     // Test duplicate parameter
-    expr_batch_add_variable(builder, "x", 1.0);
-    int32_t dup_idx = expr_batch_add_variable(builder, "x", 2.0);
-    assert(dup_idx < 0);  // Should return error
+    ExprResult first_res = expr_batch_add_variable(builder, "x", 1.0);
+    assert(first_res.status == 0);
+    ExprResult dup_res = expr_batch_add_variable(builder, "x", 2.0);
+    assert(dup_res.status != 0);  // Should return error
+    expr_free_error(dup_res.error);
     printf("✓ Duplicate parameter handled correctly\n");
     
     // Cleanup

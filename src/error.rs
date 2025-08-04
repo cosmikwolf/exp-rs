@@ -144,6 +144,30 @@ pub enum ExprError {
     InvalidParameterIndex(usize),
 }
 
+impl ExprError {
+    /// Convert this error to a numeric error code for FFI
+    pub fn error_code(&self) -> i32 {
+        match self {
+            ExprError::Parse(_) => 1,
+            ExprError::Tokenizer(_) => 2,
+            ExprError::Syntax(_) => 3,
+            ExprError::UnmatchedParenthesis { .. } => 4,
+            ExprError::UnknownVariable { .. } => 5,
+            ExprError::UnknownFunction { .. } => 6,
+            ExprError::InvalidFunctionCall { .. } => 7,
+            ExprError::ArrayIndexOutOfBounds { .. } => 8,
+            ExprError::AttributeNotFound { .. } => 9,
+            ExprError::DivideByZero => 10,
+            ExprError::RecursionLimit(_) => 11,
+            ExprError::CapacityExceeded(_) => 12,
+            ExprError::StringTooLong => 13,
+            ExprError::DuplicateParameter(_) => 14,
+            ExprError::InvalidParameterIndex(_) => 15,
+            ExprError::Other(_) => 99,
+        }
+    }
+}
+
 #[cfg(not(test))]
 use core::fmt;
 #[cfg(test)]
