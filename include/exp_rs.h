@@ -27,8 +27,6 @@
 
 #define EXP_RS_MAX_EXPRESSION_FUNCTIONS 8
 
-#define EXP_RS_MAX_USER_FUNCTIONS 4
-
 #define EXP_RS_MAX_ATTR_KEYS 4
 
 #define EXP_RS_MAX_KEY_LENGTH 32
@@ -138,6 +136,43 @@ int32_t expr_context_add_function(struct ExprContext *ctx,
                                   const char *name,
                                   uintptr_t arity,
                                   NativeFunc func);
+
+/**
+ * Add an expression function to the context
+ *
+ * Expression functions are mathematical expressions that can call other functions.
+ * They are parsed and expanded when used.
+ *
+ * # Parameters
+ * - `ctx`: The context
+ * - `name`: Function name (must be valid UTF-8)
+ * - `params`: Comma-separated parameter names (e.g., "x,y,z")
+ * - `expression`: The expression string defining the function
+ *
+ * # Returns
+ * 0 on success, non-zero on error
+ */
+__attribute__((aligned(8)))
+int32_t expr_context_add_expression_function(struct ExprContext *ctx,
+                                             const char *name,
+                                             const char *params,
+                                             const char *expression);
+
+/**
+ * Remove an expression function from the context
+ *
+ * # Parameters
+ * - `ctx`: The context
+ * - `name`: Function name to remove
+ *
+ * # Returns
+ * - 1 if the function was removed
+ * - 0 if the function didn't exist
+ * - negative error code on failure
+ */
+__attribute__((aligned(8)))
+int32_t expr_context_remove_expression_function(struct ExprContext *ctx,
+                                                const char *name);
 
 /**
  * Create a new memory arena

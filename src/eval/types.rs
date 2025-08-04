@@ -29,7 +29,6 @@ impl From<&crate::types::NativeFunction> for OwnedNativeFunction {
 pub enum FunctionCacheEntry {
     Native(OwnedNativeFunction),
     Expression(crate::types::ExpressionFunction),
-    User(crate::context::UserFunction),
 }
 
 impl Clone for FunctionCacheEntry {
@@ -42,7 +41,6 @@ impl Clone for FunctionCacheEntry {
                 description: nf.description.clone(),
             }),
             FunctionCacheEntry::Expression(ef) => FunctionCacheEntry::Expression(ef.clone()),
-            FunctionCacheEntry::User(uf) => FunctionCacheEntry::User(uf.clone()),
         }
     }
 }

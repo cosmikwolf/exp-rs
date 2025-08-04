@@ -51,7 +51,7 @@ mod tests {
     // which uses the iterative evaluator path
 
     #[test]
-    fn test_eval_user_function_polynomial() {
+    fn test_eval_expression_function_polynomial() {
         let mut ctx = create_test_context();
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
@@ -63,11 +63,18 @@ mod tests {
     #[test]
     fn test_eval_expression_function_simple() {
         let mut ctx = EvalContext::new();
+        
+        // Test double function
         ctx.register_expression_function("double", &["x"], "x*2")
             .unwrap();
-        // Use the public API instead of internal functions
-        let val = interp("double(7)", Some(Rc::new(ctx))).unwrap();
+        let val = interp("double(7)", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 14.0);
+        
+        // Test increment function
+        ctx.register_expression_function("inc", &["x"], "x+1")
+            .unwrap();
+        let val = interp("inc(41)", Some(Rc::new(ctx))).unwrap();
+        assert_eq!(val, 42.0);
     }
 
     #[test]
@@ -194,15 +201,6 @@ mod tests {
         assert_eq!(val2, 10.0);
     }
 
-    #[test]
-    fn test_eval_function_user_function() {
-        let mut ctx = create_test_context();
-        ctx.register_expression_function("inc", &["x"], "x+1")
-            .unwrap();
-        // Use the public API instead of internal functions
-        let val = interp("inc(41)", Some(Rc::new(ctx))).unwrap();
-        assert_eq!(val, 42.0);
-    }
 
     #[test]
     fn test_eval_function_builtin_fallback() {

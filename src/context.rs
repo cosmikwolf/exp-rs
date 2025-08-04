@@ -30,8 +30,6 @@ pub struct FunctionRegistry {
     pub native_functions: crate::types::NativeFunctionMap,
     /// Functions defined using expression strings
     pub expression_functions: crate::types::ExpressionFunctionMap,
-    /// User-defined functions with custom behavior
-    pub user_functions: crate::types::UserFunctionMap,
 }
 
 
@@ -988,19 +986,6 @@ impl EvalContext {
         }
     }
 
-    pub fn get_user_function(&self, name: &str) -> Option<&crate::context::UserFunction> {
-        if let Ok(key) = name.try_into_function_name() {
-            if let Some(f) = self.function_registry.user_functions.get(&key) {
-                return Some(f);
-            }
-        }
-
-        if let Some(parent) = &self.parent {
-            parent.get_user_function(name)
-        } else {
-            None
-        }
-    }
 
     pub fn get_expression_function(&self, name: &str) -> Option<&crate::types::ExpressionFunction> {
         if let Ok(key) = name.try_into_function_name() {
@@ -1056,13 +1041,6 @@ impl Default for EvalContext {
 
 // Helper trait removed - heapless containers support Clone directly
 
-/// User-defined function.
-#[derive(Clone)]
-#[allow(dead_code)]
-pub struct UserFunction {
-    pub params: Vec<String>,
-    pub body: String,
-}
 
 #[cfg(test)]
 mod tests {

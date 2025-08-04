@@ -21,7 +21,6 @@ pub const EXP_RS_MAX_NESTED_ARRAYS: usize = 2;
 pub const EXP_RS_MAX_AST_CACHE: usize = 16;
 pub const EXP_RS_MAX_NATIVE_FUNCTIONS: usize = 64;
 pub const EXP_RS_MAX_EXPRESSION_FUNCTIONS: usize = 8;
-pub const EXP_RS_MAX_USER_FUNCTIONS: usize = 4;
 pub const EXP_RS_MAX_ATTR_KEYS: usize = 4;
 
 // String length limits for embedded efficiency
@@ -49,8 +48,6 @@ pub type NestedArrayMap = FnvIndexMap<
 pub type NativeFunctionMap = FnvIndexMap<FunctionName, NativeFunction, EXP_RS_MAX_NATIVE_FUNCTIONS>;
 pub type ExpressionFunctionMap =
     FnvIndexMap<FunctionName, ExpressionFunction, EXP_RS_MAX_EXPRESSION_FUNCTIONS>;
-pub type UserFunctionMap =
-    FnvIndexMap<FunctionName, crate::context::UserFunction, EXP_RS_MAX_USER_FUNCTIONS>;
 
 // AST cache type - defined later after AstExpr is declared
 // pub type AstCacheMap = FnvIndexMap<HString, alloc::rc::Rc<AstExpr>, MAX_AST_CACHE>;
