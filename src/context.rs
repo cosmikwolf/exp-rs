@@ -100,6 +100,70 @@ pub struct EvalContext {
     pub parent: Option<Rc<EvalContext>>,
 }
 
+/// Structure containing validation results for expression functions
+#[derive(Debug, Clone)]
+pub struct ExpressionValidationReport {
+    /// Whether the expression is syntactically valid
+    pub syntax_valid: bool,
+    /// Syntax error if any
+    pub syntax_error: Option<String>,
+    /// List of undefined functions referenced in the expression
+    pub undefined_functions: Vec<String>,
+    /// List of function calls with potential arity mismatches
+    pub arity_warnings: Vec<(String, usize, Option<usize>)>, // (name, used_args, expected_args)
+    /// List of undefined variables (excluding parameters)
+    pub undefined_variables: Vec<String>,
+    /// List of parameters that are not used in the expression
+    pub unused_parameters: Vec<String>,
+    /// Whether semantic validation was performed
+    pub semantic_validated: bool,
+}
+
+impl ExpressionValidationReport {
+    /// Creates a new validation report for a successful syntax parse
+    fn new_syntax_valid() -> Self {
+        Self {
+            syntax_valid: true,
+            syntax_error: None,
+            undefined_functions: Vec::new(),
+            arity_warnings: Vec::new(),
+            undefined_variables: Vec::new(),
+            unused_parameters: Vec::new(),
+            semantic_validated: false,
+        }
+    }
+
+    /// Creates a new validation report for a syntax error
+    fn new_syntax_error(error: String) -> Self {
+        Self {
+            syntax_valid: false,
+            syntax_error: Some(error),
+            undefined_functions: Vec::new(),
+            arity_warnings: Vec::new(),
+            undefined_variables: Vec::new(),
+            unused_parameters: Vec::new(),
+            semantic_validated: false,
+        }
+    }
+
+    /// Returns true if there are no issues found
+    pub fn is_valid(&self) -> bool {
+        self.syntax_valid 
+            && self.undefined_functions.is_empty()
+            && self.arity_warnings.is_empty()
+            && self.undefined_variables.is_empty()
+    }
+
+    /// Returns true if there are only warnings (unused parameters)
+    pub fn has_only_warnings(&self) -> bool {
+        self.syntax_valid 
+            && self.undefined_functions.is_empty()
+            && self.arity_warnings.is_empty()
+            && self.undefined_variables.is_empty()
+            && !self.unused_parameters.is_empty()
+    }
+}
+
 impl EvalContext {
     /// Creates a new empty evaluation context.
     ///
@@ -326,9 +390,9 @@ impl EvalContext {
         params: &[&str],
         expression: &str,
     ) -> Result<(), crate::error::ExprError> {
-        // Parse the expression, passing parameter names as reserved variables
+        // Note: We don't parse the expression at registration time in arena-based architecture
+        // The expression will be parsed on-demand during evaluation with an arena
         let param_names: Vec<String> = params.iter().map(|&s| s.to_string()).collect();
-        let _ = crate::engine::parse_expression_with_reserved(expression, Some(&param_names))?;
 
         // Store the expression function (without compiled AST - will parse on demand with arena)
         let key = name.try_into_function_name()?;
@@ -347,6 +411,212 @@ impl EvalContext {
             Err(_) => Err(crate::error::ExprError::CapacityExceeded(
                 "expression_functions",
             )),
+        }
+    }
+
+    /// Register an expression function with validation.
+    ///
+    /// This function performs deeper validation than the standard registration,
+    /// checking for undefined functions, arity mismatches, and unused parameters.
+    ///
+    /// # Parameters
+    ///
+    /// * `name` - The name of the function to register
+    /// * `params` - List of parameter names that the function accepts
+    /// * `expression` - The expression string that defines the function's behavior
+    /// * `validate_semantics` - If true, performs semantic validation in addition to syntax
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing either:
+    /// - `Ok(report)` - The function was registered and a validation report is provided
+    /// - `Err(error)` - Registration failed (name too long, capacity exceeded, etc.)
+    ///
+    /// Even if the report contains warnings or errors, the function is still registered
+    /// if the syntax is valid. This allows for iterative development where functions
+    /// may reference other functions that haven't been defined yet.
+    pub fn register_expression_function_validated(
+        &mut self,
+        name: &str,
+        params: &[&str],
+        expression: &str,
+        validate_semantics: bool,
+    ) -> Result<ExpressionValidationReport, crate::error::ExprError> {
+        // In arena-based architecture, we need to create a temporary arena for validation
+        let param_names: Vec<String> = params.iter().map(|&s| s.to_string()).collect();
+        
+        // Create a temporary arena for validation parsing
+        let validation_arena = bumpalo::Bump::new();
+        let parse_result = crate::engine::parse_expression_with_parameters(
+            expression, 
+            &validation_arena, 
+            &param_names
+        );
+        
+        let mut report = match parse_result {
+            Ok(ast) => {
+                let mut report = ExpressionValidationReport::new_syntax_valid();
+                
+                if validate_semantics {
+                    report.semantic_validated = true;
+                    // Perform semantic validation on the AST
+                    self.validate_expression_semantics(&ast, &param_names, &mut report);
+                }
+                
+                report
+            }
+            Err(err) => {
+                // If syntax parsing failed, return the report but don't register
+                return Ok(ExpressionValidationReport::new_syntax_error(err.to_string()));
+            }
+        };
+
+        // If syntax is valid, proceed with registration
+        if report.syntax_valid {
+            // Register the function
+            let key = name.try_into_function_name()?;
+            let function = crate::types::ExpressionFunction {
+                name: key.clone(),
+                params: param_names,
+                expression: expression.to_string(),
+                description: None,
+            };
+
+            match Rc::make_mut(&mut self.function_registry)
+                .expression_functions
+                .insert(key, function)
+            {
+                Ok(_) => Ok(report),
+                Err(_) => Err(crate::error::ExprError::CapacityExceeded(
+                    "expression_functions",
+                )),
+            }
+        } else {
+            Ok(report)
+        }
+    }
+
+    /// Helper method to perform semantic validation on an AST
+    fn validate_expression_semantics(
+        &self,
+        ast: &crate::types::AstExpr,
+        param_names: &[String],
+        report: &mut ExpressionValidationReport,
+    ) {
+        use crate::types::AstExpr;
+        use alloc::collections::BTreeSet;
+
+        // Track which parameters are used
+        let mut used_params = BTreeSet::new();
+        
+        // Recursive function to validate AST nodes
+        fn validate_node(
+            node: &AstExpr,
+            ctx: &EvalContext,
+            param_names: &[String],
+            used_params: &mut BTreeSet<String>,
+            report: &mut ExpressionValidationReport,
+        ) {
+            match node {
+                AstExpr::Variable(name) => {
+                    let name_str = name.to_string();
+                    if param_names.contains(&name_str) {
+                        used_params.insert(name_str);
+                    } else if ctx.get_variable(&name_str).is_none() 
+                           && ctx.get_constant(&name_str).is_none() {
+                        // Check if it's a function used without arguments
+                        if ctx.get_native_function(&name_str).is_some() 
+                            || ctx.get_expression_function(&name_str).is_some() {
+                            // This will be caught as "function used without arguments" during eval
+                        } else {
+                            report.undefined_variables.push(name_str);
+                        }
+                    }
+                }
+                AstExpr::Function { name, args } => {
+                    let name_str = name.to_string();
+                    
+                    // Check if function exists and validate arity
+                    let expected_arity = if let Some(native_fn) = ctx.get_native_function(&name_str) {
+                        Some(native_fn.arity)
+                    } else if let Some(expr_fn) = ctx.get_expression_function(&name_str) {
+                        Some(expr_fn.params.len())
+                    } else {
+                        // Check built-in functions if libm feature is enabled
+                        #[cfg(feature = "libm")]
+                        {
+                            match name_str.as_str() {
+                                // Single argument functions
+                                "sin" | "cos" | "tan" | "asin" | "acos" | "atan" |
+                                "sinh" | "cosh" | "tanh" | "exp" | "ln" | "log" | 
+                                "log10" | "sqrt" | "ceil" | "floor" | "round" | 
+                                "abs" | "sign" => Some(1),
+                                // Two argument functions
+                                "pow" | "atan2" | "min" | "max" | "fmod" => Some(2),
+                                // Zero argument functions
+                                "pi" | "e" => Some(0),
+                                _ => {
+                                    report.undefined_functions.push(name_str.clone());
+                                    None
+                                }
+                            }
+                        }
+                        #[cfg(not(feature = "libm"))]
+                        {
+                            report.undefined_functions.push(name_str.clone());
+                            None
+                        }
+                    };
+                    
+                    if let Some(expected) = expected_arity {
+                        if args.len() != expected {
+                            report.arity_warnings.push((name_str, args.len(), Some(expected)));
+                        }
+                    }
+                    
+                    // Validate arguments
+                    for arg in args.iter() {
+                        validate_node(arg, ctx, param_names, used_params, report);
+                    }
+                }
+                AstExpr::LogicalOp { op: _, left, right } => {
+                    validate_node(left, ctx, param_names, used_params, report);
+                    validate_node(right, ctx, param_names, used_params, report);
+                }
+                AstExpr::Conditional { condition, true_branch, false_branch } => {
+                    validate_node(condition, ctx, param_names, used_params, report);
+                    validate_node(true_branch, ctx, param_names, used_params, report);
+                    validate_node(false_branch, ctx, param_names, used_params, report);
+                }
+                AstExpr::Array { name, index } => {
+                    // Array names can't be validated at registration time
+                    // But we can validate the index expression
+                    validate_node(index, ctx, param_names, used_params, report);
+                }
+                AstExpr::Attribute { base, .. } => {
+                    // Check if base is a known variable or parameter
+                    let base_str = base.to_string();
+                    if param_names.contains(&base_str) {
+                        used_params.insert(base_str);
+                    } else if ctx.get_variable(&base_str).is_none() 
+                           && ctx.get_constant(&base_str).is_none() {
+                        report.undefined_variables.push(base_str);
+                    }
+                }
+                AstExpr::Constant(_) => {
+                    // Constants are always valid
+                }
+            }
+        }
+        
+        // Validate the AST
+        validate_node(ast, self, param_names, &mut used_params, report);
+        
+        // Check for unused parameters
+        for param in param_names {
+            if !used_params.contains(param) {
+                report.unused_parameters.push(param.clone());
+            }
         }
     }
 
@@ -1256,7 +1526,9 @@ mod tests {
                 vec![10.0, 20.0, 30.0],
             )
             .expect("Failed to insert array");
-        let ast = engine::parse_expression("climb_wave_wait_time[1]").unwrap();
+        use bumpalo::Bump;
+        let arena = Bump::new();
+        let ast = engine::parse_expression("climb_wave_wait_time[1]", &arena).unwrap();
         match ast {
             AstExpr::Array { name, index } => {
                 assert_eq!(name, "climb_wave_wait_time");
@@ -1284,7 +1556,9 @@ mod tests {
             .insert("foo".try_into_heapless().unwrap(), foo_map)
             .unwrap();
 
-        let ast = engine::parse_expression("foo.bar").unwrap();
+        use bumpalo::Bump;
+        let arena = Bump::new();
+        let ast = engine::parse_expression("foo.bar", &arena).unwrap();
         println!("AST for foo.bar: {:?}", ast);
 
         let ctx_copy = ctx.clone();

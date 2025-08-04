@@ -3,7 +3,7 @@ mod test {
     use crate::{Real, EvalContext};
     use crate::batch_builder::ArenaBatchBuilder;
     use crate::eval::iterative::EvalEngine;
-    use crate::engine::parse_expression_arena;
+    use crate::engine::parse_expression;
     use bumpalo::Bump;
     use std::rc::Rc;
 
@@ -17,7 +17,7 @@ mod test {
         ctx.register_expression_function("double", &["x"], "x * 2").unwrap();
         
         // Parse the expression in the arena
-        let ast = parse_expression_arena("double(5)", &arena).unwrap();
+        let ast = parse_expression("double(5)", &arena).unwrap();
         
         // Create engine with arena support
         let mut engine = EvalEngine::new_with_arena(&arena);
@@ -48,7 +48,7 @@ mod test {
         let mut asts = Vec::new();
         for i in 0..100 {
             let expr = arena.alloc_str(&format!("square({})", i));
-            let ast = parse_expression_arena(expr, &arena).unwrap();
+            let ast = parse_expression(expr, &arena).unwrap();
             asts.push(ast);
         }
         

@@ -394,6 +394,7 @@ pub mod context;
 pub mod engine;
 pub mod error;
 pub mod eval;
+pub mod evaluator;
 pub mod expression_functions;
 pub mod ffi;
 #[cfg(test)]
@@ -402,8 +403,6 @@ pub mod functions;
 pub mod lexer;
 pub mod types;
 
-#[cfg(test)]
-pub mod test_utils;
 
 pub use batch_builder::{BatchBuilder, Param};
 pub use context::*;

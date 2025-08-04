@@ -97,10 +97,10 @@ where
         EXPR_FUNC_ARENA.with(|arena| {
             let arena = arena.borrow();
             let param_names_str: Vec<String> = func.params().iter().map(|c| c.to_string()).collect();
-            let ast = crate::engine::parse_expression_arena_with_reserved(
+            let ast = crate::engine::parse_expression_with_parameters(
                 &func.body_str(), 
                 &*arena,
-                Some(&param_names_str)
+                &param_names_str
             )?;
             // SAFETY: Same as parse_expression - safe for tests only
             Ok::<AstExpr<'static>, ExprError>(unsafe { std::mem::transmute::<AstExpr<'_>, AstExpr<'static>>(ast) })
@@ -242,10 +242,10 @@ fn eval_custom_function_ast<'b>(
                             
                             let result = NESTED_EXPR_ARENA.with(|arena| {
                                 let arena = arena.borrow();
-                                let body_ast = crate::engine::parse_expression_arena_with_reserved(
+                                let body_ast = crate::engine::parse_expression_with_parameters(
                                     &expr_fn.expression,
                                     &*arena,
-                                    Some(&expr_fn.params)
+                                    &expr_fn.params
                                 )?;
                                 
                                 // Evaluate the function body in the nested context
@@ -426,10 +426,10 @@ fn eval_custom_function_ast<'b>(
             
             EVAL_EXPR_ARENA.with(|arena| {
                 let arena = arena.borrow();
-                let body_ast = crate::engine::parse_expression_arena_with_reserved(
+                let body_ast = crate::engine::parse_expression_with_parameters(
                     &expr_fn.expression,
                     &*arena,
-                    Some(&expr_fn.params)
+                    &expr_fn.params
                 )?;
                 
                 // Now evaluate with our custom context

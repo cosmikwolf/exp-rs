@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use exp_rs::{parse_expression_arena, eval_with_engine, EvalEngine, EvalContext, BatchBuilder};
+use exp_rs::{engine::parse_expression, eval::eval_ast, EvalContext, batch_builder::BatchBuilder};
 use std::rc::Rc;
 
 #[test]
@@ -8,8 +8,8 @@ fn test_arena_zero_allocations() {
     let arena = Bump::with_capacity(64 * 1024); // 64KB
     
     // Parse expressions into arena
-    let expr1 = parse_expression_arena("x * 2 + y", &arena).unwrap();
-    let expr2 = parse_expression_arena("sin(x) + cos(y)", &arena).unwrap();
+    let expr1 = parse_expression("x * 2 + y", &arena).unwrap();
+    let expr2 = parse_expression("sin(x) + cos(y)", &arena).unwrap();
     
     let initial_bytes = arena.allocated_bytes();
     println!("Arena bytes after parsing: {}", initial_bytes);
@@ -20,9 +20,6 @@ fn test_arena_zero_allocations() {
     ctx.set_parameter("y", 2.0).unwrap();
     let ctx = Rc::new(ctx);
     
-    // Create evaluation engine
-    let mut engine = EvalEngine::new_with_arena(&arena);
-    
     // Evaluate many times - should not allocate
     for i in 0..1000 {
         // Update context for this test
@@ -30,8 +27,8 @@ fn test_arena_zero_allocations() {
         ctx_clone.set_parameter("x", i as f64).unwrap();
         let ctx_rc = Rc::new(ctx_clone);
         
-        let result1 = eval_with_engine(&expr1, Some(ctx_rc.clone()), &mut engine).unwrap();
-        let result2 = eval_with_engine(&expr2, Some(ctx_rc), &mut engine).unwrap();
+        let result1 = eval_ast(&expr1, Some(ctx_rc.clone())).unwrap();
+        let result2 = eval_ast(&expr2, Some(ctx_rc)).unwrap();
         
         // Verify results are correct
         assert_eq!(result1, (i as f64) * 2.0 + 2.0);
@@ -49,7 +46,7 @@ fn test_batch_builder_arena() {
     // Create arena
     let arena = Bump::with_capacity(64 * 1024);
     
-    // Create batch builder
+    // Create batch builder  
     let mut builder = BatchBuilder::new(&arena);
     
     // Add parameters

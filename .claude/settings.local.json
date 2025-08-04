@@ -24,7 +24,11 @@
       "Bash(SKIP_FFI_BUILD=1 cargo test --lib --no-run)",
       "Bash(./compile_arena_test.sh)",
       "Bash(clang:*)",
-      "Bash(./test_detailed_timing)"
+      "Bash(./test_detailed_timing)",
+      "mcp__tree-sitter__run_query",
+      "mcp__tree-sitter__register_project_tool",
+      "mcp__tree-sitter__find_text",
+      "mcp__tree-sitter__get_ast"
     ],
     "deny": []
   },

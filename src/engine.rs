@@ -821,111 +821,79 @@ impl<'input, 'arena> PrattParser<'input, 'arena> {
     }
 }
 
-/// Parse an expression string into an AST using the Pratt parser.
-/// Returns a Result with either the parsed AST or an error explaining what went wrong.
+/// Parse an expression string into an AST.
 ///
-/// Supports:
+/// This is the primary parsing function that requires an explicit arena for memory allocation.
+/// For parsing expression function bodies with parameters, use `parse_expression_with_parameters`.
+///
+/// # Supported Features
+///
 /// - Arithmetic operators: +, -, *, /, %, ^, **
 /// - Comparison operators: ==, !=, <, >, <=, >=, <>
 /// - Logical operators: &&, ||
 /// - Ternary conditional: condition ? true_expr : false_expr
 /// - Function calls: func(arg1, arg2)
 /// - Variables and constants
+/// - Array access: array[index]
+/// - Attribute access: object.attribute
 ///
 /// # Examples
 ///
 /// ```
-/// use exp_rs::engine::parse_expression_arena;
+/// use exp_rs::engine::parse_expression;
 /// use bumpalo::Bump;
 ///
 /// let arena = Bump::new();
 ///
 /// // Basic arithmetic
-/// let expr = parse_expression_arena("2 + 3 * 4", &arena).unwrap();
+/// let expr = parse_expression("2 + 3 * 4", &arena).unwrap();
 ///
 /// // Ternary conditional
-/// let expr = parse_expression_arena("x > 0 ? 1 : -1", &arena).unwrap();
+/// let expr = parse_expression("x > 0 ? 1 : -1", &arena).unwrap();
 ///
-/// // Nested ternary expressions
-/// let expr = parse_expression_arena("condition1 ? value1 : condition2 ? value2 : value3", &arena).unwrap();
+/// // Function calls
+/// let expr = parse_expression("sin(x) + cos(y)", &arena).unwrap();
 /// ```
-pub fn parse_expression_arena<'arena>(
+pub fn parse_expression<'arena>(
     input: &str,
     arena: &'arena Bump
 ) -> Result<AstExpr<'arena>, ExprError> {
     parse_expression_arena_with_context(input, arena, None, None)
 }
 
-/// Parse expression using thread-local arena (for tests and legacy code)
+
+/// Parse an expression with function parameters that should be treated as variables.
+///
+/// This function is specifically designed for parsing expression function bodies where
+/// certain identifiers (the function parameters) should always be treated as variables,
+/// not as function calls. This prevents "x(y)" from being parsed as a function call
+/// when "x" is a parameter.
+///
+/// # Examples
+///
+/// ```
+/// use exp_rs::engine::parse_expression_with_parameters;
+/// use bumpalo::Bump;
+///
+/// let arena = Bump::new();
 /// 
-/// # Safety
-/// The returned AST has 'static lifetime but is actually tied to a thread-local arena.
-/// This is safe for tests and single-threaded usage but should not be used in production.
-/// For production use, prefer parse_expression_arena with explicit arena management.
-#[cfg(test)]
-pub fn parse_expression(input: &str) -> Result<AstExpr<'static>, ExprError> {
-    use std::cell::RefCell;
-    
-    thread_local! {
-        static PARSE_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(64 * 1024));
-    }
-    
-    PARSE_ARENA.with(|arena| {
-        let arena = arena.borrow();
-        // SAFETY: We're extending the lifetime to 'static, but this is only safe because:
-        // 1. This is only used in tests
-        // 2. The arena is thread-local and lives for the thread's lifetime
-        // 3. Tests don't pass ASTs between threads
-        let ast = parse_expression_arena(input, &*arena)?;
-        Ok(unsafe { std::mem::transmute::<AstExpr<'_>, AstExpr<'static>>(ast) })
-    })
-}
-
-#[cfg(not(test))]
-pub fn parse_expression(_input: &str) -> Result<AstExpr<'static>, ExprError> {
-    panic!("parse_expression requires arena - use parse_expression_arena instead")
-}
-
-#[cfg(test)]
-pub fn parse_expression_with_reserved(
-    input: &str,
-    reserved_vars: Option<&[String]>,
-) -> Result<AstExpr<'static>, ExprError> {
-    use std::cell::RefCell;
-    
-    thread_local! {
-        static PARSE_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(64 * 1024));
-    }
-    
-    PARSE_ARENA.with(|arena| {
-        let arena = arena.borrow();
-        let ast = parse_expression_arena_with_reserved(input, &*arena, reserved_vars)?;
-        Ok(unsafe { std::mem::transmute::<AstExpr<'_>, AstExpr<'static>>(ast) })
-    })
-}
-
-#[cfg(not(test))]
-pub fn parse_expression_with_reserved(
-    _input: &str,
-    _reserved_vars: Option<&[String]>,
-) -> Result<AstExpr<'static>, ExprError> {
-    panic!("parse_expression_with_reserved requires arena - use parse_expression_arena_with_reserved instead")
-}
-
-/// Parse an expression with a list of reserved variable names (typically function parameters).
-///
-/// This is useful when parsing the body of an expression function. Reserved variables
-/// are not treated as functions in expressions like "x(y)" where x would normally be
-/// treated as a function call.
-///
-/// Supports the same features as parse_expression, including ternary operators.
-pub fn parse_expression_arena_with_reserved<'arena>(
+/// // Parse expression function body with parameters
+/// let params = vec!["x".to_string(), "y".to_string()];
+/// let expr = parse_expression_with_parameters("x * y + 2", &arena, &params).unwrap();
+/// // In this case, 'x' and 'y' are treated as variables, not potential function calls
+/// 
+/// // Without this, "x(y)" would be parsed as a function call
+/// let expr = parse_expression_with_parameters("x(y)", &arena, &params).unwrap();
+/// // This correctly parses as multiplication due to juxtaposition: x * y
+/// ```
+pub fn parse_expression_with_parameters<'arena>(
     input: &str,
     arena: &'arena Bump,
-    reserved_vars: Option<&[String]>,
+    parameters: &[String],
 ) -> Result<AstExpr<'arena>, ExprError> {
-    parse_expression_arena_with_context(input, arena, reserved_vars, None)
+    parse_expression_arena_with_context(input, arena, Some(parameters), None)
 }
+
 
 /// Parse an expression with reserved variables and context variable names.
 ///
@@ -1033,14 +1001,9 @@ pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::erro
         }
     };
 
-    // Extract variable and constant names for parsing
-    let mut context_vars: Vec<String> =
-        eval_ctx.variables.keys().map(|k| k.to_string()).collect();
-    context_vars.extend(eval_ctx.constants.keys().map(|k| k.to_string()));
-    
     // Create a temporary arena for parsing
     let arena = Bump::new();
-    match parse_expression_arena_with_context(expression, &arena, None, Some(&context_vars)) {
+    match parse_expression(expression, &arena) {
         Ok(ast) => eval_ast(&ast, Some(Rc::clone(&eval_ctx))),
         Err(err) => Err(err),
     }
@@ -1058,14 +1021,32 @@ mod tests {
     use super::*;
     use crate::context::EvalContext;
     use crate::functions::{log, sin};
+    use bumpalo::Bump;
 
     use std::vec; // Import functions from our own module
+    
+    // Simple test helper to parse with a temporary arena
+    fn parse_test(expr: &str) -> Result<AstExpr<'static>, ExprError> {
+        use std::cell::RefCell;
+        
+        thread_local! {
+            static TEST_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(64 * 1024));
+        }
+        
+        TEST_ARENA.with(|arena| {
+            let arena = arena.borrow();
+            let ast = parse_expression(expr, &*arena)?;
+            // SAFETY: Only safe for tests - extends lifetime to 'static
+            Ok(unsafe { std::mem::transmute::<AstExpr<'_>, AstExpr<'static>>(ast) })
+        })
+    }
+    
 
     // Tests for the ternary operator
     #[test]
     fn test_ternary_operator_parsing() {
         // Basic ternary expression
-        let ast = parse_expression("x > 0 ? 1 : -1").unwrap();
+        let ast = parse_test("x > 0 ? 1 : -1").unwrap();
         match ast {
             AstExpr::Conditional {
                 condition,
@@ -1297,10 +1278,8 @@ mod tests {
 
     #[test]
     fn test_unknown_variable_and_function_eval() {
-        use crate::test_utils::variable;
-        
-        // Instead of using interp, let's directly create and test the AST
-        let sin_var_ast = variable("sin");
+        // Test that using 'sin' as a variable (when it's a function) produces an error
+        let sin_var_ast = parse_test("sin").unwrap();
         let err = eval_ast(&sin_var_ast, None).unwrap_err();
 
         // Accept any error type, just verify it's an error when using a function name as a variable
@@ -1308,65 +1287,14 @@ mod tests {
         // No specific assertion on error type, just ensure it's an error
     }
 
-    #[test]
-    fn test_parse_postfix_chained_juxtaposition() {
-        use crate::test_utils::{variable, function};
-        
-        // For this test, we'll manually create the expected AST structure
-        // since the parser doesn't support chained juxtaposition directly
-
-        // Expected structure for "sin cos tan x":
-        // sin(cos(tan(x)))
-        let x_var = variable("x");
-        let tan_x = function("tan", vec![x_var]);
-        let cos_tan_x = function("cos", vec![tan_x]);
-        let sin_cos_tan_x = function("sin", vec![cos_tan_x]);
-
-        // Print the expected AST for debugging
-        println!(
-            "Expected AST for 'sin cos tan x':\n{}",
-            debug_ast(&sin_cos_tan_x, 0)
-        );
-
-        // Test with the manually created AST
-        match &sin_cos_tan_x {
-            AstExpr::Function { name, args } => {
-                assert_eq!(*name, "sin");
-                assert_eq!(args.len(), 1);
-                match &args[0] {
-                    AstExpr::Function {
-                        name: n2,
-                        args: args2,
-                    } => {
-                        assert_eq!(*n2, "cos");
-                        assert_eq!(args2.len(), 1);
-                        match &args2[0] {
-                            AstExpr::Function {
-                                name: n3,
-                                args: args3,
-                            } => {
-                                assert_eq!(*n3, "tan");
-                                assert_eq!(args3.len(), 1);
-                                match &args3[0] {
-                                    AstExpr::Variable(var) => assert_eq!(*var, "x"),
-                                    _ => panic!("Expected variable as argument to tan"),
-                                }
-                            }
-                            _ => panic!("Expected tan as argument to cos"),
-                        }
-                    }
-                    _ => panic!("Expected cos as argument to sin"),
-                }
-            }
-            _ => panic!("Expected function node for sin cos tan x"),
-        }
-    }
+    // Removed test_parse_postfix_chained_juxtaposition - testing manual AST construction
+    // which is no longer relevant with arena-based parsing
 
     #[test]
     fn test_pow_arity_ast() {
         // Since we now automatically add a second argument to pow(2),
         // we need to modify this test to check for 2 arguments
-        let ast = parse_expression("pow(2)").unwrap_or_else(|e| panic!("Parse error: {}", e));
+        let ast = parse_test("pow(2)").unwrap_or_else(|e| panic!("Parse error: {}", e));
         println!("AST for pow(2): {:?}", ast);
 
         match ast {
@@ -1388,14 +1316,12 @@ mod tests {
 
     #[test]
     fn test_parse_postfix_array_and_attribute_access() {
-        // Use test_utils to create AST nodes with arena allocation
-        use crate::test_utils;
+        // Test array indexing through parsing
+        let arena = Bump::new();
+        let ast = parse_expression("sin(arr[0])", &arena).unwrap();
         
-        let arr_index = test_utils::array("arr", test_utils::constant(0.0));
-        let sin_arr = test_utils::function("sin", vec![arr_index]);
-
-        // Test with the manually created AST
-        match &sin_arr {
+        // Verify the parsed structure
+        match &ast {
             AstExpr::Function { name, args } => {
                 assert_eq!(*name, "sin");
                 assert_eq!(args.len(), 1);
@@ -1413,26 +1339,24 @@ mod tests {
             _ => panic!("Expected function node for sin(arr[0])"),
         }
 
-        // Create the AST manually for attribute access
-        let foo_bar_x = test_utils::function("bar", vec![test_utils::variable("x")]);
-
-        // Test with the manually created AST
-        match &foo_bar_x {
-            AstExpr::Function { name, args } => {
-                assert_eq!(*name, "bar");
-                assert_eq!(args.len(), 1);
-                match &args[0] {
-                    AstExpr::Variable(var) => assert_eq!(*var, "x"),
-                    _ => panic!("Expected variable as argument to foo.bar"),
-                }
+        // Test attribute access through parsing
+        // Note: foo.bar(x) would parse as a function call with foo.bar as the function name
+        // For pure attribute access, test foo.bar
+        let ast2 = parse_expression("foo.bar", &arena).unwrap();
+        
+        // Verify the parsed structure
+        match &ast2 {
+            AstExpr::Attribute { base, attr } => {
+                assert_eq!(*base, "foo");
+                assert_eq!(*attr, "bar");
             }
-            _ => panic!("Expected function node for foo.bar(x)"),
+            _ => panic!("Expected attribute node for foo.bar"),
         }
     }
 
     #[test]
     fn test_parse_postfix_function_call_after_attribute() {
-        let ast = parse_expression("foo.bar(1)").unwrap();
+        let ast = parse_test("foo.bar(1)").unwrap();
         match ast {
             AstExpr::Function { name, args } => {
                 assert_eq!(name, "bar");
@@ -1448,7 +1372,7 @@ mod tests {
 
     #[test]
     fn test_parse_postfix_array_access_complex_index() {
-        let ast = parse_expression("arr[1+2*3]").unwrap();
+        let ast = parse_test("arr[1+2*3]").unwrap();
         match ast {
             AstExpr::Array { name, index } => {
                 assert_eq!(name, "arr");
@@ -1511,92 +1435,68 @@ mod tests {
 
     #[test]
     #[cfg(feature = "libm")] // This test requires libm for built-in sin/cos/abs
-    fn test_function_juxtaposition() {
-        use crate::test_utils;
+    fn test_function_composition() {
+        // Test function composition through parsing and evaluation
         
-        // Create a context with the sin function registered
-        let mut ctx = EvalContext::new();
-        ctx.register_default_math_functions();
-        let ctx_rc = Rc::new(ctx);
-
-        // Create AST for sin function call
-        let sin_ast = test_utils::function("sin", vec![test_utils::constant(0.5)]);
-
-        let result = eval_ast(&sin_ast, Some(ctx_rc.clone())).unwrap();
+        // Test sin(0.5)
+        let result = interp("sin(0.5)", None).unwrap();
         println!("sin 0.5 = {}", result);
         assert!(
             (result - sin(0.5, 0.0)).abs() < 1e-6,
-            "sin 0.5 should work with juxtaposition"
+            "sin(0.5) should work"
         );
 
-        // Test chained juxtaposition with manually created AST
-        let cos_ast = test_utils::function("cos", vec![test_utils::constant(0.0)]);
-        let sin_cos_ast = test_utils::function("sin", vec![cos_ast]);
-
-        let result2 = eval_ast(&sin_cos_ast, None).unwrap();
-        println!("sin cos 0 = {}", result2);
+        // Test chained function calls: sin(cos(0))
+        let result2 = interp("sin(cos(0))", None).unwrap();
+        println!("sin(cos(0)) = {}", result2);
         assert!(
             (result2 - sin(1.0, 0.0)).abs() < 1e-6,
-            "sin cos 0 should be sin(cos(0)) = sin(1)"
+            "sin(cos(0)) should be sin(1)"
         );
 
-        // Test abs with negative number using manually created AST
-        let neg_ast = test_utils::function("neg", vec![test_utils::constant(42.0)]);
-        let abs_neg_ast = test_utils::function("abs", vec![neg_ast]);
-
-        let result3 = eval_ast(&abs_neg_ast, None).unwrap();
-        println!("abs -42 = {}", result3);
-        assert_eq!(result3, 42.0, "abs -42 should be 42.0");
+        // Test abs with negative number
+        let result3 = interp("abs(-42)", None).unwrap();
+        println!("abs(-42) = {}", result3);
+        assert_eq!(result3, 42.0, "abs(-42) should be 42.0");
     }
 
     #[test]
     #[cfg(not(feature = "libm"))] // Alternative test for non-libm builds
-    fn test_function_juxtaposition_no_libm() {
-        use crate::test_utils;
-        
+    fn test_function_composition_no_libm() {
         // Create a context with our own implementations
         let mut ctx = EvalContext::new();
         ctx.register_native_function("sin", 1, |args| args[0].sin());
         ctx.register_native_function("cos", 1, |args| args[0].cos());
         ctx.register_native_function("abs", 1, |args| args[0].abs());
-        ctx.register_native_function("neg", 1, |args| -args[0]);
 
         let ctx_rc = Rc::new(ctx);
 
-        // Create AST for sin function call
-        let sin_ast = test_utils::function("sin", vec![test_utils::constant(0.5)]);
-
-        let result = eval_ast(&sin_ast, Some(ctx_rc.clone())).unwrap();
+        // Test sin(0.5)
+        let result = interp("sin(0.5)", Some(ctx_rc.clone())).unwrap();
         println!("sin 0.5 = {}", result);
         assert!(
             (result - (0.5 as Real).sin()).abs() < 1e-6,
-            "sin 0.5 should work with juxtaposition"
+            "sin(0.5) should work"
         );
 
-        // Test chained juxtaposition with manually created AST
-        let cos_ast = test_utils::function("cos", vec![test_utils::constant(0.0)]);
-        let sin_cos_ast = test_utils::function("sin", vec![cos_ast]);
-
-        let result2 = eval_ast(&sin_cos_ast, Some(ctx_rc.clone())).unwrap();
-        println!("sin cos 0 = {}", result2);
+        // Test chained function calls: sin(cos(0))
+        let result2 = interp("sin(cos(0))", Some(ctx_rc.clone())).unwrap();
+        println!("sin(cos(0)) = {}", result2);
         assert!(
             (result2 - (1.0 as Real).sin()).abs() < 1e-6,
-            "sin cos 0 should be sin(cos(0)) = sin(1)"
+            "sin(cos(0)) should be sin(1)"
         );
 
-        // Test abs with negative number using manually created AST
-        let neg_ast = test_utils::function("neg", vec![test_utils::constant(42.0)]);
-        let abs_neg_ast = test_utils::function("abs", vec![neg_ast]);
-
-        let result3 = eval_ast(&abs_neg_ast, Some(ctx_rc)).unwrap();
-        println!("abs -42 = {}", result3);
-        assert_eq!(result3, 42.0, "abs -42 should be 42.0");
+        // Test abs with negative number
+        let result3 = interp("abs(-42)", Some(ctx_rc)).unwrap();
+        println!("abs(-42) = {}", result3);
+        assert_eq!(result3, 42.0, "abs(-42) should be 42.0");
     }
 
     #[test]
     fn test_juxtaposition_disabled() {
         // Test that juxtaposition is properly disabled - "sin x" should fail
-        let ast = parse_expression("sin x");
+        let ast = parse_test("sin x");
         match ast {
             Ok(_) => panic!("Expected parse error for 'sin x' since juxtaposition is disabled"),
             Err(e) => {
@@ -1608,7 +1508,7 @@ mod tests {
 
         // For abs -42, we need to use parentheses to make it clear
         // that we want function application, not subtraction
-        let ast2 = parse_expression("abs(-42)");
+        let ast2 = parse_test("abs(-42)");
         match ast2 {
             Ok(ast2) => {
                 println!("AST for abs(-42): {:?}", ast2);
@@ -1642,21 +1542,15 @@ mod tests {
     #[test]
     #[cfg(feature = "libm")] // This test requires libm for built-in sin/asin
     fn test_function_recognition() {
-        use crate::test_utils;
+        // Test function recognition through parsing and evaluation
         
-        // Test function recognition with manually created AST
-        let sin_ast = test_utils::function("sin", vec![test_utils::constant(0.5)]);
-
-        let asin_sin_ast = test_utils::function("asin", vec![sin_ast]);
-
-        let result = eval_ast(&asin_sin_ast, None).unwrap();
-        println!("asin sin 0.5 = {}", result);
+        // Test asin(sin(0.5))
+        let result = interp("asin(sin(0.5))", None).unwrap();
+        println!("asin(sin(0.5)) = {}", result);
         assert!((result - 0.5).abs() < 1e-6, "asin(sin(0.5)) should be 0.5");
 
-        // Test function recognition with parentheses using manually created AST
-        let sin_paren_ast = test_utils::function("sin", vec![test_utils::constant(0.5)]);
-
-        let result2 = eval_ast(&sin_paren_ast, None).unwrap();
+        // Test function recognition with parentheses
+        let result2 = interp("sin(0.5)", None).unwrap();
         println!("sin(0.5) = {}", result2);
         assert!(
             (result2 - sin(0.5, 0.0)).abs() < 1e-6,
@@ -1677,22 +1571,16 @@ mod tests {
         // Convert to Rc
         let ctx_rc = Rc::new(ctx);
 
-        // Test function recognition with manually created AST
-        use crate::test_utils;
-        
-        let sin_ast = test_utils::function("sin", vec![test_utils::constant(0.5)]);
-
-        let asin_sin_ast = test_utils::function("asin", vec![sin_ast.clone()]);
-
-        let result = eval_ast(&asin_sin_ast, Some(ctx_rc.clone())).unwrap();
-        println!("asin sin 0.5 = {}", result);
+        // Test asin(sin(0.5))
+        let result = interp("asin(sin(0.5))", Some(ctx_rc.clone())).unwrap();
+        println!("asin(sin(0.5)) = {}", result);
         assert!(
             (result - 0.5).abs() < 1e-2,
             "asin(sin(0.5)) should be approximately 0.5"
         );
 
-        // Test function recognition with parentheses using manually created AST
-        let result2 = eval_ast(&sin_ast, Some(ctx_rc)).unwrap();
+        // Test function recognition with parentheses
+        let result2 = interp("sin(0.5)", Some(ctx_rc)).unwrap();
         println!("sin(0.5) = {}", result2);
         assert!(
             (result2 - (0.5 as Real).sin()).abs() < 1e-6,
@@ -1702,31 +1590,26 @@ mod tests {
 
     #[test]
     fn test_parse_postfix_attribute_on_function_result_should_error() {
-        use crate::test_utils;
-        
         // This test verifies that attribute access on function results is rejected
-        // We'll manually verify this behavior
-
-        // Create a function result: sin(x)
-        let x_var = test_utils::variable("x");
-        let _sin_x = test_utils::function("sin", vec![x_var]);
-
-        // Attempting to access an attribute on this function result should be rejected
-        // We'll simulate this by checking that our parser rejects such expressions
-        let ast = parse_expression("(sin x).foo");
+        // Since juxtaposition is disabled, "sin x" will fail, so test with parentheses
+        let ast = parse_test("sin(x).foo");
+        
+        // Currently, this might parse as sin(x.foo) due to precedence
+        // Let's test with parentheses to be explicit
+        let ast2 = parse_test("(sin(x)).foo");
         assert!(
-            ast.is_err(),
+            ast2.is_err(),
             "Attribute access on function result should be rejected"
         );
     }
 
     #[test]
     fn test_parse_comma_in_parens_and_top_level() {
-        let ast = parse_expression("(1,2)");
+        let ast = parse_test("(1,2)");
         assert!(ast.is_ok(), "Comma in parens should be allowed");
-        let ast2 = parse_expression("1,2,3");
+        let ast2 = parse_test("1,2,3");
         assert!(ast2.is_ok(), "Top-level comma should be allowed");
-        let ast3 = parse_expression("(1,2),3");
+        let ast3 = parse_test("(1,2),3");
         assert!(
             ast3.is_ok(),
             "Nested comma outside parens should be allowed"
@@ -1737,7 +1620,7 @@ mod tests {
     fn test_deeply_nested_function_calls() {
         // Test with 10 levels of nesting
         let expr = "abs(abs(abs(abs(abs(abs(abs(abs(abs(abs(-12345))))))))))";
-        let ast = parse_expression(expr);
+        let ast = parse_test(expr);
         assert!(
             ast.is_ok(),
             "Deeply nested function calls should be parsed correctly"
@@ -1745,7 +1628,7 @@ mod tests {
 
         // Test with unbalanced parentheses (missing one closing parenthesis)
         let unbalanced = "abs(abs(abs(abs(abs(abs(abs(abs(abs(abs(-12345)))))))))";
-        let result = parse_expression(unbalanced);
+        let result = parse_test(unbalanced);
         assert!(result.is_err(), "Unbalanced parentheses should be detected");
         match result {
             Err(ExprError::UnmatchedParenthesis { position: _, found }) => {
@@ -1761,7 +1644,7 @@ mod tests {
 
     #[test]
     fn test_parse_binary_op_deep_right_assoc_pow() {
-        let ast = parse_expression("2^2^2^2^2").unwrap();
+        let ast = parse_test("2^2^2^2^2").unwrap();
         fn count_right_assoc_pow(expr: &AstExpr<'_>) -> usize {
             match expr {
                 AstExpr::Function { name, args } if *name == "^" && args.len() == 2 => {
@@ -1812,7 +1695,7 @@ mod tests {
         );
 
         // Now try parsing
-        let ast = parse_expression(expr);
+        let ast = parse_test(expr);
         assert!(
             ast.is_ok(),
             "Deeply nested function calls should be parsed correctly"
@@ -1821,7 +1704,7 @@ mod tests {
 
     #[test]
     fn test_parse_binary_op_mixed_unary_and_power() {
-        let ast = parse_expression("-2^2").unwrap();
+        let ast = parse_test("-2^2").unwrap();
         match ast {
             AstExpr::Function { name, args } if name == "neg" => match &args[0] {
                 AstExpr::Function {
@@ -1834,7 +1717,7 @@ mod tests {
             },
             _ => panic!("Expected neg as top-level function"),
         }
-        let ast2 = parse_expression("(-2)^2").unwrap();
+        let ast2 = parse_test("(-2)^2").unwrap();
         match ast2 {
             AstExpr::Function { name, args } if name == "^" => match &args[0] {
                 AstExpr::Function {
@@ -1847,7 +1730,7 @@ mod tests {
             },
             _ => panic!("Expected ^ as top-level function"),
         }
-        let ast3 = parse_expression("-2^-2").unwrap();
+        let ast3 = parse_test("-2^-2").unwrap();
         match ast3 {
             AstExpr::Function { name, args } if name == "neg" => match &args[0] {
                 AstExpr::Function {
@@ -1864,7 +1747,7 @@ mod tests {
 
     #[test]
     fn test_parse_binary_op_mixed_precedence() {
-        let ast = parse_expression("2+3*4^2-5/6").unwrap();
+        let ast = parse_test("2+3*4^2-5/6").unwrap();
         match ast {
             AstExpr::Function { name, args } if name == "-" => {
                 assert_eq!(args.len(), 2);
@@ -1875,15 +1758,15 @@ mod tests {
 
     #[test]
     fn test_parse_primary_paren_errors() {
-        let ast = parse_expression("((1+2)");
+        let ast = parse_test("((1+2)");
         assert!(ast.is_err(), "Unmatched parenthesis should be rejected");
-        let ast2 = parse_expression("1+)");
+        let ast2 = parse_test("1+)");
         assert!(ast2.is_err(), "Unmatched parenthesis should be rejected");
     }
 
     #[test]
     fn test_parse_primary_variable_and_number_edge_cases() {
-        let ast = parse_expression("foo_bar123").unwrap();
+        let ast = parse_test("foo_bar123").unwrap();
         match ast {
             AstExpr::Variable(name) => assert_eq!(name, "foo_bar123"),
             _ => panic!("Expected variable node"),
@@ -1892,13 +1775,13 @@ mod tests {
         // Skip the .5 test for now as it's causing issues
         // We'll handle it in a separate test
 
-        let ast3 = parse_expression("1e-2").unwrap();
+        let ast3 = parse_test("1e-2").unwrap();
         match ast3 {
             AstExpr::Constant(val) => assert!((val - 0.01).abs() < 1e-10),
             _ => panic!("Expected constant node"),
         }
 
-        let ast4 = parse_expression("1.2e+3").unwrap();
+        let ast4 = parse_test("1.2e+3").unwrap();
         match ast4 {
             AstExpr::Constant(val) => assert!((val - 1200.0).abs() < 1e-10),
             _ => panic!("Expected constant node"),
@@ -1908,7 +1791,7 @@ mod tests {
     #[test]
     fn test_parse_decimal_with_leading_dot() {
         // This test should now pass with our improved error handling
-        let ast = parse_expression(".5").unwrap_or_else(|e| panic!("Parse error: {}", e));
+        let ast = parse_test(".5").unwrap_or_else(|e| panic!("Parse error: {}", e));
         match ast {
             AstExpr::Constant(val) => assert_eq!(val, 0.5),
             _ => panic!("Expected constant node"),

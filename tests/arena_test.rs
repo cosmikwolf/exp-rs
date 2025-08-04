@@ -1,7 +1,7 @@
 //! Test arena-based expression evaluation
 
 use exp_rs::{Real};
-use exp_rs::engine::parse_expression_arena;
+use exp_rs::engine::parse_expression;
 use exp_rs::eval::eval_ast;
 use exp_rs::context::EvalContext;
 use bumpalo::Bump;
@@ -13,7 +13,7 @@ fn test_arena_basic_expression() {
     let arena = Bump::new();
     
     // Parse expression into arena
-    let ast = parse_expression_arena("2 + 3", &arena).unwrap();
+    let ast = parse_expression("2 + 3", &arena).unwrap();
     
     // Evaluate
     let result = eval_ast(&ast, None).unwrap();
@@ -32,7 +32,7 @@ fn test_arena_with_variables() {
     let ctx = Rc::new(ctx);
     
     // Parse expression
-    let ast = parse_expression_arena("x + y", &arena).unwrap();
+    let ast = parse_expression("x + y", &arena).unwrap();
     
     // Evaluate
     let result = eval_ast(&ast, Some(ctx)).unwrap();
@@ -45,7 +45,7 @@ fn test_arena_zero_allocations() {
     let arena = Bump::with_capacity(4096);
     
     // Parse expression once
-    let ast = parse_expression_arena("x * 2 + y", &arena).unwrap();
+    let ast = parse_expression("x * 2 + y", &arena).unwrap();
     let allocated_after_parse = arena.allocated_bytes();
     
     // Evaluate many times - should not allocate

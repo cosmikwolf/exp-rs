@@ -332,10 +332,18 @@ __attribute__((aligned(8))) struct EvalContextOpaque *exp_rs_context_new(void);
 __attribute__((aligned(8))) void exp_rs_context_free(struct EvalContextOpaque *ctx);
 
 /**
- * Register an expression function with the given context.
+ * Register an expression function with mandatory validation.
  *
  * This function registers a new function defined by an expression string
- * that can be called in future expression evaluations.
+ * that can be called in future expression evaluations. The expression is
+ * fully validated for both syntax and semantic correctness.
+ *
+ * Validation includes:
+ * - Syntax checking (balanced parentheses, valid operators)
+ * - Function existence checking (warns if undefined functions are used)
+ * - Function arity checking (warns if wrong number of arguments)
+ * - Variable existence checking (warns if undefined variables are used)
+ * - Parameter usage analysis (info if parameters are unused)
  *
  * # Parameters
  *
@@ -348,10 +356,16 @@ __attribute__((aligned(8))) void exp_rs_context_free(struct EvalContextOpaque *c
  * # Returns
  *
  * An EvalResult structure with:
- * - status=0 on success
- * - non-zero status with an error message on failure
+ * - status=0, value=0.0: Success, no issues found
+ * - status=0, value=1.0: Success with undefined function warnings
+ * - status=0, value=2.0: Success with function arity warnings
+ * - status=0, value=3.0: Success with undefined variable warnings
+ * - status=0, value=4.0: Success with unused parameter info
+ * - status=7: Syntax error (function NOT registered)
+ * - status=1-6: Other errors (null pointers, invalid UTF-8, capacity exceeded)
  *
- * When status is non-zero, the error message must be freed with exp_rs_free_error.
+ * IMPORTANT: Even when status=0, check if error is non-null for warning messages.
+ * All error messages must be freed with exp_rs_free_error.
  */
 __attribute__((aligned(8)))
 struct EvalResult exp_rs_context_register_expression_function(struct EvalContextOpaque *ctx,
@@ -359,6 +373,37 @@ struct EvalResult exp_rs_context_register_expression_function(struct EvalContext
                                                               const char *const *params,
                                                               uintptr_t param_count,
                                                               const char *expression);
+
+/**
+ * Register an expression function without validation (unsafe).
+ *
+ * This function is identical to exp_rs_context_register_expression_function
+ * but skips all validation checks. Use this only if:
+ * - You need to register mutually dependent functions
+ * - You are certain the expression is valid
+ * - Performance during registration is critical
+ *
+ * WARNING: Invalid expressions will cause errors during evaluation that could
+ * have been caught at registration time.
+ *
+ * # Parameters
+ *
+ * Same as exp_rs_context_register_expression_function
+ *
+ * # Returns
+ *
+ * An EvalResult structure with:
+ * - status=0 on success (syntax parse succeeded)
+ * - status=1-6: Various registration errors
+ *
+ * No validation warnings are provided with this function.
+ */
+__attribute__((aligned(8)))
+struct EvalResult exp_rs_context_register_expression_function_unsafe(struct EvalContextOpaque *ctx,
+                                                                     const char *name,
+                                                                     const char *const *params,
+                                                                     uintptr_t param_count,
+                                                                     const char *expression);
 
 /**
  * Unregister an expression function from the given context.

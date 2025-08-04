@@ -486,10 +486,10 @@ impl<'arena> EvalEngine<'arena> {
                 } else {
                     // Parse the expression function body into the arena
                     let param_names: Vec<crate::String> = func.params.clone();
-                    let parsed_ast = crate::engine::parse_expression_arena_with_reserved(
+                    let parsed_ast = crate::engine::parse_expression_with_parameters(
                         &func.expression,
                         arena,
-                        Some(&param_names)
+                        &param_names
                     )?;
                     
                     // Allocate the AST in the arena
@@ -690,13 +690,13 @@ impl<'arena> EvalEngine<'arena> {
 ///
 /// ```
 /// use exp_rs::eval::iterative::{eval_with_engine, EvalEngine};
-/// use exp_rs::engine::parse_expression_arena;
+/// use exp_rs::engine::parse_expression;
 /// use exp_rs::context::EvalContext;
 /// use std::rc::Rc;
 /// use bumpalo::Bump;
 ///
 /// let arena = Bump::new();
-/// let ast = parse_expression_arena("2 + 3", &arena).unwrap();
+/// let ast = parse_expression("2 + 3", &arena).unwrap();
 /// let mut engine = EvalEngine::new_with_arena(&arena);
 /// let result = eval_with_engine(&ast, None, &mut engine).unwrap();
 /// assert_eq!(result, 5.0);

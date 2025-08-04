@@ -5,7 +5,7 @@
 
 use crate::{Real, AstExpr, EvalContext};
 use crate::error::ExprError;
-use crate::engine::parse_expression_arena;
+use crate::engine::parse_expression;
 use crate::eval::iterative::{EvalEngine, eval_with_engine};
 use alloc::vec::Vec;
 use alloc::string::{String, ToString};
@@ -62,7 +62,7 @@ impl<'arena> BatchBuilder<'arena> {
     /// The expression is parsed immediately and cached.
     /// Returns the index of the added expression.
     pub fn add_expression(&mut self, expr: &str) -> Result<usize, ExprError> {
-        let ast = parse_expression_arena(expr, self.arena)?;
+        let ast = parse_expression(expr, self.arena)?;
         let ast_ref = self.arena.alloc(ast);
         let idx = self.expressions.len();
         self.expressions.push((expr.to_string(), ast_ref));
@@ -212,7 +212,7 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     /// Returns the index of the added expression.
     pub fn add_expression(&mut self, expr: &str) -> Result<usize, ExprError> {
         // Parse the expression into the arena
-        let ast = crate::engine::parse_expression_arena(expr, self.arena)?;
+        let ast = crate::engine::parse_expression(expr, self.arena)?;
         
         // Allocate expression string in arena
         let expr_str = self.arena.alloc_str(expr);

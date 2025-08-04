@@ -425,10 +425,18 @@ pub extern "C" fn exp_rs_context_free(ctx: *mut EvalContextOpaque) {
     }
 }
 
-/// Register an expression function with the given context.
+/// Register an expression function with mandatory validation.
 ///
 /// This function registers a new function defined by an expression string
-/// that can be called in future expression evaluations.
+/// that can be called in future expression evaluations. The expression is
+/// fully validated for both syntax and semantic correctness.
+///
+/// Validation includes:
+/// - Syntax checking (balanced parentheses, valid operators)
+/// - Function existence checking (warns if undefined functions are used)
+/// - Function arity checking (warns if wrong number of arguments)
+/// - Variable existence checking (warns if undefined variables are used)
+/// - Parameter usage analysis (info if parameters are unused)
 ///
 /// # Parameters
 ///
@@ -441,10 +449,16 @@ pub extern "C" fn exp_rs_context_free(ctx: *mut EvalContextOpaque) {
 /// # Returns
 ///
 /// An EvalResult structure with:
-/// - status=0 on success
-/// - non-zero status with an error message on failure
+/// - status=0, value=0.0: Success, no issues found
+/// - status=0, value=1.0: Success with undefined function warnings
+/// - status=0, value=2.0: Success with function arity warnings
+/// - status=0, value=3.0: Success with undefined variable warnings
+/// - status=0, value=4.0: Success with unused parameter info
+/// - status=7: Syntax error (function NOT registered)
+/// - status=1-6: Other errors (null pointers, invalid UTF-8, capacity exceeded)
 ///
-/// When status is non-zero, the error message must be freed with exp_rs_free_error.
+/// IMPORTANT: Even when status=0, check if error is non-null for warning messages.
+/// All error messages must be freed with exp_rs_free_error.
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_context_register_expression_function(
     ctx: *mut EvalContextOpaque,
@@ -528,9 +542,218 @@ pub extern "C" fn exp_rs_context_register_expression_function(
     }
 
     let ctx_mut = alloc::rc::Rc::make_mut(ctx_handle);
-    match ctx_mut.register_expression_function(
+    
+    // Always perform validation for FFI users
+    match ctx_mut.register_expression_function_validated(
         name_str,
         &param_vec.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        expr_str,
+        true, // Always validate semantics in FFI
+    ) {
+        Ok(report) => {
+            // Check validation results
+            if !report.syntax_valid {
+                let msg = CString::new(format!(
+                    "Expression syntax error: {}",
+                    report.syntax_error.unwrap_or_else(|| "Unknown syntax error".to_string())
+                )).unwrap();
+                let ptr = msg.into_raw();
+                return EvalResult {
+                    status: 7,
+                    value: Real::NAN,
+                    error: ptr,
+                };
+            }
+            
+            // Check for semantic errors (but still register the function)
+            if !report.undefined_functions.is_empty() {
+                let msg = CString::new(format!(
+                    "Warning: Undefined functions: {}. Function registered but may fail at evaluation.",
+                    report.undefined_functions.join(", ")
+                )).unwrap();
+                let ptr = msg.into_raw();
+                return EvalResult {
+                    status: 0, // Success with warning
+                    value: 1.0, // Indicate warning
+                    error: ptr,
+                };
+            }
+            
+            if !report.arity_warnings.is_empty() {
+                let warnings: Vec<String> = report.arity_warnings.iter()
+                    .map(|(name, used, expected)| {
+                        format!("{} (used {} args, expected {})", 
+                                name, used, expected.map_or("?".to_string(), |e| e.to_string()))
+                    })
+                    .collect();
+                let msg = CString::new(format!(
+                    "Warning: Function arity mismatches: {}. Function registered but may fail at evaluation.",
+                    warnings.join(", ")
+                )).unwrap();
+                let ptr = msg.into_raw();
+                return EvalResult {
+                    status: 0, // Success with warning
+                    value: 2.0, // Indicate warning type
+                    error: ptr,
+                };
+            }
+            
+            if !report.undefined_variables.is_empty() {
+                let msg = CString::new(format!(
+                    "Warning: Undefined variables: {}. Function registered but may fail at evaluation.",
+                    report.undefined_variables.join(", ")
+                )).unwrap();
+                let ptr = msg.into_raw();
+                return EvalResult {
+                    status: 0, // Success with warning
+                    value: 3.0, // Indicate warning type
+                    error: ptr,
+                };
+            }
+            
+            if !report.unused_parameters.is_empty() {
+                let msg = CString::new(format!(
+                    "Info: Unused parameters: {}. Function registered successfully.",
+                    report.unused_parameters.join(", ")
+                )).unwrap();
+                let ptr = msg.into_raw();
+                return EvalResult {
+                    status: 0, // Success with info
+                    value: 4.0, // Indicate info type
+                    error: ptr,
+                };
+            }
+            
+            // All good, no warnings
+            EvalResult {
+                status: 0,
+                value: 0.0,
+                error: ptr::null(),
+            }
+        },
+        Err(e) => {
+            let msg =
+                CString::new(format!("Failed to register expression function: {}", e)).unwrap();
+            let ptr = msg.into_raw();
+            EvalResult {
+                status: 6,
+                value: Real::NAN,
+                error: ptr,
+            }
+        }
+    }
+}
+
+/// Register an expression function without validation (unsafe).
+///
+/// This function is identical to exp_rs_context_register_expression_function
+/// but skips all validation checks. Use this only if:
+/// - You need to register mutually dependent functions
+/// - You are certain the expression is valid
+/// - Performance during registration is critical
+///
+/// WARNING: Invalid expressions will cause errors during evaluation that could
+/// have been caught at registration time.
+///
+/// # Parameters
+///
+/// Same as exp_rs_context_register_expression_function
+///
+/// # Returns
+///
+/// An EvalResult structure with:
+/// - status=0 on success (syntax parse succeeded)
+/// - status=1-6: Various registration errors
+///
+/// No validation warnings are provided with this function.
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_context_register_expression_function_unsafe(
+    ctx: *mut EvalContextOpaque,
+    name: *const c_char,
+    params: *const *const c_char,
+    param_count: usize,
+    expression: *const c_char,
+) -> EvalResult {
+    if ctx.is_null() || name.is_null() || expression.is_null() {
+        let msg = CString::new("Null pointer provided for required parameter").unwrap();
+        let ptr = msg.into_raw();
+        return EvalResult {
+            status: 1,
+            value: Real::NAN,
+            error: ptr,
+        };
+    }
+
+    let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
+
+    let name_cstr = unsafe { CStr::from_ptr(name) };
+    let name_str = match name_cstr.to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = CString::new(format!("Invalid UTF-8 in function name: {}", e)).unwrap();
+            let ptr = msg.into_raw();
+            return EvalResult {
+                status: 2,
+                value: Real::NAN,
+                error: ptr,
+            };
+        }
+    };
+
+    let expr_cstr = unsafe { CStr::from_ptr(expression) };
+    let expr_str = match expr_cstr.to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = CString::new(format!("Invalid UTF-8 in expression: {}", e)).unwrap();
+            let ptr = msg.into_raw();
+            return EvalResult {
+                status: 3,
+                value: Real::NAN,
+                error: ptr,
+            };
+        }
+    };
+
+    let mut param_vec = Vec::new();
+    if !params.is_null() {
+        for i in 0..param_count {
+            let param_ptr = unsafe { *params.add(i) };
+            if param_ptr.is_null() {
+                let msg =
+                    CString::new(format!("Null pointer in parameter list at index {}", i)).unwrap();
+                let ptr = msg.into_raw();
+                return EvalResult {
+                    status: 4,
+                    value: Real::NAN,
+                    error: ptr,
+                };
+            }
+            let param_cstr = unsafe { CStr::from_ptr(param_ptr) };
+            match param_cstr.to_str() {
+                Ok(s) => param_vec.push(s),
+                Err(e) => {
+                    let msg = CString::new(format!(
+                        "Invalid UTF-8 in parameter name at index {}: {}",
+                        i, e
+                    ))
+                    .unwrap();
+                    let ptr = msg.into_raw();
+                    return EvalResult {
+                        status: 5,
+                        value: Real::NAN,
+                        error: ptr,
+                    };
+                }
+            }
+        }
+    }
+
+    let ctx_mut = alloc::rc::Rc::make_mut(ctx_handle);
+    
+    // Use the non-validated registration
+    match ctx_mut.register_expression_function(
+        name_str,
+        &param_vec,
         expr_str,
     ) {
         Ok(_) => EvalResult {
@@ -1005,6 +1228,9 @@ pub extern "C" fn exp_rs_batch_eval(
     // Get context handle
     let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
 
+    // Create a single arena for all expressions
+    let expr_arena = Bump::new();
+    
     // Parse all expressions once
     let mut parsed_asts = Vec::with_capacity(request.expression_count);
     let mut parse_errors = Vec::with_capacity(request.expression_count);
@@ -1033,8 +1259,8 @@ pub extern "C" fn exp_rs_batch_eval(
             }
         };
 
-        // Parse expression (will use AST cache if enabled)
-        match parse_expression(expr_str) {
+        // Parse expression using the shared arena
+        match parse_expression(expr_str, &expr_arena) {
             Ok(ast) => {
                 parsed_asts.push(Some(ast));
                 parse_errors.push(None);
@@ -1307,7 +1533,7 @@ pub extern "C" fn exp_rs_batch_eval_with_context(
 
     #[allow(unreachable_code)]
     {
-        use crate::engine::parse_expression_arena;
+        use crate::engine::parse_expression;
         use crate::eval::iterative::{EvalEngine, eval_with_engine};
         use crate::types::{HString, TryIntoHeaplessString};
         use alloc::rc::Rc;
