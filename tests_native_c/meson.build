@@ -52,6 +52,12 @@ test_programs = {
   'test_pattern_isolation': {
     'sources': ['test_pattern_isolation.c'],
     'deps': [exp_rs_dep, m_dep]
+  },
+
+  # Panic handler tests
+  'test_panic_handler': {
+    'sources': ['test_panic_handler.c'],
+    'deps': [exp_rs_dep, m_dep]
   }
 }
 

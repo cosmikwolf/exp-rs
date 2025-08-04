@@ -1260,7 +1260,7 @@ mod tests {
 // Panic Handler Implementation
 // ============================================================================
 
-/// Panic handler for no_std - improved version
+/// Panic handler for no_std environments (ARM targets)
 #[cfg(all(not(test), target_arch = "arm"))]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
@@ -1275,14 +1275,19 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
             // Cast the raw pointer to a function pointer and call it
             let log_func: LogFunctionType = core::mem::transmute(EXP_RS_LOG_FUNCTION);
             
-            // Try to get the string directly from the panic information
-            if let Some(msg) = info.message().as_str() {
-                // msg is a &str, which is already a valid pointer to string data
-                log_func(msg.as_ptr(), msg.len());
-            } else if let Some(location) = info.location() {
-                // If we can't get a message, at least log the location
-                let loc_str = location.file();
-                log_func(loc_str.as_ptr(), loc_str.len());
+            // Try to extract panic information
+            // Note: The .message() method was removed in newer Rust versions
+            // We'll use location information which is more stable
+            if let Some(location) = info.location() {
+                // Create a simple message with file and line info
+                let file = location.file();
+                let _line = location.line(); // We have line number but can't easily format it in no_std
+                
+                // Log the file path first
+                log_func(file.as_ptr(), file.len());
+                
+                // In a no_std environment, we can't easily format strings with line numbers
+                // The C side logger can at least see which file panicked
             } else {
                 // Fallback to default message
                 log_func(PANIC_DEFAULT_MSG.as_ptr(), PANIC_DEFAULT_MSG.len() - 1);
@@ -1290,11 +1295,8 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         }
     }
     
-    // Enter an infinite loop
+    // Enter an infinite loop with WFI (Wait For Interrupt) to save power
     loop {
-        // On ARM, we can use a WFI (Wait For Interrupt) instruction
-        // to put the processor in a low-power state
-        #[cfg(target_arch = "arm")]
         unsafe {
             core::arch::asm!("wfi");
         }
