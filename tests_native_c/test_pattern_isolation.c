@@ -113,17 +113,17 @@ int main() {
     expr_batch_evaluate(video_pattern, ctx);
     expr_batch_evaluate(sensor_pattern, ctx);
     
-    // Get the index of the last expression in each batch
-    size_t audio_idx = expr_batch_get_expression_count(audio_pattern) - 1;
-    size_t video_idx = expr_batch_get_expression_count(video_pattern) - 1;
-    size_t sensor_idx = expr_batch_get_expression_count(sensor_pattern) - 1;
+    // We need to track the indices manually since there's no get_expression_count function
+    // Audio has 3 initial expressions + 1 normalize = index 3
+    // Video has 3 initial expressions + 1 failed + 1 normalize = index 4  
+    // Sensor has 3 initial expressions + 1 failed + 1 normalize = index 4
     
     printf("   - Audio: normalize(5, 0, 10) = %.2f (expected 0.50)\n", 
-           expr_batch_get_result(audio_pattern, audio_idx));
+           expr_batch_get_result(audio_pattern, 3));
     printf("   - Video: normalize(128, 0, 255) = %.2f (expected 0.50)\n",
-           expr_batch_get_result(video_pattern, video_idx));
+           expr_batch_get_result(video_pattern, 4));
     printf("   - Sensor: normalize(25, 20, 30) = %.2f (expected 0.50)\n",
-           expr_batch_get_result(sensor_pattern, sensor_idx));
+           expr_batch_get_result(sensor_pattern, 4));
     
     // Test 6: Override context function in one pattern
     printf("\n6. Testing function override in specific pattern:\n");
@@ -138,13 +138,13 @@ int main() {
     expr_batch_evaluate(audio_pattern, ctx);
     expr_batch_evaluate(video_pattern, ctx);
     
-    size_t audio_override_idx = expr_batch_get_expression_count(audio_pattern) - 1;
-    size_t video_normal_idx = expr_batch_get_expression_count(video_pattern) - 1;
+    // Audio has 4 expressions from before + 1 new normalize = index 4
+    // Video has 5 expressions from before + 1 new normalize = index 5
     
     printf("   - Audio (overridden): normalize(5, 0, 10) = %.2f (expected 0.00)\n",
-           expr_batch_get_result(audio_pattern, audio_override_idx));
+           expr_batch_get_result(audio_pattern, 4));
     printf("   - Video (original): normalize(5, 0, 10) = %.2f (expected 0.50)\n",
-           expr_batch_get_result(video_pattern, video_normal_idx));
+           expr_batch_get_result(video_pattern, 5));
     
     // Test 7: Dynamic pattern loading/unloading
     printf("\n7. Testing dynamic pattern loading:\n");

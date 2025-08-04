@@ -106,6 +106,42 @@ pub use crate::expression::ArenaBatchBuilder as ArenaBatchBuilderExport;
 pub use crate::expression::Expression as ExpressionExport;
 
 // ============================================================================
+// Panic Handler Support
+// ============================================================================
+
+/// Global panic flag pointer - set by C code
+static mut EXP_RS_PANIC_FLAG: *mut i32 = ptr::null_mut();
+
+/// Global log function pointer - set by C code  
+static mut EXP_RS_LOG_FUNCTION: *const c_void = ptr::null();
+
+/// Type for the logging function
+type LogFunctionType = unsafe extern "C" fn(*const u8, usize);
+
+/// Default panic message
+static PANIC_DEFAULT_MSG: &[u8] = b"Rust panic occurred\0";
+
+/// Register a panic handler
+///
+/// # Parameters
+/// - `flag_ptr`: Pointer to an integer that will be set to 1 on panic
+/// - `log_func`: Optional logging function pointer (can be NULL)
+///
+/// # Safety
+/// The provided pointers must remain valid for the lifetime of the program
+#[cfg(not(test))]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn exp_rs_register_panic_handler(
+    flag_ptr: *mut i32,
+    log_func: *const c_void,
+) {
+    unsafe {
+        EXP_RS_PANIC_FLAG = flag_ptr;
+        EXP_RS_LOG_FUNCTION = log_func;
+    }
+}
+
+// ============================================================================
 // Error Handling
 // ============================================================================
 
@@ -1216,6 +1252,51 @@ mod tests {
             // Try allocating again to verify arena was reset
             let _val2 = checkout.arena().alloc(42u32);
             // If arena was properly reset, this should succeed
+        }
+    }
+}
+
+// ============================================================================
+// Panic Handler Implementation
+// ============================================================================
+
+/// Panic handler for no_std - improved version
+#[cfg(all(not(test), target_arch = "arm"))]
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    // Try to set the panic flag to let C code know about the panic
+    unsafe {
+        if !EXP_RS_PANIC_FLAG.is_null() {
+            *EXP_RS_PANIC_FLAG = 1;
+        }
+        
+        // Try to log if we have a logging function
+        if !EXP_RS_LOG_FUNCTION.is_null() {
+            // Cast the raw pointer to a function pointer and call it
+            let log_func: LogFunctionType = core::mem::transmute(EXP_RS_LOG_FUNCTION);
+            
+            // Try to get the string directly from the panic information
+            if let Some(msg) = info.message().as_str() {
+                // msg is a &str, which is already a valid pointer to string data
+                log_func(msg.as_ptr(), msg.len());
+            } else if let Some(location) = info.location() {
+                // If we can't get a message, at least log the location
+                let loc_str = location.file();
+                log_func(loc_str.as_ptr(), loc_str.len());
+            } else {
+                // Fallback to default message
+                log_func(PANIC_DEFAULT_MSG.as_ptr(), PANIC_DEFAULT_MSG.len() - 1);
+            }
+        }
+    }
+    
+    // Enter an infinite loop
+    loop {
+        // On ARM, we can use a WFI (Wait For Interrupt) instruction
+        // to put the processor in a low-power state
+        #[cfg(target_arch = "arm")]
+        unsafe {
+            core::arch::asm!("wfi");
         }
     }
 }

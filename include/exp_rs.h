@@ -90,6 +90,20 @@ extern "C" {
 #endif // __cplusplus
 
 /**
+ * Register a panic handler
+ *
+ * # Parameters
+ * - `flag_ptr`: Pointer to an integer that will be set to 1 on panic
+ * - `log_func`: Optional logging function pointer (can be NULL)
+ *
+ * # Safety
+ * The provided pointers must remain valid for the lifetime of the program
+ */
+__attribute__((aligned(8)))
+void exp_rs_register_panic_handler(int32_t *flag_ptr,
+                                   const void *log_func);
+
+/**
  * Free an error message string
  *
  * # Safety
