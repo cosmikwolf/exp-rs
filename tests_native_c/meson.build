@@ -11,34 +11,40 @@ test_programs = {
     'sources': ['test_batch_api.c'],
     'deps': [exp_rs_dep, m_dep]
   },
-  
+
   # Session API tests
   'test_session_api': {
     'sources': ['test_session_api.c'],
     'deps': [exp_rs_dep, m_dep]
   },
-  
+
   # Memory management tests
   'test_memory_management': {
     'sources': ['test_memory_management.c'],
     'deps': [exp_rs_dep, m_dep]
   },
-  
+
   # Embedded tests
   'test_embedded_pool': {
     'sources': ['test_embedded_pool.c'],
     'deps': [exp_rs_dep, m_dep]
   },
-  
+
   # Performance tests (consolidated)
   'test_performance': {
     'sources': ['test_performance.c'],
     'deps': [exp_rs_dep, m_dep]
   },
-  
+
   # Error handling tests
   'test_error_handling': {
     'sources': ['test_error_handling.c'],
+    'deps': [exp_rs_dep, m_dep]
+  },
+
+  # Expression function tests
+  'test_expression_functions': {
+    'sources': ['test_expression_functions.c'],
     'deps': [exp_rs_dep, m_dep]
   }
 }
@@ -51,8 +57,8 @@ foreach test_name, test_info : test_programs
     dependencies: test_info['deps'],
     install: false
   )
-  
-  test(test_name, exe, 
+
+  test(test_name, exe,
     timeout: 30,
     is_parallel: true
   )
@@ -69,7 +75,7 @@ performance_tests = [
 
 run_target('test-performance',
   command: ['meson', 'test', '-C', '@BUILD_ROOT@'] + performance_tests
-)  
+)
 
 memory_tests = [
   'test_embedded_pool',
