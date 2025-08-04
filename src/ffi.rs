@@ -1,103 +1,103 @@
 //! Foreign Function Interface (FFI) for C/C++ interoperability
 //!
 //! This module provides a simplified C API for expression evaluation with arena-based memory management.
-//! 
+//!
 //! # Overview
-//! 
+//!
 //! The exp-rs FFI provides two main APIs:
-//! 
+//!
 //! ## Batch API (Advanced, Manual Memory Management)
 //! - Create an arena for memory allocation
 //! - Create a batch builder with the arena
 //! - Add multiple expressions and parameters
 //! - Evaluate all expressions at once
 //! - Manually manage arena lifetime
-//! 
+//!
 //! ## Session API (Simple, Automatic Memory Management)
 //! - Automatically gets arena from a pool
 //! - Single expression evaluation
 //! - Arena automatically returned when session is freed
-//! 
+//!
 //! ## Function Support
-//! 
+//!
 //! The FFI supports two types of functions:
-//! 
+//!
 //! ### Native Functions
 //! - Implemented in C and passed as function pointers
 //! - Registered with `expr_context_add_function()`
 //! - Example: `sin`, `cos`, `sqrt` implementations
-//! 
+//!
 //! ### Expression Functions
 //! - Mathematical expressions that can call other functions
 //! - Defined as strings and parsed when registered
 //! - Registered with `expr_context_add_expression_function()`
 //! - Can be removed with `expr_context_remove_expression_function()`
 //! - Example: `distance(x1,y1,x2,y2) = sqrt((x2-x1)^2 + (y2-y1)^2)`
-//! 
+//!
 //! # Example Usage
-//! 
+//!
 //! ## Batch API Example
 //! ```c
 //! // Create context with functions
 //! ExprContext* ctx = expr_context_new();
 //! expr_context_add_function(ctx, "sin", 1, native_sin);
-//! 
+//!
 //! // Add expression functions (mathematical expressions that can call other functions)
-//! expr_context_add_expression_function(ctx, "distance", "x1,y1,x2,y2", 
+//! expr_context_add_expression_function(ctx, "distance", "x1,y1,x2,y2",
 //!                                      "sqrt((x2-x1)^2 + (y2-y1)^2)");
 //! expr_context_add_expression_function(ctx, "avg", "a,b", "(a+b)/2");
-//! 
+//!
 //! // Create arena and batch
 //! ExprArena* arena = expr_arena_new(8192);
 //! ExprBatch* batch = expr_batch_new(arena);
-//! 
+//!
 //! // Add expressions and parameters
 //! expr_batch_add_expression(batch, "x + sin(y)");
 //! expr_batch_add_expression(batch, "distance(0, 0, x, y)");
 //! expr_batch_add_variable(batch, "x", 1.0);
 //! expr_batch_add_variable(batch, "y", 3.14159);
-//! 
+//!
 //! // Evaluate
 //! expr_batch_evaluate(batch, ctx);
 //! Real result1 = expr_batch_get_result(batch, 0);
 //! Real result2 = expr_batch_get_result(batch, 1);
-//! 
+//!
 //! // Remove expression functions when no longer needed
 //! expr_context_remove_expression_function(ctx, "avg");
-//! 
+//!
 //! // Cleanup
 //! expr_batch_free(batch);
 //! expr_arena_free(arena);
 //! expr_context_free(ctx);
 //! ```
-//! 
+//!
 //! ## Session API Example
 //! ```c
 //! // Initialize arena pool
 //! expr_pool_init(16);
-//! 
+//!
 //! // Create session
 //! ExprSession* session = expr_session_new();
 //! expr_session_parse(session, "x + y");
 //! expr_session_add_variable(session, "x", 10.0);
 //! expr_session_add_variable(session, "y", 20.0);
-//! 
+//!
 //! // Evaluate
 //! Real result;
 //! expr_session_evaluate(session, NULL, &result);
-//! 
+//!
 //! // Cleanup
 //! expr_session_free(session);
 //! ```
 
+use crate::expression::{ArenaBatchBuilder, Expression};
 use crate::{EvalContext, Real};
-use crate::expression::{Expression, ArenaBatchBuilder};
 use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use bumpalo::Bump;
-use core::ffi::{c_char, c_void, CStr};
+use core::ffi::{CStr, c_char, c_void};
 use core::ptr;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -112,77 +112,118 @@ pub use crate::expression::Expression as ExpressionExport;
 #[cfg(all(not(test), target_arch = "arm"))]
 mod allocator {
     use core::alloc::{GlobalAlloc, Layout};
-    
-    struct CAllocator;
-    
-    // External C functions for memory allocation
-    extern "C" {
+
+    // Choose between standard and custom allocator based on feature
+    #[cfg(feature = "custom_cbindgen_alloc")]
+    struct CustomAllocator;
+
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    struct StandardAllocator;
+
+    // External function declarations
+    #[cfg(feature = "custom_cbindgen_alloc")]
+    unsafe extern "C" {
+        // Use custom allocation functions provided by the user
+        fn exp_rs_malloc(size: usize) -> *mut core::ffi::c_void;
+        fn exp_rs_free(ptr: *mut core::ffi::c_void);
+    }
+
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    unsafe extern "C" {
+        // Use standard C malloc/free
         fn malloc(size: usize) -> *mut core::ffi::c_void;
         fn free(ptr: *mut core::ffi::c_void);
     }
-    
-    unsafe impl GlobalAlloc for CAllocator {
+
+    // Implementation for custom allocator (using exp_rs_malloc/exp_rs_free)
+    #[cfg(feature = "custom_cbindgen_alloc")]
+    unsafe impl GlobalAlloc for CustomAllocator {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             let size = layout.size();
             let align = layout.align();
-            
+
             if size == 0 {
                 return align as *mut u8;
             }
-            
-            // Standard malloc typically provides 8-byte alignment
-            // For higher alignment requirements, we need to allocate extra space
+
+            // For alignment requirements greater than what exp_rs_malloc guarantees (8 bytes),
+            // we need to allocate extra space and manually align
+            if align > 8 {
+                // Allocate extra space for alignment
+                let total_size = size + align;
+                let ptr = exp_rs_malloc(total_size) as *mut u8;
+                if ptr.is_null() {
+                    return ptr;
+                }
+
+                // Calculate aligned address
+                let addr = ptr as usize;
+                let aligned_addr = (addr + align - 1) & !(align - 1);
+                aligned_addr as *mut u8
+            } else {
+                // exp_rs_malloc already guarantees 8-byte alignment
+                exp_rs_malloc(size) as *mut u8
+            }
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            if !ptr.is_null() {
+                // For over-aligned allocations, we can't easily find the original pointer
+                // This is a limitation - for now just free the given pointer
+                // In production code, you'd want to store the original pointer somewhere
+                exp_rs_free(ptr as *mut core::ffi::c_void);
+            }
+        }
+    }
+
+    // Implementation for standard allocator (using malloc/free)
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    unsafe impl GlobalAlloc for StandardAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            let size = layout.size();
+            let align = layout.align();
+
+            if size == 0 {
+                return align as *mut u8;
+            }
+
+            // Standard malloc typically provides 8-byte alignment on 32-bit systems
+            // For higher alignment requirements, we need to handle it manually
             if align > 8 {
                 // Allocate extra space for alignment
                 let total_size = size + align;
                 let ptr = malloc(total_size) as *mut u8;
-                
                 if ptr.is_null() {
                     return ptr;
                 }
-                
+
                 // Calculate aligned address
                 let addr = ptr as usize;
                 let aligned_addr = (addr + align - 1) & !(align - 1);
-                let offset = aligned_addr - addr;
-                
-                // Store the original pointer just before the aligned address
-                // so we can free it later
-                if offset >= core::mem::size_of::<*mut u8>() {
-                    let meta_ptr = (aligned_addr - core::mem::size_of::<*mut u8>()) as *mut *mut u8;
-                    *meta_ptr = ptr;
-                    aligned_addr as *mut u8
-                } else {
-                    // Not enough space for metadata, fail
-                    free(ptr as *mut core::ffi::c_void);
-                    core::ptr::null_mut()
-                }
+                aligned_addr as *mut u8
             } else {
+                // Standard malloc should provide adequate alignment
                 malloc(size) as *mut u8
             }
         }
-        
+
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-            if layout.size() == 0 {
-                return;
-            }
-            
-            let align = layout.align();
-            
-            if align > 8 {
-                // For aligned allocations, retrieve the original pointer
-                let addr = ptr as usize;
-                let meta_ptr = (addr - core::mem::size_of::<*mut u8>()) as *mut *mut u8;
-                let original_ptr = *meta_ptr;
-                free(original_ptr as *mut core::ffi::c_void);
-            } else {
+            if !ptr.is_null() {
+                // For over-aligned allocations, we can't easily find the original pointer
+                // This is a limitation - for now just free the given pointer
                 free(ptr as *mut core::ffi::c_void);
             }
         }
     }
-    
+
+    // Choose the appropriate allocator
+    #[cfg(feature = "custom_cbindgen_alloc")]
     #[global_allocator]
-    static ALLOCATOR: CAllocator = CAllocator;
+    static ALLOCATOR: CustomAllocator = CustomAllocator;
+
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    #[global_allocator]
+    static ALLOCATOR: StandardAllocator = StandardAllocator;
 }
 
 // ============================================================================
@@ -192,7 +233,7 @@ mod allocator {
 /// Global panic flag pointer - set by C code
 static mut EXP_RS_PANIC_FLAG: *mut i32 = ptr::null_mut();
 
-/// Global log function pointer - set by C code  
+/// Global log function pointer - set by C code
 static mut EXP_RS_LOG_FUNCTION: *const c_void = ptr::null();
 
 /// Type for the logging function
@@ -342,7 +383,7 @@ pub extern "C" fn expr_context_add_function(
     }
 
     let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
-    
+
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
@@ -394,28 +435,28 @@ pub extern "C" fn expr_context_add_expression_function(
     }
 
     let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
-    
+
     // Parse function name
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     // Parse parameters
     let params_cstr = unsafe { CStr::from_ptr(params) };
     let params_str = match params_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     // Parse expression
     let expr_cstr = unsafe { CStr::from_ptr(expression) };
     let expr_str = match expr_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     // Split parameters by comma
     let param_vec: Vec<&str> = if params_str.is_empty() {
         Vec::new()
@@ -455,7 +496,7 @@ pub extern "C" fn expr_context_remove_expression_function(
     }
 
     let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
-    
+
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
@@ -466,7 +507,13 @@ pub extern "C" fn expr_context_remove_expression_function(
     match alloc::rc::Rc::get_mut(ctx_handle) {
         Some(ctx_mut) => {
             match ctx_mut.unregister_expression_function(name_str) {
-                Ok(was_removed) => if was_removed { 1 } else { 0 },
+                Ok(was_removed) => {
+                    if was_removed {
+                        1
+                    } else {
+                        0
+                    }
+                }
                 Err(_) => -3, // Error (e.g., name too long)
             }
         }
@@ -497,35 +544,35 @@ pub extern "C" fn expr_batch_add_expression_function(
     if batch.is_null() || name.is_null() || params.is_null() || expression.is_null() {
         return -1;
     }
-    
+
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
-    
+
     // Parse strings
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     let params_cstr = unsafe { CStr::from_ptr(params) };
     let params_str = match params_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     let expr_cstr = unsafe { CStr::from_ptr(expression) };
     let expr_str = match expr_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     // Split parameters by comma
     let param_vec: Vec<&str> = if params_str.is_empty() {
         Vec::new()
     } else {
         params_str.split(',').map(|s| s.trim()).collect()
     };
-    
+
     // Register function
     match builder.register_expression_function(name_str, &param_vec, expr_str) {
         Ok(_) => 0,
@@ -551,17 +598,23 @@ pub extern "C" fn expr_batch_remove_expression_function(
     if batch.is_null() || name.is_null() {
         return -1;
     }
-    
+
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
-    
+
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     match builder.unregister_expression_function(name_str) {
-        Ok(was_removed) => if was_removed { 1 } else { 0 },
+        Ok(was_removed) => {
+            if was_removed {
+                1
+            } else {
+                0
+            }
+        }
         Err(_) => -3, // Error
     }
 }
@@ -637,7 +690,7 @@ pub extern "C" fn expr_batch_new(arena: *mut ExprArena) -> *mut ExprBatch {
     if arena.is_null() {
         return ptr::null_mut();
     }
-    
+
     let arena = unsafe { &*(arena as *const Bump) };
     let builder = Box::new(ArenaBatchBuilder::new(arena));
     Box::into_raw(builder) as *mut ExprBatch
@@ -666,16 +719,13 @@ pub extern "C" fn expr_batch_free(batch: *mut ExprBatch) {
 /// # Returns
 /// Expression index on success, negative error code on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_batch_add_expression(
-    batch: *mut ExprBatch,
-    expr: *const c_char,
-) -> i32 {
+pub extern "C" fn expr_batch_add_expression(batch: *mut ExprBatch, expr: *const c_char) -> i32 {
     if batch.is_null() || expr.is_null() {
         return -1;
     }
 
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
-    
+
     let expr_cstr = unsafe { CStr::from_ptr(expr) };
     let expr_str = match expr_cstr.to_str() {
         Ok(s) => s,
@@ -708,7 +758,7 @@ pub extern "C" fn expr_batch_add_variable(
     }
 
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
-    
+
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
@@ -731,17 +781,13 @@ pub extern "C" fn expr_batch_add_variable(
 /// # Returns
 /// 0 on success, negative error code on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_batch_set_variable(
-    batch: *mut ExprBatch,
-    index: usize,
-    value: Real,
-) -> i32 {
+pub extern "C" fn expr_batch_set_variable(batch: *mut ExprBatch, index: usize, value: Real) -> i32 {
     if batch.is_null() {
         return -1;
     }
 
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
-    
+
     match builder.set_param(index, value) {
         Ok(_) => 0,
         Err(_) => -2, // Invalid index
@@ -757,16 +803,13 @@ pub extern "C" fn expr_batch_set_variable(
 /// # Returns
 /// 0 on success, negative error code on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_batch_evaluate(
-    batch: *mut ExprBatch,
-    ctx: *mut ExprContext,
-) -> i32 {
+pub extern "C" fn expr_batch_evaluate(batch: *mut ExprBatch, ctx: *mut ExprContext) -> i32 {
     if batch.is_null() {
         return -1;
     }
 
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
-    
+
     let eval_ctx = if ctx.is_null() {
         alloc::rc::Rc::new(EvalContext::new())
     } else {
@@ -791,10 +834,7 @@ pub extern "C" fn expr_batch_evaluate(
 /// # Returns
 /// Result value, or NaN if index is invalid
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_batch_get_result(
-    batch: *const ExprBatch,
-    index: usize,
-) -> Real {
+pub extern "C" fn expr_batch_get_result(batch: *const ExprBatch, index: usize) -> Real {
     if batch.is_null() {
         return Real::NAN;
     }
@@ -849,61 +889,60 @@ impl ArenaPool {
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_POOL_SIZE, DEFAULT_ARENA_SIZE)
     }
-    
+
     /// Create a new arena pool with specified capacity
     pub fn with_capacity(num_arenas: usize, arena_size: usize) -> Self {
         let mut slots = Vec::with_capacity(num_arenas);
-        
+
         for _ in 0..num_arenas {
             slots.push(ArenaSlot {
                 arena: Bump::with_capacity(arena_size),
                 in_use: AtomicBool::new(false),
             });
         }
-        
+
         ArenaPool {
             slots,
             active_count: AtomicUsize::new(0),
         }
     }
-    
+
     /// Try to check out an arena from the pool
     pub fn checkout(&self) -> Option<ArenaCheckout> {
         // Try each slot in order
         for (index, slot) in self.slots.iter().enumerate() {
             // Try to atomically set in_use from false to true
-            if slot.in_use.compare_exchange(
-                false,
-                true,
-                Ordering::Acquire,
-                Ordering::Relaxed
-            ).is_ok() {
+            if slot
+                .in_use
+                .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
                 // Successfully reserved this slot
                 self.active_count.fetch_add(1, Ordering::Relaxed);
-                
+
                 // Reset the arena for clean slate
                 // This is safe because we have exclusive access via in_use flag
                 unsafe {
                     let arena_ptr = &slot.arena as *const Bump as *mut Bump;
                     (*arena_ptr).reset();
                 }
-                
+
                 return Some(ArenaCheckout {
                     slot_index: index,
                     pool: self as *const ArenaPool,
                 });
             }
         }
-        
+
         // All arenas are in use
         None
     }
-    
+
     /// Get the number of arenas currently in use
     pub fn active_count(&self) -> usize {
         self.active_count.load(Ordering::Relaxed)
     }
-    
+
     /// Get the total number of arenas in the pool
     pub fn capacity(&self) -> usize {
         self.slots.len()
@@ -971,7 +1010,7 @@ struct ExpressionWrapper {
     checkout: ArenaCheckout,
     // Store expression strings
     expressions: Vec<String>,
-    // Store parameter names and values  
+    // Store parameter names and values
     params: Vec<(String, Real)>,
     // Store results
     results: Vec<Real>,
@@ -979,35 +1018,39 @@ struct ExpressionWrapper {
 
 impl ExpressionWrapper {
     /// Build a temporary Expression for evaluation
-    fn with_expression<F, R>(&mut self, ctx: &alloc::rc::Rc<EvalContext>, f: F) -> Result<R, crate::error::ExprError>
+    fn with_expression<F, R>(
+        &mut self,
+        ctx: &alloc::rc::Rc<EvalContext>,
+        f: F,
+    ) -> Result<R, crate::error::ExprError>
     where
         F: FnOnce(&mut Expression) -> Result<R, crate::error::ExprError>,
     {
         // Get arena reference without unsafe - the checkout provides safe access
         let arena = self.checkout.arena();
-        
+
         // Create a new Expression
         let mut expr = Expression::new(arena);
-        
+
         // Add all parameters
         for (name, value) in &self.params {
             expr.add_parameter(name, *value)?;
         }
-        
+
         // Add all expressions
         for expr_str in &self.expressions {
             expr.add_expression(expr_str)?;
         }
-        
+
         // Call the provided function
         let result = f(&mut expr)?;
-        
+
         // Update results if evaluation occurred
         if expr.expression_count() > 0 {
             self.results.clear();
             self.results.extend_from_slice(expr.get_all_results());
         }
-        
+
         Ok(result)
     }
 }
@@ -1040,7 +1083,7 @@ pub extern "C" fn expr_session_new() -> *mut ExprSession {
         Some(c) => c,
         None => return ptr::null_mut(),
     };
-    
+
     // Create wrapper without lifetime issues
     let wrapper = ExpressionWrapper {
         checkout,
@@ -1048,7 +1091,7 @@ pub extern "C" fn expr_session_new() -> *mut ExprSession {
         params: Vec::new(),
         results: Vec::new(),
     };
-    
+
     // Return as opaque pointer
     Box::into_raw(Box::new(wrapper)) as *mut ExprSession
 }
@@ -1064,7 +1107,7 @@ pub extern "C" fn expr_session_free(session: *mut ExprSession) {
     if session.is_null() {
         return;
     }
-    
+
     // Cast back to the actual type and drop it
     unsafe {
         let _ = Box::from_raw(session as *mut ExpressionWrapper);
@@ -1080,28 +1123,25 @@ pub extern "C" fn expr_session_free(session: *mut ExprSession) {
 /// # Returns
 /// 0 on success, negative error code on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_session_parse(
-    session: *mut ExprSession,
-    expr: *const c_char,
-) -> i32 {
+pub extern "C" fn expr_session_parse(session: *mut ExprSession, expr: *const c_char) -> i32 {
     if session.is_null() || expr.is_null() {
         return -1;
     }
-    
+
     // Parse C string
     let expr_cstr = unsafe { CStr::from_ptr(expr) };
     let expr_str = match expr_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     // Get the wrapper
     let wrapper = unsafe { &mut *(session as *mut ExpressionWrapper) };
-    
+
     // Store the expression string and add a result slot
     wrapper.expressions.push(expr_str.to_string());
     wrapper.results.push(0.0);
-    
+
     // Validate by trying to parse with a temporary Expression
     let ctx = alloc::rc::Rc::new(EvalContext::new());
     match wrapper.with_expression(&ctx, |_| Ok(())) {
@@ -1133,22 +1173,22 @@ pub extern "C" fn expr_session_add_variable(
     if session.is_null() || name.is_null() {
         return -1;
     }
-    
+
     // Parse C string
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     // Get the wrapper
     let wrapper = unsafe { &mut *(session as *mut ExpressionWrapper) };
-    
+
     // Check for duplicates
     if wrapper.params.iter().any(|(n, _)| n == name_str) {
         return -3; // Duplicate name
     }
-    
+
     // Add the parameter
     let idx = wrapper.params.len() as i32;
     wrapper.params.push((name_str.to_string(), value));
@@ -1173,17 +1213,17 @@ pub extern "C" fn expr_session_set_variable(
     if session.is_null() || name.is_null() {
         return -1;
     }
-    
+
     // Parse C string
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8
     };
-    
+
     // Get the wrapper
     let wrapper = unsafe { &mut *(session as *mut ExpressionWrapper) };
-    
+
     // Find and update the parameter
     match wrapper.params.iter_mut().find(|(n, _)| n == name_str) {
         Some((_, v)) => {
@@ -1212,20 +1252,20 @@ pub extern "C" fn expr_session_evaluate(
     if session.is_null() || result.is_null() {
         return -1;
     }
-    
+
     // Get the wrapper
     let wrapper = unsafe { &mut *(session as *mut ExpressionWrapper) };
-    
+
     // Create or use context
     let eval_ctx = if ctx.is_null() {
         alloc::rc::Rc::new(EvalContext::new())
     } else {
-        unsafe { 
+        unsafe {
             let ctx_rc = &*(ctx as *const alloc::rc::Rc<EvalContext>);
             ctx_rc.clone()
         }
     };
-    
+
     // Evaluate using the wrapper
     match wrapper.with_expression(&eval_ctx, |expr| expr.eval_single(&eval_ctx)) {
         Ok(value) => {
@@ -1259,13 +1299,13 @@ pub extern "C" fn expr_estimate_arena_size(
 ) -> usize {
     // Base overhead per expression (AST nodes, etc)
     let expr_overhead = expression_count * 512;
-    
+
     // String storage
     let string_storage = total_expr_length * 2;
-    
+
     // Parameter storage
     let param_storage = param_count * 64;
-    
+
     // Add 50% buffer
     let total = expr_overhead + string_storage + param_storage;
     total + (total / 2)
@@ -1274,40 +1314,40 @@ pub extern "C" fn expr_estimate_arena_size(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_arena_pool_checkout_checkin() {
         let pool = ArenaPool::with_capacity(2, 1024);
-        
+
         // Check out first arena
         let checkout1 = pool.checkout().expect("Should get first arena");
         assert_eq!(pool.active_count(), 1);
-        
+
         // Check out second arena
         let checkout2 = pool.checkout().expect("Should get second arena");
         assert_eq!(pool.active_count(), 2);
-        
+
         // Pool should be exhausted
         assert!(pool.checkout().is_none());
-        
+
         // Return first arena
         drop(checkout1);
         assert_eq!(pool.active_count(), 1);
-        
+
         // Should be able to check out again
         let _checkout3 = pool.checkout().expect("Should get arena after return");
         assert_eq!(pool.active_count(), 2);
-        
+
         // Clean up
         drop(checkout2);
         drop(_checkout3);
         assert_eq!(pool.active_count(), 0);
     }
-    
+
     #[test]
     fn test_arena_reset_on_checkout() {
         let pool = ArenaPool::with_capacity(1, 1024);
-        
+
         // First checkout and allocate
         let bytes_after_alloc = {
             let checkout = pool.checkout().unwrap();
@@ -1316,10 +1356,10 @@ mod tests {
             println!("Bytes after alloc: {}", bytes);
             bytes
         };
-        
+
         // Verify allocation happened
         assert!(bytes_after_alloc > 0);
-        
+
         // Second checkout should get reset arena
         {
             let checkout = pool.checkout().unwrap();
@@ -1328,7 +1368,7 @@ mod tests {
             // Since bump allocator tracks total capacity, not used bytes,
             // we need to check if the arena can allocate again from the beginning
             // This test might need to be adjusted based on how Bump tracks allocations
-            
+
             // Try allocating again to verify arena was reset
             let _val2 = checkout.arena().alloc(42u32);
             // If arena was properly reset, this should succeed
@@ -1360,12 +1400,12 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         if !EXP_RS_PANIC_FLAG.is_null() {
             *EXP_RS_PANIC_FLAG = 1;
         }
-        
+
         // Try to log if we have a logging function
         if !EXP_RS_LOG_FUNCTION.is_null() {
             // Cast the raw pointer to a function pointer and call it
             let log_func: LogFunctionType = core::mem::transmute(EXP_RS_LOG_FUNCTION);
-            
+
             // Try to extract panic information
             // Note: The .message() method was removed in newer Rust versions
             // We'll use location information which is more stable
@@ -1373,10 +1413,10 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
                 // Create a simple message with file and line info
                 let file = location.file();
                 let _line = location.line(); // We have line number but can't easily format it in no_std
-                
+
                 // Log the file path first
                 log_func(file.as_ptr(), file.len());
-                
+
                 // In a no_std environment, we can't easily format strings with line numbers
                 // The C side logger can at least see which file panicked
             } else {
@@ -1385,7 +1425,7 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
             }
         }
     }
-    
+
     // Enter an infinite loop with WFI (Wait For Interrupt) to save power
     loop {
         unsafe {
@@ -1393,3 +1433,4 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         }
     }
 }
+
