@@ -6,9 +6,9 @@ inc = include_directories('.', '../include')
 
 # Define test programs that are still active
 test_programs = {
-  # Basic tests
-  'test_simple_batch': {
-    'sources': ['test_simple_batch.c'],
+  # Batch API tests
+  'test_batch_api': {
+    'sources': ['test_batch_api.c'],
     'deps': [exp_rs_dep, m_dep]
   },
   
@@ -18,9 +18,9 @@ test_programs = {
     'deps': [exp_rs_dep, m_dep]
   },
   
-  # Arena tests
-  'test_arena_integration': {
-    'sources': ['test_arena_integration.c'],
+  # Memory management tests
+  'test_memory_management': {
+    'sources': ['test_memory_management.c'],
     'deps': [exp_rs_dep, m_dep]
   },
   
@@ -30,21 +30,15 @@ test_programs = {
     'deps': [exp_rs_dep, m_dep]
   },
   
-  # Timing tests
-  'test_detailed_timing': {
-    'sources': ['test_detailed_timing.c'],
+  # Performance tests (consolidated)
+  'test_performance': {
+    'sources': ['test_performance.c'],
     'deps': [exp_rs_dep, m_dep]
   },
-  'test_microbenchmark': {
-    'sources': ['test_microbenchmark.c'],
-    'deps': [exp_rs_dep, m_dep]
-  },
-  'test_realistic_timing': {
-    'sources': ['test_realistic_timing.c'],
-    'deps': [exp_rs_dep, m_dep]
-  },
-  'test_proper_timing': {
-    'sources': ['test_proper_timing.c'],
+  
+  # Error handling tests
+  'test_error_handling': {
+    'sources': ['test_error_handling.c'],
     'deps': [exp_rs_dep, m_dep]
   }
 }
@@ -69,20 +63,17 @@ run_target('test-all',
   command: ['meson', 'test', '-C', '@BUILD_ROOT@']
 )
 
-timing_tests = [
-  'test_detailed_timing',
-  'test_microbenchmark',
-  'test_realistic_timing',
-  'test_proper_timing'
+performance_tests = [
+  'test_performance'
 ]
 
-run_target('test-timing',
-  command: ['meson', 'test', '-C', '@BUILD_ROOT@'] + timing_tests
+run_target('test-performance',
+  command: ['meson', 'test', '-C', '@BUILD_ROOT@'] + performance_tests
 )  
 
 memory_tests = [
   'test_embedded_pool',
-  'test_arena_integration'
+  'test_memory_management'
 ]
 
 run_target('test-memory',
@@ -90,9 +81,9 @@ run_target('test-memory',
 )
 
 functional_tests = [
-  'test_simple_batch',
+  'test_batch_api',
   'test_session_api',
-  'test_arena_integration',
+  'test_memory_management',
   'test_embedded_pool'
 ]
 
