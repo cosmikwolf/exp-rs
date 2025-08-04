@@ -8,19 +8,16 @@ use std::rc::Rc;
 use crate::Real;
 use crate::context::EvalContext;
 use crate::error::ExprError;
-use crate::eval::eval_ast;
 use crate::lexer::{Lexer, Token};
-use crate::types::{AstExpr, TokenKind, TryIntoHeaplessString};
+use crate::types::{AstExpr, TokenKind};
 #[cfg(not(test))]
-use crate::{Box, Vec};
+use crate::Vec;
 use bumpalo::Bump;
 
 use alloc::borrow::Cow;
 #[cfg(not(test))]
 use alloc::format;
 use alloc::string::{String, ToString};
-#[cfg(not(test))]
-use alloc::vec;
 
 /// Pratt parser for mathematical expressions
 #[cfg(not(test))]
@@ -1278,7 +1275,7 @@ mod tests {
     fn test_unknown_variable_and_function_eval() {
         // Test that using 'sin' as a variable (when it's a function) produces an error
         let sin_var_ast = parse_test("sin").unwrap();
-        let err = eval_ast(&sin_var_ast, None).unwrap_err();
+        let err = crate::eval::ast::eval_ast(&sin_var_ast, None).unwrap_err();
 
         // Accept any error type, just verify it's an error when using a function name as a variable
         println!("Error when evaluating 'sin' as a variable: {:?}", err);

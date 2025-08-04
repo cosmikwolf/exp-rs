@@ -8,8 +8,8 @@ use alloc::rc::Rc;
 use exp_rs::Real;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::parse_expression;
-use exp_rs::eval::eval_ast;
 use std::time::Instant;
+use bumpalo::Bump;
 
 // Native Rust implementations for benchmarking
 fn native_sqrt_expr(a: Real) -> Real {
@@ -57,7 +57,8 @@ fn main() {
     for (expr, native_func) in benchmarks.iter() {
         println!("Benchmarking: {}", expr);
 
-        let ast = parse_expression(expr).expect("parse failed");
+        let arena = Bump::new();
+        let ast = parse_expression(expr, &arena).expect("parse failed");
 
         // Create a mutable context first before wrapping in Rc
         let mut ctx_base = EvalContext::new();
@@ -160,7 +161,7 @@ fn main() {
             let mut ctx = ctx_base.clone();
             ctx.set_parameter("a", j as Real);
             let ctx_rc = Rc::new(ctx);
-            evalctx_sum += eval_ast(&ast, Some(ctx_rc)).unwrap();
+            evalctx_sum += exp_rs::eval::ast::eval_ast(&ast, Some(ctx_rc)).unwrap();
         }
         let evalctx_time = start.elapsed();
         std::hint::black_box(evalctx_sum);

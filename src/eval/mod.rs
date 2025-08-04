@@ -6,8 +6,6 @@
 
 pub mod ast;
 pub mod context_stack;
-pub mod custom_function;
-pub mod evaluator;
 pub mod iterative;
 pub mod recursion;
 pub mod stack_ops;
@@ -15,8 +13,6 @@ pub mod types;
 
 // Re-export the main evaluation functions for backward compatibility
 pub use ast::*;
-pub use custom_function::*;
-pub use evaluator::*;
 pub use recursion::*;
 pub use types::*;
 
@@ -29,7 +25,6 @@ pub use recursion::{
 #[cfg(test)]
 mod tests {
     use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
-    use alloc::collections::BTreeMap;
 
     use super::*;
     use crate::AstExpr;
@@ -41,6 +36,7 @@ mod tests {
     use std::rc::Rc;
     use crate::parse_expression;
     use crate::FunctionRegistry;
+    use std::collections::BTreeMap;
     
     // Import functions used in tests
     #[cfg(feature = "libm")]
@@ -48,8 +44,7 @@ mod tests {
 
     // Helper functions for tests that need to call eval functions directly
     fn test_eval_variable(name: &str, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
-        let mut var_cache = BTreeMap::new();
-        super::eval_variable(name, ctx, &mut var_cache)
+        interp(name, ctx)
     }
 
     // Test helper functions removed - tests now use the public API (interp) directly
@@ -79,34 +74,7 @@ mod tests {
     fn test_eval_native_function_simple() {
         let mut ctx = EvalContext::new();
         ctx.register_native_function("triple", 1, |args| args[0] * 3.0);
-        let mut func_cache = std::collections::BTreeMap::new();
-        // Avoid simultaneous mutable and immutable borrow of ctx by splitting the scope
-        let native_fn = {
-            // We need to use the string directly as the key
-            let nf = ctx
-                .function_registry
-                .native_functions
-                .get(&"triple".try_into_function_name().unwrap())
-                .unwrap();
-            OwnedNativeFunction {
-                arity: nf.arity,
-                implementation: nf.implementation.clone(),
-                name: nf.name.to_string(), // Convert to String
-                description: nf.description.clone(),
-            }
-        };
-        // At this point, the immutable borrow is dropped
-
-        let mut var_cache = std::collections::BTreeMap::new();
-        let val = eval_native_function(
-            "triple",
-            &[AstExpr::Constant(4.0)],
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache,
-            &mut var_cache,
-            &native_fn,
-        )
-        .unwrap();
+        let val = interp("triple(4)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val, 12.0);
     }
 
@@ -239,27 +207,11 @@ mod tests {
     #[test]
     fn test_eval_function_builtin_fallback() {
         let ctx = create_test_context();
-        let mut func_cache = std::collections::BTreeMap::new();
-        let mut var_cache = std::collections::BTreeMap::new();
         // Built-in fallback: pow(2,3)
-        let val = eval_function(
-            "pow",
-            &[AstExpr::Constant(2.0), AstExpr::Constant(3.0)],
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache,
-            &mut var_cache,
-        )
-        .unwrap();
+        let val = interp("pow(2,3)", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 8.0);
         // Built-in fallback: abs(-5)
-        let val2 = eval_function(
-            "abs",
-            &[AstExpr::Constant(-5.0)],
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache,
-            &mut var_cache,
-        )
-        .unwrap();
+        let val2 = interp("abs(-5)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val2, 5.0);
     }
 
@@ -269,51 +221,18 @@ mod tests {
         ctx.arrays
             .insert("arr".try_into_heapless().unwrap(), vec![1.0, 2.0, 3.0])
             .expect("Failed to insert array");
-
-        // Create separate caches for each call to avoid borrowing issues
-        let mut func_cache1 = std::collections::BTreeMap::new();
-        let mut var_cache1 = std::collections::BTreeMap::new();
-        let mut func_cache2 = std::collections::BTreeMap::new();
-        let mut var_cache2 = std::collections::BTreeMap::new();
-
-        let idx_expr = AstExpr::Constant(1.0);
-        let val = eval_array(
-            "arr",
-            &idx_expr,
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache1,
-            &mut var_cache1,
-        )
-        .unwrap();
+        // Valid index
+        let val = interp("arr[1]", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 2.0);
-
         // Out of bounds
-        let idx_expr2 = AstExpr::Constant(10.0);
-        let err = eval_array(
-            "arr",
-            &idx_expr2,
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache2,
-            &mut var_cache2,
-        )
-        .unwrap_err();
+        let err = interp("arr[10]", Some(Rc::new(ctx))).unwrap_err();
         assert!(matches!(err, ExprError::ArrayIndexOutOfBounds { .. }));
     }
 
     #[test]
     fn test_eval_array_unknown() {
         let ctx = EvalContext::new();
-        let mut func_cache = std::collections::BTreeMap::new();
-        let mut var_cache = std::collections::BTreeMap::new();
-        let idx_expr = AstExpr::Constant(0.0);
-        let err = eval_array(
-            "nosucharr",
-            &idx_expr,
-            Some(Rc::new(ctx.clone())),
-            &mut func_cache,
-            &mut var_cache,
-        )
-        .unwrap_err();
+        let err = interp("nosucharr[0]", Some(Rc::new(ctx))).unwrap_err();
         assert!(matches!(err, ExprError::UnknownVariable { .. }));
     }
 
@@ -323,16 +242,16 @@ mod tests {
         // Use the helper method to set attributes
         ctx.set_attribute("bar", "foo", 123.0)
             .expect("Failed to set attribute");
-        let val = super::eval_attribute("bar", "foo", Some(Rc::new(ctx.clone()))).unwrap();
+        let val = interp("bar.foo", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 123.0);
-        let err = super::eval_attribute("bar", "baz", Some(Rc::new(ctx.clone()))).unwrap_err();
+        let err = interp("bar.baz", Some(Rc::new(ctx.clone()))).unwrap_err();
         assert!(matches!(err, ExprError::AttributeNotFound { .. }));
     }
 
     #[test]
     fn test_eval_attribute_unknown_base() {
         let ctx = EvalContext::new();
-        let err = super::eval_attribute("nosuch", "foo", Some(Rc::new(ctx.clone()))).unwrap_err();
+        let err = interp("nosuch.foo", Some(Rc::new(ctx.clone()))).unwrap_err();
         assert!(matches!(err, ExprError::AttributeNotFound { .. }));
     }
 
@@ -517,7 +436,7 @@ mod tests {
         let arena = Bump::new();
         let ast = crate::engine::parse_expression("abs(-42)", &arena).unwrap();
 
-        let val = eval_ast(&ast, Some(Rc::new(ctx))).unwrap();
+        let val = crate::eval::ast::eval_ast(&ast, Some(Rc::new(ctx))).unwrap();
         assert_eq!(val, 42.0);
     }
 
@@ -708,7 +627,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_override_builtin_expression() {
         let mut ctx = create_test_context(); // Start with defaults (if enabled)
 
@@ -784,7 +702,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_expression_function_uses_correct_context() {
         let mut ctx = create_test_context(); // Start with defaults (if enabled)
         ctx.set_parameter("a", 10.0)
@@ -846,7 +763,6 @@ mod tests {
     // Additional tests for polynomial expression function and related checks
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_polynomial_expression_function_direct() {
         let mut ctx = EvalContext::new();
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
@@ -856,10 +772,7 @@ mod tests {
         let ctx_rc = Rc::new(ctx);
 
         // Test for x = 2
-        use bumpalo::Bump;
-        let arena = Bump::new();
-        let ast = crate::engine::parse_expression("polynomial(2)", &arena).unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
+        let result = interp("polynomial(2)", Some(ctx_rc.clone())).unwrap();
         assert!(
             (result - 26.0).abs() < 1e-10,
             "Expected 26.0, got {}",
@@ -867,8 +780,7 @@ mod tests {
         );
 
         // Test for x = 3
-        let ast = crate::engine::parse_expression("polynomial(3)", &arena).unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(ctx_rc)).unwrap();
+        let result = interp("polynomial(3)", Some(ctx_rc)).unwrap();
         assert!(
             (result - 58.0).abs() < 1e-10,
             "Expected 58.0, got {}",
@@ -888,22 +800,22 @@ mod tests {
         use bumpalo::Bump;
         let arena = Bump::new();
         let ast = crate::engine::parse_expression("x^3", &arena).unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
+        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 8.0);
 
         // 2*x^2
         let ast = crate::engine::parse_expression("2*x^2", &arena).unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
+        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 8.0);
 
         // 3*x
         let ast = crate::engine::parse_expression("3*x", &arena).unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
+        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
         assert_eq!(result, 6.0);
 
         // 4
         let ast = crate::engine::parse_expression("4", &arena).unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(ctx_rc)).unwrap();
+        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc)).unwrap();
         assert_eq!(result, 4.0);
     }
 
@@ -939,39 +851,28 @@ mod tests {
 
     // New test for debugging polynomial function and body evaluation
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_polynomial_integration_debug() {
         let mut ctx = EvalContext::new();
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
 
         // Parse the expressions for debugging
-        use bumpalo::Bump;
-        let arena = Bump::new();
-        let body_ast = crate::engine::parse_expression("x^3 + 2*x^2 + 3*x + 4", &arena).unwrap();
-        println!("AST for polynomial body: {:?}", body_ast);
-
-        // Print the AST for polynomial(2)
-        let call_ast = crate::engine::parse_expression("polynomial(2)", &arena).unwrap();
-        println!("AST for polynomial(2): {:?}", call_ast);
-
         // Create Rc for ctx
         let ctx_rc = Rc::new(ctx.clone());
 
         // Evaluate polynomial(2)
-        let result = crate::eval::eval_ast(&call_ast, Some(ctx_rc)).unwrap();
+        let result = interp("polynomial(2)", Some(ctx_rc)).unwrap();
         println!("polynomial(2) = {}", result);
 
         // Evaluate the body directly with x=2
         ctx.set_parameter("x", 2.0);
         let ctx_rc2 = Rc::new(ctx);
-        let direct_result = crate::eval::eval_ast(&body_ast, Some(ctx_rc2)).unwrap();
+        let direct_result = interp("x^3 + 2*x^2 + 3*x + 4", Some(ctx_rc2)).unwrap();
         println!("Direct eval with x=2: {}", direct_result);
     }
 
     // Test for function argument passing and context mapping in polynomial
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_polynomial_argument_mapping_debug() {
         let mut ctx = EvalContext::new();
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
@@ -981,10 +882,7 @@ mod tests {
         let mut ctx_rc = Rc::new(ctx.clone());
 
         // Test with a literal
-        use bumpalo::Bump;
-        let arena = Bump::new();
-        let ast_lit = crate::engine::parse_expression("polynomial(10)", &arena).unwrap();
-        let result_lit = crate::eval::eval_ast(&ast_lit, Some(ctx_rc.clone())).unwrap();
+        let result_lit = interp("polynomial(10)", Some(ctx_rc.clone())).unwrap();
         println!("polynomial(10) = {}", result_lit);
         assert_eq!(result_lit, 1234.0);
 
@@ -992,8 +890,7 @@ mod tests {
         ctx.set_parameter("z", 10.0);
         ctx_rc = Rc::new(ctx.clone());
 
-        let ast_var = crate::engine::parse_expression("polynomial(z)", &arena).unwrap();
-        let result_var = crate::eval::eval_ast(&ast_var, Some(ctx_rc.clone())).unwrap();
+        let result_var = interp("polynomial(z)", Some(ctx_rc.clone())).unwrap();
         println!("polynomial(z) = {}", result_var);
         assert_eq!(result_var, 1234.0);
 
@@ -1002,18 +899,15 @@ mod tests {
         ctx.set_parameter("b", 10.0);
         ctx_rc = Rc::new(ctx.clone());
 
-        let ast_sub = crate::engine::parse_expression("polynomial(a + b / 2)", &arena).unwrap();
-        let result_sub = crate::eval::eval_ast(&ast_sub, Some(ctx_rc.clone())).unwrap();
+        let result_sub = interp("polynomial(a + b / 2)", Some(ctx_rc.clone())).unwrap();
         println!("polynomial(a + b / 2) = {}", result_sub);
         assert_eq!(result_sub, 1234.0);
 
         // Test with a nested polynomial call
-        let ast_nested = crate::engine::parse_expression("polynomial(polynomial(2))", &arena).unwrap();
-        let result_nested = crate::eval::eval_ast(&ast_nested, Some(ctx_rc)).unwrap();
+        let result_nested = interp("polynomial(polynomial(2))", Some(ctx_rc)).unwrap();
         println!("polynomial(polynomial(2)) = {}", result_nested);
     }
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_polynomial_shadowing_variable() {
         let mut ctx = EvalContext::new();
         ctx.set_parameter("x", 100.0); // Shadowing variable
@@ -1021,10 +915,7 @@ mod tests {
             .unwrap();
 
         let ctx_rc = Rc::new(ctx);
-        use bumpalo::Bump;
-        let arena = Bump::new();
-        let call_ast = crate::engine::parse_expression("polynomial(2)", &arena).unwrap();
-        let result = crate::eval::eval_ast(&call_ast, Some(ctx_rc)).unwrap();
+        let result = interp("polynomial(2)", Some(ctx_rc)).unwrap();
 
         assert!(
             (result - 26.0).abs() < 1e-10,
@@ -1043,7 +934,7 @@ mod tests {
 
         // We'll test that simple expressions evaluate correctly
         let ast = AstExpr::Constant(42.0);
-        let result = eval_ast(&ast, None);
+        let result = crate::eval::ast::eval_ast(&ast, None);
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42.0);
@@ -1053,7 +944,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_infinite_recursion_detection() {
         // Reset recursion depth to ensure clean test state
         crate::eval::recursion::reset_recursion_depth();
@@ -1086,7 +976,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_nested_function_calls() {
         // Test that nested function calls are properly tracked
         let mut ctx = EvalContext::new();
@@ -1209,7 +1098,6 @@ mod tests {
 
     // Test for AST caching effect on polynomial evaluation
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_polynomial_ast_cache_effect() {
         use std::cell::RefCell;
         use std::rc::Rc;
@@ -1238,7 +1126,6 @@ mod tests {
 
     // Test for function overriding
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_polynomial_function_overriding() {
         let mut ctx = EvalContext::new();
         ctx.register_expression_function("polynomial", &["x"], "x + 1")
@@ -1247,10 +1134,7 @@ mod tests {
             .unwrap();
 
         let ctx_rc = Rc::new(ctx);
-        use bumpalo::Bump;
-        let arena = Bump::new();
-        let call_ast = crate::engine::parse_expression("polynomial(2)", &arena).unwrap();
-        let result = crate::eval::eval_ast(&call_ast, Some(ctx_rc)).unwrap();
+        let result = interp("polynomial(2)", Some(ctx_rc)).unwrap();
 
         println!("polynomial(2) after overriding = {}", result);
         assert!((result - 26.0).abs() < 1e-10);
@@ -1258,7 +1142,6 @@ mod tests {
 
     // Test for built-in function name collision
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_polynomial_name_collision_with_builtin() {
         let mut ctx = EvalContext::new();
         // Register a function named "sin" that overrides built-in
@@ -1266,10 +1149,7 @@ mod tests {
             .unwrap();
 
         let ctx_rc = Rc::new(ctx);
-        use bumpalo::Bump;
-        let arena = Bump::new();
-        let call_ast = crate::engine::parse_expression("sin(2)", &arena).unwrap();
-        let result = crate::eval::eval_ast(&call_ast, Some(ctx_rc)).unwrap();
+        let result = interp("sin(2)", Some(ctx_rc)).unwrap();
 
         println!("sin(2) with override = {}", result);
         assert_eq!(result, 102.0);

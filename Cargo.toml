@@ -19,7 +19,9 @@ hash32 = "0.2.1"
 bitflags = "2.9.0"
 libm = { version = "0.2", optional = true }
 serde = { version = "1.0", features = ["derive"], default-features = false }
-bumpalo = { version = "3.16", default-features = false, features = ["collections"] }
+bumpalo = { version = "3.16", default-features = false, features = [
+  "collections",
+] }
 [features]
 default = ["libm"]
 f32 = []
@@ -46,9 +48,9 @@ codegen-units = 1 # Use single codegen unit for better optimization
 debug = true
 
 [profile.bench]
-opt-level = 0     # No optimization for debugging
-debug = true      # Keep debug symbols
-lto = false       # Disable LTO for faster builds
+opt-level = 0      # No optimization for debugging
+debug = true       # Keep debug symbols
+lto = false        # Disable LTO for faster builds
 codegen-units = 16 # Default codegen units
 
 [build-dependencies]
@@ -56,6 +58,7 @@ cbindgen = "0.29"
 
 [dev-dependencies]
 criterion = "0.5"
+proptest = "1.7"
 
 [[bench]]
 name = "consolidated_benchmark"

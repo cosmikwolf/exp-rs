@@ -1,8 +1,8 @@
 use bumpalo::Bump;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use exp_rs::{
-    AstExpr, EvalContext, EvalEngine, Expression, Real, eval_with_engine, interp,
-    parse_expression_arena,
+    AstExpr, EvalContext, EvalEngine, Expression, eval_with_engine, interp,
+    parse_expression,
 };
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::RefCell;
@@ -375,7 +375,7 @@ fn run_memory_analysis() {
     let (parsed_expressions, _) = measure_stage("Parsing 7 expressions", || {
         expressions
             .iter()
-            .map(|expr| parse_expression_arena(expr, &parse_arena).unwrap())
+            .map(|expr| parse_expression(expr, &parse_arena).unwrap())
             .collect::<Vec<_>>()
     });
 
@@ -541,7 +541,7 @@ fn run_ast_size_analysis() {
 
     let ast_arena = Bump::new();
     for (name, expr) in expressions {
-        let ast = parse_expression_arena(expr, &ast_arena).unwrap();
+        let ast = parse_expression(expr, &ast_arena).unwrap();
         let total = calculate_ast_size(&ast);
         let shallow = size_of_val(&ast);
         println!("{:<18} | {:>10} | {:>12} | {}", name, total, shallow, expr);
@@ -554,7 +554,7 @@ fn run_ast_size_analysis() {
 
     let real_arena = Bump::new();
     for (i, expr) in real_expressions.iter().enumerate() {
-        let ast = parse_expression_arena(expr, &real_arena).unwrap();
+        let ast = parse_expression(expr, &real_arena).unwrap();
         let size = calculate_ast_size(&ast);
         total_size += size;
         println!("Expression {}: {} bytes", i + 1, size);

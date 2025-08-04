@@ -198,10 +198,121 @@ ctx.register_native_function("cos", 1, |args| cmsis_dsp_cos(args[0]));
 
 The QEMU tests in the repository include examples of integrating with CMSIS-DSP for optimized math functions on ARM Cortex-M processors.
 
+## Expression API - The Primary Interface
+
+The `Expression` struct provides the most efficient way to evaluate expressions, especially when you need to evaluate the same expression multiple times with different parameter values. It uses arena allocation for zero-allocation evaluation after parsing.
+
+### Simple Expression Evaluation
+
+```rust
+use exp_rs::Expression;
+use bumpalo::Bump;
+
+// Create an arena for memory allocation
+let arena = Bump::new();
+
+// Evaluate a simple expression without variables
+let result = Expression::eval_simple("2 + 3 * 4", &arena).unwrap();
+assert_eq!(result, 14.0);
+```
+
+### Expressions with Parameters
+
+```rust
+use exp_rs::{Expression, EvalContext};
+use bumpalo::Bump;
+use std::rc::Rc;
+
+let arena = Bump::new();
+
+// Method 1: Using parse and add_parameter
+let mut expr = Expression::parse("x^2 + y", &arena).unwrap();
+expr.add_parameter("x", 3.0).unwrap();
+expr.add_parameter("y", 4.0).unwrap();
+let result = expr.eval_single(&Rc::new(EvalContext::new())).unwrap();
+assert_eq!(result, 13.0); // 3^2 + 4 = 13
+
+// Method 2: Using eval_with_params for one-shot evaluation
+let params = [("x", 3.0), ("y", 4.0)];
+let result = Expression::eval_with_params(
+    "x^2 + y",
+    &params,
+    &Rc::new(EvalContext::new()),
+    &arena
+).unwrap();
+assert_eq!(result, 13.0);
+```
+
+### Efficient Repeated Evaluation
+
+The Expression API excels when evaluating the same expression multiple times:
+
+```rust
+use exp_rs::{Expression, EvalContext};
+use bumpalo::Bump;
+use std::rc::Rc;
+
+let arena = Bump::new();
+let ctx = Rc::new(EvalContext::new());
+
+// Parse once, evaluate many times
+let mut expr = Expression::parse("a * x^2 + b * x + c", &arena).unwrap();
+expr.add_parameter("a", 1.0).unwrap();
+expr.add_parameter("b", -3.0).unwrap();
+expr.add_parameter("c", 2.0).unwrap();
+expr.add_parameter("x", 0.0).unwrap();
+
+// Evaluate for different x values
+for x in [0.0, 1.0, 2.0, 3.0] {
+    expr.set("x", x).unwrap();
+    let y = expr.eval_single(&ctx).unwrap();
+    println!("f({}) = {}", x, y);
+}
+```
+
+### Batch Expression Evaluation
+
+Evaluate multiple expressions with shared parameters:
+
+```rust
+use exp_rs::{Expression, EvalContext};
+use bumpalo::Bump;
+use std::rc::Rc;
+
+let arena = Bump::new();
+let ctx = Rc::new(EvalContext::new());
+
+let mut batch = Expression::new(&arena);
+
+// Add shared parameters
+batch.add_parameter("radius", 5.0).unwrap();
+
+// Add multiple expressions
+let area_idx = batch.add_expression("pi * radius^2").unwrap();
+let circumference_idx = batch.add_expression("2 * pi * radius").unwrap();
+
+// Evaluate all expressions
+batch.eval(&ctx).unwrap();
+
+println!("Area: {}", batch.get_result(area_idx).unwrap());
+println!("Circumference: {}", batch.get_result(circumference_idx).unwrap());
+
+// Update parameter and re-evaluate
+batch.set("radius", 10.0).unwrap();
+batch.eval(&ctx).unwrap();
+
+println!("New area: {}", batch.get_result(area_idx).unwrap());
+println!("New circumference: {}", batch.get_result(circumference_idx).unwrap());
+```
+
+## Legacy API (interp function)
+
+The `interp()` function remains available for backward compatibility and simple one-shot evaluations. For new code, especially when evaluating expressions multiple times or when performance is critical, prefer using the Expression API shown above.
+
 ### Basic Example
 
 ```rust
-use exp_rs::engine::interp;
+use exp_rs::interp;
 
 fn main() {
     // Simple expression evaluation
@@ -217,21 +328,22 @@ fn main() {
 ### Using Variables and Constants
 
 ```rust
-use exp_rs::engine::interp;
+use exp_rs::interp;
 use exp_rs::context::EvalContext;
+use std::rc::Rc;
 
 fn main() {
     let mut ctx = EvalContext::new();
 
     // Add variables
-    ctx.variables.insert("x".to_string(), 5.0);
-    ctx.variables.insert("y".to_string(), 10.0);
+    ctx.set_parameter("x", 5.0);
+    ctx.set_parameter("y", 10.0);
 
     // Add constants
-    ctx.constants.insert("FACTOR".to_string(), 2.5);
+    ctx.constants.insert("FACTOR".try_into().unwrap(), 2.5).unwrap();
 
     // Evaluate expression with variables and constants
-    let result = interp("x + y * FACTOR", Some(&mut ctx)).unwrap();
+    let result = interp("x + y * FACTOR", Some(Rc::new(ctx))).unwrap();
     println!("x + y * FACTOR = {}", result); // Outputs: x + y * FACTOR = 30
 }
 ```
@@ -239,8 +351,9 @@ fn main() {
 ### Custom Functions
 
 ```rust
-use exp_rs::engine::interp;
+use exp_rs::interp;
 use exp_rs::context::EvalContext;
+use std::rc::Rc;
 
 fn main() {
     let mut ctx = EvalContext::new();
@@ -258,10 +371,10 @@ fn main() {
     ).unwrap();
 
     // Use the custom functions
-    let result1 = interp("sum(1, 2, 3)", Some(&mut ctx)).unwrap();
+    let result1 = interp("sum(1, 2, 3)", Some(Rc::new(ctx.clone()))).unwrap();
     println!("sum(1, 2, 3) = {}", result1); // Outputs: sum(1, 2, 3) = 6
 
-    let result2 = interp("hypotenuse(3, 4)", Some(&mut ctx)).unwrap();
+    let result2 = interp("hypotenuse(3, 4)", Some(Rc::new(ctx))).unwrap();
     println!("hypotenuse(3, 4) = {}", result2); // Outputs: hypotenuse(3, 4) = 5
 }
 ```
@@ -269,32 +382,35 @@ fn main() {
 ### Arrays and Attributes
 
 ```rust
-use exp_rs::engine::interp;
+use exp_rs::interp;
 use exp_rs::context::EvalContext;
-use std::collections::BTreeMap;
+use heapless::FnvIndexMap;
+use std::rc::Rc;
 
 fn main() {
     let mut ctx = EvalContext::new();
 
     // Add an array
-    ctx.arrays.insert("data".to_string(), vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+    ctx.arrays.insert("data".try_into().unwrap(), vec![10.0, 20.0, 30.0, 40.0, 50.0]).unwrap();
 
     // Add an object with attributes
-    let mut point = BTreeMap::new();
-    point.insert("x".to_string(), 3.0);
-    point.insert("y".to_string(), 4.0);
-    ctx.attributes.insert("point".to_string(), point);
+    let mut point = FnvIndexMap::new();
+    point.insert("x".try_into().unwrap(), 3.0).unwrap();
+    point.insert("y".try_into().unwrap(), 4.0).unwrap();
+    ctx.attributes.insert("point".try_into().unwrap(), point).unwrap();
+
+    let ctx_rc = Rc::new(ctx);
 
     // Access array elements
-    let result1 = interp("data[2]", Some(&mut ctx)).unwrap();
+    let result1 = interp("data[2]", Some(ctx_rc.clone())).unwrap();
     println!("data[2] = {}", result1); // Outputs: data[2] = 30
 
     // Access attributes
-    let result2 = interp("point.x + point.y", Some(&mut ctx)).unwrap();
+    let result2 = interp("point.x + point.y", Some(ctx_rc.clone())).unwrap();
     println!("point.x + point.y = {}", result2); // Outputs: point.x + point.y = 7
 
     // Combine array and attribute access in expressions
-    let result3 = interp("sqrt(point.x^2 + point.y^2) + data[0]", Some(&mut ctx)).unwrap();
+    let result3 = interp("sqrt(point.x^2 + point.y^2) + data[0]", Some(ctx_rc)).unwrap();
     println!("sqrt(point.x^2 + point.y^2) + data[0] = {}", result3); // Outputs: 15
 }
 ```

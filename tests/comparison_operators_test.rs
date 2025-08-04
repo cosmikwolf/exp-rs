@@ -255,7 +255,6 @@ fn test_comparison_with_functions() {
 }
 
 #[test]
-#[ignore = "Expression functions require arena allocation - not supported in current architecture"]
 fn test_registered_comparison_function() {
     // Create a context with comparison operators registered
     let mut ctx = create_test_context();

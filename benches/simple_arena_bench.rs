@@ -1,6 +1,6 @@
 use bumpalo::Bump;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use exp_rs::{EvalContext, Expression, parse_expression_arena};
+use exp_rs::{EvalContext, Expression};
 use std::rc::Rc;
 
 fn bench_arena_performance(c: &mut Criterion) {
@@ -60,7 +60,8 @@ fn bench_arena_performance(c: &mut Criterion) {
             let mut parsed = Vec::new();
 
             for expr in &expressions {
-                parsed.push(parse_expression_arena(expr, &arena).unwrap());
+                let mut expr_builder = Expression::parse(expr, &arena).unwrap();
+                parsed.push(expr_builder);
             }
 
             black_box(parsed);

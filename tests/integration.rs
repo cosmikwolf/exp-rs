@@ -6,7 +6,7 @@ extern crate alloc;
 #[cfg(test)]
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
-use exp_rs::eval::{eval_ast, get_recursion_depth, reset_recursion_depth};
+use exp_rs::eval::eval_ast;
 use bumpalo::Bump;
 use exp_rs::{assert_approx_eq, constants};
 use std::sync::Mutex;
@@ -863,7 +863,6 @@ fn test_advanced_native_functions() {
 
 /// Level 10: Expression functions and YAML configuration
 #[test]
-#[ignore = "Expression functions require arena allocation - not supported in current architecture"]
 fn test_expression_functions() {
     // Create a context with some variables
     #[cfg(not(feature = "libm"))]
@@ -1004,7 +1003,6 @@ fn test_config_expressions() {
 
 /// Level 12: Testing recursion limits with recursive functions
 #[test]
-#[ignore = "Expression functions require arena allocation - not supported in current architecture"]
 fn test_recursion_limits() {
     // Create a new context
     let mut ctx = EvalContext::new();
@@ -1307,63 +1305,3 @@ fn test_recursion_limits() {
     println!("All recursion tests passed successfully!");
 }
 
-/// Separate test for infinite recursion detection to prevent stack overflow in other tests
-#[test]
-#[ignore]
-fn test_infinite_recursion_detection() {
-    println!("\nTesting infinite recursion detection in isolation");
-
-    // Create a new context just for this test
-    let mut expr_ctx = EvalContext::new();
-
-    // Register a function that will trigger our recursion limit detection
-    expr_ctx
-        .register_expression_function(
-            "infinite_loop",
-            &["n"],
-            "infinite_loop(n+1)", // No base case, would recurse forever
-        )
-        .unwrap();
-
-    // Explicitly reset the recursion depth before testing
-    let before_reset = get_recursion_depth();
-    reset_recursion_depth();
-    let after_reset = get_recursion_depth();
-    println!(
-        "Recursion depth before reset: {}, after reset: {}",
-        before_reset, after_reset
-    );
-    assert_eq!(
-        after_reset, 0,
-        "reset_recursion_depth() failed to reset the counter to zero"
-    );
-
-    // Test that our recursion checking works
-    println!("Testing recursion limit detection...");
-    let result = interp("infinite_loop(0)", Some(std::rc::Rc::new(expr_ctx.clone())));
-
-    // This should fail with a recursion limit error, not a stack overflow
-    match result {
-        Ok(_) => panic!("infinite_loop should be caught by recursion limit"),
-        Err(e) => {
-            let err_msg = e.to_string().to_lowercase();
-            assert!(
-                err_msg.contains("recursion") || err_msg.contains("depth"),
-                "Error should mention recursion limits: {}",
-                err_msg
-            );
-            println!("Recursion limit correctly detected: {}", err_msg);
-        }
-    }
-
-    // Reset recursion depth at the end
-    reset_recursion_depth();
-    let final_depth = get_recursion_depth();
-    println!("Final recursion depth after test: {}", final_depth);
-    assert_eq!(
-        final_depth, 0,
-        "reset_recursion_depth() failed to reset the counter to zero at the end of the test"
-    );
-
-    println!("Infinite recursion detection test passed!");
-}

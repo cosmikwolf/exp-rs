@@ -34,7 +34,6 @@ pub struct FunctionRegistry {
     pub user_functions: crate::types::UserFunctionMap,
 }
 
-use core::cell::RefCell;
 
 /// Evaluation context for expressions.
 ///
@@ -1336,7 +1335,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_unregister_expression_function_with_dependencies() {
         let mut ctx = EvalContext::new();
 
@@ -1363,7 +1361,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_unregister_expression_function_cache_invalidation() {
         let mut ctx = EvalContext::new();
         // AST cache removed in arena implementation
@@ -1429,7 +1426,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_unregister_expression_function_multiple_functions() {
         let mut ctx = EvalContext::new();
 
@@ -1464,7 +1460,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_unregister_expression_function_reregister() {
         let mut ctx = EvalContext::new();
 
@@ -1486,7 +1481,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Expression functions require arena allocation - not supported in current architecture"]
     fn test_expression_function() {
         let mut ctx = EvalContext::new();
 

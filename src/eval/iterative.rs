@@ -4,21 +4,20 @@
 //! an explicit stack. This approach eliminates stack overflow issues and
 //! provides better performance for deeply nested expressions.
 
-use crate::types::{AstExpr, HString, FunctionName};
 use crate::Real;
-use crate::error::ExprError;
 use crate::context::EvalContext;
-use crate::eval::types::{FunctionCacheEntry, OwnedNativeFunction};
-use crate::eval::stack_ops::EvalOp;
+use crate::error::ExprError;
 use crate::eval::context_stack::ContextStack;
+use crate::eval::stack_ops::EvalOp;
+use crate::eval::types::{FunctionCacheEntry, OwnedNativeFunction};
+use crate::types::{AstExpr, FunctionName, HString};
 use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
-use bumpalo::Bump;
 
-use alloc::vec::Vec;
-use alloc::rc::Rc;
 use alloc::collections::BTreeMap;
 use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use heapless::FnvIndexMap;
 
 /// Maximum depth of the operation stack (prevents runaway evaluation)
@@ -74,7 +73,7 @@ impl<'arena> EvalEngine<'arena> {
             expr_func_cache: BTreeMap::new(),
         }
     }
-    
+
     /// Create a new evaluation engine with arena for expression functions
     pub fn new_with_arena(arena: &'arena bumpalo::Bump) -> Self {
         Self {
@@ -87,59 +86,65 @@ impl<'arena> EvalEngine<'arena> {
             expr_func_cache: BTreeMap::new(),
         }
     }
-    
+
     /// Evaluate an expression
-    pub fn eval(&mut self, ast: &'arena AstExpr<'arena>, ctx: Option<Rc<EvalContext>>) -> Result<Real, ExprError> {
+    pub fn eval(
+        &mut self,
+        ast: &'arena AstExpr<'arena>,
+        ctx: Option<Rc<EvalContext>>,
+    ) -> Result<Real, ExprError> {
         // Clear stacks but keep capacity
         self.op_stack.clear();
         self.value_stack.clear();
         self.ctx_stack.clear();
         self.func_cache.clear();
-        
+
         // Initialize with root context
         let root_ctx_id = self.ctx_stack.push_context(ctx)?;
-        
+
         // Push initial operation (no clone needed - just use reference!)
-        self.op_stack.push(EvalOp::Eval { 
-            expr: ast, 
-            ctx_id: root_ctx_id 
+        self.op_stack.push(EvalOp::Eval {
+            expr: ast,
+            ctx_id: root_ctx_id,
         });
-        
+
         // Main evaluation loop
         while let Some(op) = self.op_stack.pop() {
             // Check depth limit
             if self.op_stack.len() > MAX_STACK_DEPTH {
-                return Err(ExprError::RecursionLimit(
-                    format!("Maximum evaluation depth {} exceeded", MAX_STACK_DEPTH)
-                ));
+                return Err(ExprError::RecursionLimit(format!(
+                    "Maximum evaluation depth {} exceeded",
+                    MAX_STACK_DEPTH
+                )));
             }
-            
+
             self.process_operation(op)?;
         }
-        
+
         // Result should be on top of value stack
-        self.value_stack.pop()
+        self.value_stack
+            .pop()
             .ok_or_else(|| ExprError::Other("No result on value stack".to_string()))
     }
-    
+
     /// Process a single operation
     fn process_operation(&mut self, op: EvalOp<'arena>) -> Result<(), ExprError> {
         match op {
             EvalOp::Eval { expr, ctx_id } => {
                 self.process_eval(expr, ctx_id)?;
             }
-            
+
             EvalOp::ApplyUnary { op } => {
                 let operand = self.pop_value()?;
                 self.value_stack.push(op.apply(operand));
             }
-            
+
             EvalOp::CompleteBinary { op } => {
                 let right = self.pop_value()?;
                 let left = self.pop_value()?;
                 self.value_stack.push(op.apply(left, right));
             }
-            
+
             EvalOp::ShortCircuitAnd { right_expr, ctx_id } => {
                 let left_val = self.pop_value()?;
                 if left_val == 0.0 {
@@ -148,10 +153,13 @@ impl<'arena> EvalEngine<'arena> {
                 } else {
                     // Need to evaluate right side
                     self.op_stack.push(EvalOp::CompleteAnd);
-                    self.op_stack.push(EvalOp::Eval { expr: right_expr, ctx_id });
+                    self.op_stack.push(EvalOp::Eval {
+                        expr: right_expr,
+                        ctx_id,
+                    });
                 }
             }
-            
+
             EvalOp::ShortCircuitOr { right_expr, ctx_id } => {
                 let left_val = self.pop_value()?;
                 if left_val != 0.0 {
@@ -160,50 +168,80 @@ impl<'arena> EvalEngine<'arena> {
                 } else {
                     // Need to evaluate right side
                     self.op_stack.push(EvalOp::CompleteOr);
-                    self.op_stack.push(EvalOp::Eval { expr: right_expr, ctx_id });
+                    self.op_stack.push(EvalOp::Eval {
+                        expr: right_expr,
+                        ctx_id,
+                    });
                 }
             }
-            
+
             EvalOp::CompleteAnd => {
                 let right = self.pop_value()?;
                 let left = 1.0; // We know left was true or we wouldn't be here
-                self.value_stack.push(if left != 0.0 && right != 0.0 { 1.0 } else { 0.0 });
+                self.value_stack.push(if left != 0.0 && right != 0.0 {
+                    1.0
+                } else {
+                    0.0
+                });
             }
-            
+
             EvalOp::CompleteOr => {
                 let right = self.pop_value()?;
                 let left = 0.0; // We know left was false or we wouldn't be here
-                self.value_stack.push(if left != 0.0 || right != 0.0 { 1.0 } else { 0.0 });
+                self.value_stack.push(if left != 0.0 || right != 0.0 {
+                    1.0
+                } else {
+                    0.0
+                });
             }
-            
+
             EvalOp::LookupVariable { name, ctx_id } => {
                 self.process_variable_lookup(name, ctx_id)?;
             }
-            
-            EvalOp::TernaryCondition { true_branch, false_branch, ctx_id } => {
+
+            EvalOp::TernaryCondition {
+                true_branch,
+                false_branch,
+                ctx_id,
+            } => {
                 let condition = self.pop_value()?;
                 if condition != 0.0 {
-                    self.op_stack.push(EvalOp::Eval { expr: true_branch, ctx_id });
+                    self.op_stack.push(EvalOp::Eval {
+                        expr: true_branch,
+                        ctx_id,
+                    });
                 } else {
-                    self.op_stack.push(EvalOp::Eval { expr: false_branch, ctx_id });
+                    self.op_stack.push(EvalOp::Eval {
+                        expr: false_branch,
+                        ctx_id,
+                    });
                 }
             }
-            
+
             EvalOp::AccessArray { array_name, ctx_id } => {
                 let index = self.pop_value()?;
                 self.process_array_access(array_name, index, ctx_id)?;
             }
-            
-            EvalOp::AccessAttribute { object_name, attr_name, ctx_id } => {
+
+            EvalOp::AccessAttribute {
+                object_name,
+                attr_name,
+                ctx_id,
+            } => {
                 self.process_attribute_access(object_name, attr_name, ctx_id)?;
             }
-            
-            EvalOp::CollectFunctionArgs { name, total_args, mut args_so_far, ctx_id } => {
+
+            EvalOp::CollectFunctionArgs {
+                name,
+                total_args,
+                mut args_so_far,
+                ctx_id,
+            } => {
                 // Pop one argument from value stack and insert at the beginning
                 // to preserve the original order (since we evaluate args in reverse)
                 let arg = self.pop_value()?;
                 args_so_far.insert(0, arg);
-                
+
                 if args_so_far.len() == total_args {
                     // All arguments collected, apply function
                     self.op_stack.push(EvalOp::ApplyFunction {
@@ -222,85 +260,107 @@ impl<'arena> EvalEngine<'arena> {
                     });
                 }
             }
-            
-            EvalOp::ApplyFunction { name, args_needed, args_collected, ctx_id } => {
+
+            EvalOp::ApplyFunction {
+                name,
+                args_needed,
+                args_collected,
+                ctx_id,
+            } => {
                 self.process_function_call(name, args_needed, args_collected, ctx_id)?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Process an Eval operation by converting AST to stack operations
-    fn process_eval(&mut self, expr: &'arena AstExpr<'arena>, ctx_id: usize) -> Result<(), ExprError> {
+    fn process_eval(
+        &mut self,
+        expr: &'arena AstExpr<'arena>,
+        ctx_id: usize,
+    ) -> Result<(), ExprError> {
         match expr {
             AstExpr::Constant(val) => {
                 self.value_stack.push(*val);
             }
-            
+
             AstExpr::Variable(name) => {
                 let hname = name.try_into_heapless()?;
-                self.op_stack.push(EvalOp::LookupVariable { 
-                    name: hname, 
-                    ctx_id 
+                self.op_stack.push(EvalOp::LookupVariable {
+                    name: hname,
+                    ctx_id,
                 });
             }
-            
+
             AstExpr::LogicalOp { op, left, right } => {
                 // Handle short-circuit operators
                 use crate::types::LogicalOperator;
                 match op {
                     LogicalOperator::And => {
-                        self.op_stack.push(EvalOp::ShortCircuitAnd { 
-                            right_expr: right, 
-                            ctx_id 
+                        self.op_stack.push(EvalOp::ShortCircuitAnd {
+                            right_expr: right,
+                            ctx_id,
                         });
                         self.op_stack.push(EvalOp::Eval { expr: left, ctx_id });
                     }
                     LogicalOperator::Or => {
-                        self.op_stack.push(EvalOp::ShortCircuitOr { 
-                            right_expr: right, 
-                            ctx_id 
+                        self.op_stack.push(EvalOp::ShortCircuitOr {
+                            right_expr: right,
+                            ctx_id,
                         });
                         self.op_stack.push(EvalOp::Eval { expr: left, ctx_id });
                     }
                 }
             }
-            
-            AstExpr::Conditional { condition, true_branch, false_branch } => {
-                self.op_stack.push(EvalOp::TernaryCondition { 
+
+            AstExpr::Conditional {
+                condition,
+                true_branch,
+                false_branch,
+            } => {
+                self.op_stack.push(EvalOp::TernaryCondition {
                     true_branch,
                     false_branch,
                     ctx_id,
                 });
-                self.op_stack.push(EvalOp::Eval { expr: condition, ctx_id });
+                self.op_stack.push(EvalOp::Eval {
+                    expr: condition,
+                    ctx_id,
+                });
             }
-            
+
             AstExpr::Function { name, args } => {
                 // Special handling for short-circuit operators
                 match (*name, args.len()) {
                     ("&&", 2) => {
                         // Short-circuit AND: evaluate left first, then right only if left is true
-                        self.op_stack.push(EvalOp::ShortCircuitAnd { 
-                            right_expr: &args[1], 
-                            ctx_id 
+                        self.op_stack.push(EvalOp::ShortCircuitAnd {
+                            right_expr: &args[1],
+                            ctx_id,
                         });
-                        self.op_stack.push(EvalOp::Eval { expr: &args[0], ctx_id });
+                        self.op_stack.push(EvalOp::Eval {
+                            expr: &args[0],
+                            ctx_id,
+                        });
                     }
                     ("||", 2) => {
                         // Short-circuit OR: evaluate left first, then right only if left is false
-                        self.op_stack.push(EvalOp::ShortCircuitOr { 
-                            right_expr: &args[1], 
-                            ctx_id 
+                        self.op_stack.push(EvalOp::ShortCircuitOr {
+                            right_expr: &args[1],
+                            ctx_id,
                         });
-                        self.op_stack.push(EvalOp::Eval { expr: &args[0], ctx_id });
+                        self.op_stack.push(EvalOp::Eval {
+                            expr: &args[0],
+                            ctx_id,
+                        });
                     }
                     _ => {
                         // All other function calls go through the same path to support overrides
                         // The parser represents operators like ^, +, -, etc. as function calls
                         // So we treat them all uniformly to allow user overrides
                         let fname = name.try_into_function_name()?;
-                        
+
                         if args.is_empty() {
                             // No arguments to evaluate
                             self.op_stack.push(EvalOp::ApplyFunction {
@@ -317,7 +377,7 @@ impl<'arena> EvalEngine<'arena> {
                                 args_so_far: Vec::new(),
                                 ctx_id,
                             });
-                            
+
                             // Push argument evaluations in reverse order
                             for arg in args.iter().rev() {
                                 self.op_stack.push(EvalOp::Eval { expr: arg, ctx_id });
@@ -326,29 +386,33 @@ impl<'arena> EvalEngine<'arena> {
                     }
                 }
             }
-            
+
             AstExpr::Array { name, index } => {
                 let array_name = name.try_into_heapless()?;
-                
-                self.op_stack.push(EvalOp::AccessArray { array_name, ctx_id });
-                self.op_stack.push(EvalOp::Eval { expr: index, ctx_id });
+
+                self.op_stack
+                    .push(EvalOp::AccessArray { array_name, ctx_id });
+                self.op_stack.push(EvalOp::Eval {
+                    expr: index,
+                    ctx_id,
+                });
             }
-            
+
             AstExpr::Attribute { base, attr } => {
                 let obj_name = base.try_into_heapless()?;
                 let attr_name = attr.try_into_heapless()?;
-                
-                self.op_stack.push(EvalOp::AccessAttribute { 
+
+                self.op_stack.push(EvalOp::AccessAttribute {
                     object_name: obj_name,
                     attr_name,
                     ctx_id,
                 });
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Process variable lookup
     fn process_variable_lookup(&mut self, name: HString, ctx_id: usize) -> Result<(), ExprError> {
         // Check parameter overrides first (highest priority for batch evaluation)
@@ -358,13 +422,13 @@ impl<'arena> EvalEngine<'arena> {
                 return Ok(());
             }
         }
-        
+
         // Try context stack next
         if let Some(value) = self.ctx_stack.lookup_variable(ctx_id, &name) {
             self.value_stack.push(value);
             return Ok(());
         }
-        
+
         // Check if it's a built-in constant
         let value = match name.as_str() {
             "pi" | "PI" => core::f64::consts::PI as Real,
@@ -373,59 +437,65 @@ impl<'arena> EvalEngine<'arena> {
             _ => {
                 // Check if this looks like a function name
                 let is_potential_function_name = match name.as_str() {
-                    "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | 
-                    "sinh" | "cosh" | "tanh" | "exp" | "log" | "log10" | "ln" | 
-                    "sqrt" | "abs" | "ceil" | "floor" | "pow" | "neg" | "," | 
-                    "comma" | "+" | "-" | "*" | "/" | "%" | "^" | "max" | "min" |
-                    "<" | ">" | "<=" | ">=" | "==" | "!=" => true,
+                    "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "sinh"
+                    | "cosh" | "tanh" | "exp" | "log" | "log10" | "ln" | "sqrt" | "abs"
+                    | "ceil" | "floor" | "pow" | "neg" | "," | "comma" | "+" | "-" | "*" | "/"
+                    | "%" | "^" | "max" | "min" | "<" | ">" | "<=" | ">=" | "==" | "!=" => true,
                     _ => false,
                 };
-                
+
                 if is_potential_function_name && name.len() > 1 {
                     return Err(ExprError::Syntax(format!(
                         "Function '{}' used without arguments",
                         name
                     )));
                 }
-                
-                return Err(ExprError::UnknownVariable { name: name.to_string() })
+
+                return Err(ExprError::UnknownVariable {
+                    name: name.to_string(),
+                });
             }
         };
-        
+
         self.value_stack.push(value);
         Ok(())
     }
-    
+
     /// Process array access
-    fn process_array_access(&mut self, array_name: HString, index: Real, ctx_id: usize) -> Result<(), ExprError> {
+    fn process_array_access(
+        &mut self,
+        array_name: HString,
+        index: Real,
+        ctx_id: usize,
+    ) -> Result<(), ExprError> {
         let idx = index as usize;
-        
+
         if let Some(ctx) = self.ctx_stack.get_context(ctx_id) {
             if let Some(array) = ctx.arrays.get(&array_name) {
                 if idx < array.len() {
                     self.value_stack.push(array[idx]);
                     return Ok(());
                 } else {
-                    return Err(ExprError::ArrayIndexOutOfBounds { 
-                        name: array_name.to_string(), 
+                    return Err(ExprError::ArrayIndexOutOfBounds {
+                        name: array_name.to_string(),
                         index: idx,
-                        len: array.len()
+                        len: array.len(),
                     });
                 }
             }
         }
-        
-        Err(ExprError::UnknownVariable { 
-            name: array_name.to_string() 
+
+        Err(ExprError::UnknownVariable {
+            name: array_name.to_string(),
         })
     }
-    
+
     /// Process attribute access
     fn process_attribute_access(
-        &mut self, 
-        object_name: HString, 
-        attr_name: HString, 
-        ctx_id: usize
+        &mut self,
+        object_name: HString,
+        attr_name: HString,
+        ctx_id: usize,
     ) -> Result<(), ExprError> {
         if let Some(ctx) = self.ctx_stack.get_context(ctx_id) {
             if let Some(obj_attrs) = ctx.attributes.get(&object_name) {
@@ -435,13 +505,13 @@ impl<'arena> EvalEngine<'arena> {
                 }
             }
         }
-        
-        Err(ExprError::AttributeNotFound { 
+
+        Err(ExprError::AttributeNotFound {
             base: object_name.to_string(),
             attr: attr_name.to_string(),
         })
     }
-    
+
     /// Process function call
     fn process_function_call(
         &mut self,
@@ -451,9 +521,11 @@ impl<'arena> EvalEngine<'arena> {
         ctx_id: usize,
     ) -> Result<(), ExprError> {
         // Get context
-        let ctx = self.ctx_stack.get_context(ctx_id)
+        let ctx = self
+            .ctx_stack
+            .get_context(ctx_id)
             .ok_or_else(|| ExprError::Other("Invalid context ID".to_string()))?;
-        
+
         // Try expression function first (highest priority) - clone it to avoid borrowing issues
         let expr_func = ctx.get_expression_function(&name).cloned();
         if let Some(func) = expr_func {
@@ -464,26 +536,26 @@ impl<'arena> EvalEngine<'arena> {
                     found: args.len(),
                 });
             }
-            
+
             // Create new context for function evaluation
             let mut func_ctx = EvalContext::new();
-            
+
             // Set parameters
             for (param, value) in func.params.iter().zip(args.iter()) {
                 func_ctx.set_parameter(param, *value)?;
             }
-            
+
             // Copy function registry
             func_ctx.function_registry = ctx.function_registry.clone();
-            
+
             // Set parent context to inherit variables and constants
             func_ctx.parent = Some(ctx.clone());
-            
+
             // Parse expression function on-demand if we have an arena
             if let Some(arena) = self.arena {
                 // Check if we've already parsed this function
                 let func_key = func.name.try_into_heapless()?;
-                
+
                 let ast = if let Some(&cached_ast) = self.expr_func_cache.get(&func_key) {
                     cached_ast
                 } else {
@@ -492,31 +564,31 @@ impl<'arena> EvalEngine<'arena> {
                     let parsed_ast = crate::engine::parse_expression_with_parameters(
                         &func.expression,
                         arena,
-                        &param_names
+                        &param_names,
                     )?;
-                    
+
                     // Allocate the AST in the arena
                     let arena_ast = arena.alloc(parsed_ast);
                     self.expr_func_cache.insert(func_key.clone(), arena_ast);
                     // Return the reference - no move needed
                     &*arena_ast
                 };
-                
+
                 // Push the function's AST for evaluation with the new context
                 let func_ctx_id = self.ctx_stack.push_context(Some(Rc::new(func_ctx)))?;
-                self.op_stack.push(EvalOp::Eval { 
-                    expr: ast, 
-                    ctx_id: func_ctx_id 
+                self.op_stack.push(EvalOp::Eval {
+                    expr: ast,
+                    ctx_id: func_ctx_id,
                 });
                 return Ok(());
             } else {
                 // No arena available for expression functions
                 return Err(ExprError::Other(
-                    "Expression functions require an arena-enabled evaluator".to_string()
+                    "Expression functions require an arena-enabled evaluator".to_string(),
                 ));
             }
         }
-        
+
         // Try native function second
         if let Some(func) = ctx.get_native_function(&name) {
             if args.len() != func.arity {
@@ -526,30 +598,36 @@ impl<'arena> EvalEngine<'arena> {
                     found: args.len(),
                 });
             }
-            
+
             let owned_fn = OwnedNativeFunction::from(func);
             let result = (owned_fn.implementation)(&args);
             self.value_stack.push(result);
             return Ok(());
         }
-        
+
         // Try built-in functions
         if let Some(result) = self.try_builtin_function(&name, &args)? {
             self.value_stack.push(result);
             return Ok(());
         }
-        
-        Err(ExprError::UnknownFunction { name: name.to_string() })
+
+        Err(ExprError::UnknownFunction {
+            name: name.to_string(),
+        })
     }
-    
+
     /// Try to evaluate built-in functions
-    fn try_builtin_function(&self, name: &FunctionName, args: &[Real]) -> Result<Option<Real>, ExprError> {
+    fn try_builtin_function(
+        &self,
+        name: &FunctionName,
+        args: &[Real],
+    ) -> Result<Option<Real>, ExprError> {
         let result = match (name.as_str(), args.len()) {
             // Unary operators
             ("-", 1) => Some(-args[0]),
             ("!", 1) => Some(if args[0] == 0.0 { 1.0 } else { 0.0 }),
             ("neg", 1) => Some(-args[0]),
-            
+
             // Binary operators (treated as functions for override support)
             ("+", 2) => Some(args[0] + args[1]),
             ("-", 2) => Some(args[0] - args[1]),
@@ -559,13 +637,13 @@ impl<'arena> EvalEngine<'arena> {
                     return Err(ExprError::DivideByZero);
                 }
                 Some(args[0] / args[1])
-            },
+            }
             ("%", 2) => {
                 if args[1] == 0.0 {
                     return Err(ExprError::DivideByZero);
                 }
                 Some(args[0] % args[1])
-            },
+            }
             ("^", 2) | ("**", 2) | ("pow", 2) => {
                 #[cfg(feature = "libm")]
                 {
@@ -575,8 +653,8 @@ impl<'arena> EvalEngine<'arena> {
                 {
                     None // Will be handled by registered functions
                 }
-            },
-            
+            }
+
             // Comparison operators
             ("<", 2) => Some(if args[0] < args[1] { 1.0 } else { 0.0 }),
             (">", 2) => Some(if args[0] > args[1] { 1.0 } else { 0.0 }),
@@ -584,7 +662,7 @@ impl<'arena> EvalEngine<'arena> {
             (">=", 2) => Some(if args[0] >= args[1] { 1.0 } else { 0.0 }),
             ("==", 2) => Some(if args[0] == args[1] { 1.0 } else { 0.0 }),
             ("!=", 2) => Some(if args[0] != args[1] { 1.0 } else { 0.0 }),
-            
+
             // Math functions - only available with libm or std
             #[cfg(feature = "libm")]
             ("sin", 1) => Some(crate::functions::sin(args[0], 0.0)),
@@ -625,8 +703,14 @@ impl<'arena> EvalEngine<'arena> {
             ("round", 1) => Some(libm::round(args[0])),
             #[cfg(feature = "libm")]
             ("trunc", 1) => Some(libm::trunc(args[0])),
-            ("sign", 1) => Some(if args[0] > 0.0 { 1.0 } else if args[0] < 0.0 { -1.0 } else { 0.0 }),
-            
+            ("sign", 1) => Some(if args[0] > 0.0 {
+                1.0
+            } else if args[0] < 0.0 {
+                -1.0
+            } else {
+                0.0
+            }),
+
             // Multi-argument functions
             ("min", 2) => Some(args[0].min(args[1])),
             ("max", 2) => Some(args[0].max(args[1])),
@@ -634,36 +718,37 @@ impl<'arena> EvalEngine<'arena> {
             ("hypot", 2) => Some(libm::hypot(args[0], args[1])),
             ("fmod", 2) => Some(args[0] % args[1]),
             (",", 2) | ("comma", 2) => Some(args[1]), // Comma operator returns the second value
-            
+
             // Not a built-in
             _ => None,
         };
-        
+
         Ok(result)
     }
-    
+
     /// Pop a value from the value stack
     fn pop_value(&mut self) -> Result<Real, ExprError> {
-        self.value_stack.pop()
+        self.value_stack
+            .pop()
             .ok_or_else(|| ExprError::Other("Value stack underflow".to_string()))
     }
-    
+
     /// Set parameter overrides for batch evaluation.
     /// These take precedence over context variables during lookup.
     pub fn set_param_overrides(&mut self, params: FnvIndexMap<HString, Real, 16>) {
         self.param_overrides = Some(params);
     }
-    
+
     /// Clear parameter overrides.
     pub fn clear_param_overrides(&mut self) {
         self.param_overrides = None;
     }
-    
+
     /// Execute a function with parameter overrides, ensuring they are cleared afterwards.
     /// This provides RAII-style cleanup for safe batch evaluation.
-    pub fn with_param_overrides<F, R>(&mut self, params: FnvIndexMap<HString, Real, 16>, f: F) -> R 
-    where 
-        F: FnOnce(&mut Self) -> R 
+    pub fn with_param_overrides<F, R>(&mut self, params: FnvIndexMap<HString, Real, 16>, f: F) -> R
+    where
+        F: FnOnce(&mut Self) -> R,
     {
         let old_overrides = self.param_overrides.take();
         self.param_overrides = Some(params);
@@ -711,3 +796,4 @@ pub fn eval_with_engine<'arena>(
 ) -> Result<Real, ExprError> {
     engine.eval(ast, ctx)
 }
+

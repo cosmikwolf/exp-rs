@@ -19,6 +19,7 @@ use bumpalo::Bump;
 /// # Examples
 /// 
 /// ```
+/// extern crate alloc;
 /// use exp_rs::evaluator::Evaluator;
 /// use exp_rs::EvalContext;
 /// use alloc::rc::Rc;
@@ -30,7 +31,7 @@ use bumpalo::Bump;
 /// 
 /// // With context
 /// let mut ctx = EvalContext::new();
-/// ctx.set_parameter("x", 5.0);
+/// ctx.set_parameter("x", 5.0).unwrap();
 /// let result = evaluator.eval_with_context("x * 2", Rc::new(ctx)).unwrap();
 /// assert_eq!(result, 10.0);
 /// ```

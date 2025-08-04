@@ -138,7 +138,7 @@ fn test_ffi_registration_errors() {
             0,
             CString::new("(((").unwrap().as_ptr(), // Unmatched parentheses
         );
-        assert_eq!(result.status, 6); // Failed to register expression function
+        assert_eq!(result.status, 7); // Syntax error (status 7 for syntax errors)
         assert!(!result.error.is_null());
         exp_rs_free_error(result.error as *mut c_char);
         
@@ -163,7 +163,7 @@ fn test_ffi_registration_errors() {
             0,
             CString::new("42").unwrap().as_ptr(),
         );
-        assert_eq!(result.status, 6); // Failed to register (capacity exceeded)
+        assert_eq!(result.status, 6); // Failed to register (all registration errors return status 6)
         assert!(!result.error.is_null());
         exp_rs_free_error(result.error as *mut c_char);
         
