@@ -32,7 +32,6 @@ pub struct FunctionRegistry {
     pub expression_functions: crate::types::ExpressionFunctionMap,
 }
 
-
 /// Evaluation context for expressions.
 ///
 /// This is the main configuration object that holds variables, constants, arrays, functions,
@@ -145,7 +144,7 @@ impl ExpressionValidationReport {
 
     /// Returns true if there are no issues found
     pub fn is_valid(&self) -> bool {
-        self.syntax_valid 
+        self.syntax_valid
             && self.undefined_functions.is_empty()
             && self.arity_warnings.is_empty()
             && self.undefined_variables.is_empty()
@@ -153,7 +152,7 @@ impl ExpressionValidationReport {
 
     /// Returns true if there are only warnings (unused parameters)
     pub fn has_only_warnings(&self) -> bool {
-        self.syntax_valid 
+        self.syntax_valid
             && self.undefined_functions.is_empty()
             && self.arity_warnings.is_empty()
             && self.undefined_variables.is_empty()
@@ -187,8 +186,7 @@ impl EvalContext {
         };
 
         // Always register default math functions
-        // This now includes basic operators and core functions regardless of features,
-        // while advanced math functions are guarded by feature flags within the function
+        // The actual functions registered depend on feature flags
         ctx.register_default_math_functions();
 
         ctx
@@ -204,6 +202,35 @@ impl EvalContext {
     pub fn with_default_functions() -> Self {
         // Simply call new() as it now always registers default functions
         Self::new()
+    }
+
+    /// Creates an evaluation context without any pre-registered functions.
+    ///
+    /// This creates a context with no built-in functions or constants.
+    /// Note that basic operators (+, -, *, /, %, <, >, <=, >=, ==, !=) are still
+    /// available as they are handled by the parser, not the function registry.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use exp_rs::context::EvalContext;
+    ///
+    /// let mut ctx = EvalContext::empty();
+    /// // Basic operators still work
+    /// // But functions like sin, cos, abs, etc. must be registered manually
+    /// ctx.register_native_function("abs", 1, |args| args[0].abs());
+    /// ctx.register_native_function("sin", 1, |args| args[0].sin());
+    /// ```
+    pub fn empty() -> Self {
+        Self {
+            variables: crate::types::VariableMap::new(),
+            constants: crate::types::ConstantMap::new(),
+            arrays: crate::types::ArrayMap::new(),
+            attributes: crate::types::AttributeMap::new(),
+            nested_arrays: crate::types::NestedArrayMap::new(),
+            function_registry: Rc::new(FunctionRegistry::default()),
+            parent: None,
+        }
     }
 
     /// Sets a parameter (variable) in the context.
@@ -441,30 +468,32 @@ impl EvalContext {
     ) -> Result<ExpressionValidationReport, crate::error::ExprError> {
         // In arena-based architecture, we need to create a temporary arena for validation
         let param_names: Vec<String> = params.iter().map(|&s| s.to_string()).collect();
-        
+
         // Create a temporary arena for validation parsing
         let validation_arena = bumpalo::Bump::new();
         let parse_result = crate::engine::parse_expression_with_parameters(
-            expression, 
-            &validation_arena, 
-            &param_names
+            expression,
+            &validation_arena,
+            &param_names,
         );
-        
+
         let mut report = match parse_result {
             Ok(ast) => {
                 let mut report = ExpressionValidationReport::new_syntax_valid();
-                
+
                 if validate_semantics {
                     report.semantic_validated = true;
                     // Perform semantic validation on the AST
                     self.validate_expression_semantics(&ast, &param_names, &mut report);
                 }
-                
+
                 report
             }
             Err(err) => {
                 // If syntax parsing failed, return the report but don't register
-                return Ok(ExpressionValidationReport::new_syntax_error(err.to_string()));
+                return Ok(ExpressionValidationReport::new_syntax_error(
+                    err.to_string(),
+                ));
             }
         };
 
@@ -505,7 +534,7 @@ impl EvalContext {
 
         // Track which parameters are used
         let mut used_params = BTreeSet::new();
-        
+
         // Recursive function to validate AST nodes
         fn validate_node(
             node: &AstExpr,
@@ -519,11 +548,13 @@ impl EvalContext {
                     let name_str = name.to_string();
                     if param_names.contains(&name_str) {
                         used_params.insert(name_str);
-                    } else if ctx.get_variable(&name_str).is_none() 
-                           && ctx.get_constant(&name_str).is_none() {
+                    } else if ctx.get_variable(&name_str).is_none()
+                        && ctx.get_constant(&name_str).is_none()
+                    {
                         // Check if it's a function used without arguments
-                        if ctx.get_native_function(&name_str).is_some() 
-                            || ctx.get_expression_function(&name_str).is_some() {
+                        if ctx.get_native_function(&name_str).is_some()
+                            || ctx.get_expression_function(&name_str).is_some()
+                        {
                             // This will be caught as "function used without arguments" during eval
                         } else {
                             report.undefined_variables.push(name_str);
@@ -532,9 +563,10 @@ impl EvalContext {
                 }
                 AstExpr::Function { name, args } => {
                     let name_str = name.to_string();
-                    
+
                     // Check if function exists and validate arity
-                    let expected_arity = if let Some(native_fn) = ctx.get_native_function(&name_str) {
+                    let expected_arity = if let Some(native_fn) = ctx.get_native_function(&name_str)
+                    {
                         Some(native_fn.arity)
                     } else if let Some(expr_fn) = ctx.get_expression_function(&name_str) {
                         Some(expr_fn.params.len())
@@ -544,10 +576,9 @@ impl EvalContext {
                         {
                             match name_str.as_str() {
                                 // Single argument functions
-                                "sin" | "cos" | "tan" | "asin" | "acos" | "atan" |
-                                "sinh" | "cosh" | "tanh" | "exp" | "ln" | "log" | 
-                                "log10" | "sqrt" | "ceil" | "floor" | "round" | 
-                                "abs" | "sign" => Some(1),
+                                "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "sinh"
+                                | "cosh" | "tanh" | "exp" | "ln" | "log" | "log10" | "sqrt"
+                                | "ceil" | "floor" | "round" | "abs" | "sign" => Some(1),
                                 // Two argument functions
                                 "pow" | "atan2" | "min" | "max" | "fmod" => Some(2),
                                 // Zero argument functions
@@ -564,13 +595,15 @@ impl EvalContext {
                             None
                         }
                     };
-                    
+
                     if let Some(expected) = expected_arity {
                         if args.len() != expected {
-                            report.arity_warnings.push((name_str, args.len(), Some(expected)));
+                            report
+                                .arity_warnings
+                                .push((name_str, args.len(), Some(expected)));
                         }
                     }
-                    
+
                     // Validate arguments
                     for arg in args.iter() {
                         validate_node(arg, ctx, param_names, used_params, report);
@@ -580,7 +613,11 @@ impl EvalContext {
                     validate_node(left, ctx, param_names, used_params, report);
                     validate_node(right, ctx, param_names, used_params, report);
                 }
-                AstExpr::Conditional { condition, true_branch, false_branch } => {
+                AstExpr::Conditional {
+                    condition,
+                    true_branch,
+                    false_branch,
+                } => {
                     validate_node(condition, ctx, param_names, used_params, report);
                     validate_node(true_branch, ctx, param_names, used_params, report);
                     validate_node(false_branch, ctx, param_names, used_params, report);
@@ -595,8 +632,9 @@ impl EvalContext {
                     let base_str = base.to_string();
                     if param_names.contains(&base_str) {
                         used_params.insert(base_str);
-                    } else if ctx.get_variable(&base_str).is_none() 
-                           && ctx.get_constant(&base_str).is_none() {
+                    } else if ctx.get_variable(&base_str).is_none()
+                        && ctx.get_constant(&base_str).is_none()
+                    {
                         report.undefined_variables.push(base_str);
                     }
                 }
@@ -605,10 +643,10 @@ impl EvalContext {
                 }
             }
         }
-        
+
         // Validate the AST
         validate_node(ast, self, param_names, &mut used_params, report);
-        
+
         // Check for unused parameters
         for param in param_names {
             if !used_params.contains(param) {
@@ -691,7 +729,7 @@ impl EvalContext {
     /// AST caching has been removed in the arena-based implementation.
     /// The arena architecture provides better performance characteristics
     /// without the need for explicit caching.
-
+    ///
     /// Disables AST caching and clears the cache.
     ///
     /// This is useful if you want to free up memory or if you want to force
@@ -701,9 +739,9 @@ impl EvalContext {
     ///
     /// AST caching has been removed in the arena-based implementation.
     /// This functionality is no longer available.
-
+    ///
     /// Clear the AST cache if enabled.
-
+    ///
     /// Registers all built-in math functions as native functions in the context.
     ///
     /// # Usage
@@ -722,7 +760,7 @@ impl EvalContext {
     /// If the `libm` feature is enabled, this will use the libm implementations.
     /// Otherwise, it will use the standard library implementation which is not available
     /// in `no_std` environments.
-
+    ///
     /// Enables default math functions for this context.
     ///
     /// Alias for `register_default_math_functions()`.
@@ -732,34 +770,49 @@ impl EvalContext {
 
     /// Registers all built-in math functions as native functions in the context.
     pub fn register_default_math_functions(&mut self) {
-        // Register basic arithmetic operators and fundamental functions
-        // These are always available regardless of feature flags
-
         // Basic operators as functions
-        self.register_native_function("+", 2, |args| args[0] + args[1]);
-        self.register_native_function("-", 2, |args| args[0] - args[1]);
-        self.register_native_function("*", 2, |args| args[0] * args[1]);
-        self.register_native_function("/", 2, |args| args[0] / args[1]);
-        self.register_native_function("%", 2, |args| args[0] % args[1]);
+        let _ = self.register_native_function("+", 2, |args| args[0] + args[1]);
+        let _ = self.register_native_function("-", 2, |args| args[0] - args[1]);
+        let _ = self.register_native_function("*", 2, |args| args[0] * args[1]);
+        let _ = self.register_native_function("/", 2, |args| args[0] / args[1]);
+        let _ = self.register_native_function("%", 2, |args| args[0] % args[1]);
         // self.register_native_function("^", 2, |args| args[0].powf(args[1]));
 
         // Comparison operators
-        self.register_native_function("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
-        self.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
-        self.register_native_function("<=", 2, |args| if args[0] <= args[1] { 1.0 } else { 0.0 });
-        self.register_native_function(">=", 2, |args| if args[0] >= args[1] { 1.0 } else { 0.0 });
-        self.register_native_function("==", 2, |args| if args[0] == args[1] { 1.0 } else { 0.0 });
-        self.register_native_function("!=", 2, |args| if args[0] != args[1] { 1.0 } else { 0.0 });
+        let _ =
+            self.register_native_function("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
+        let _ =
+            self.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+        let _ = self.register_native_function(
+            "<=",
+            2,
+            |args| if args[0] <= args[1] { 1.0 } else { 0.0 },
+        );
+        let _ = self.register_native_function(
+            ">=",
+            2,
+            |args| if args[0] >= args[1] { 1.0 } else { 0.0 },
+        );
+        let _ = self.register_native_function(
+            "==",
+            2,
+            |args| if args[0] == args[1] { 1.0 } else { 0.0 },
+        );
+        let _ = self.register_native_function(
+            "!=",
+            2,
+            |args| if args[0] != args[1] { 1.0 } else { 0.0 },
+        );
 
         // Logical operators
-        self.register_native_function("&&", 2, |args| {
+        let _ = self.register_native_function("&&", 2, |args| {
             if args[0] != 0.0 && args[1] != 0.0 {
                 1.0
             } else {
                 0.0
             }
         });
-        self.register_native_function("||", 2, |args| {
+        let _ = self.register_native_function("||", 2, |args| {
             if args[0] != 0.0 || args[1] != 0.0 {
                 1.0
             } else {
@@ -768,23 +821,23 @@ impl EvalContext {
         });
 
         // Function aliases for the operators
-        self.register_native_function("add", 2, |args| args[0] + args[1]);
-        self.register_native_function("sub", 2, |args| args[0] - args[1]);
-        self.register_native_function("mul", 2, |args| args[0] * args[1]);
-        self.register_native_function("div", 2, |args| args[0] / args[1]);
-        self.register_native_function("fmod", 2, |args| args[0] % args[1]);
+        let _ = self.register_native_function("add", 2, |args| args[0] + args[1]);
+        let _ = self.register_native_function("sub", 2, |args| args[0] - args[1]);
+        let _ = self.register_native_function("mul", 2, |args| args[0] * args[1]);
+        let _ = self.register_native_function("div", 2, |args| args[0] / args[1]);
+        let _ = self.register_native_function("fmod", 2, |args| args[0] % args[1]);
         // self.register_native_function("pow", 2, |args| args[0].powf(args[1]));
-        self.register_native_function("neg", 1, |args| -args[0]);
+        let _ = self.register_native_function("neg", 1, |args| -args[0]);
 
         // Sequence operators
-        self.register_native_function(",", 2, |args| args[1]); // The actual comma operator
-        self.register_native_function("comma", 2, |args| args[1]); // Function alias for the comma operator
+        let _ = self.register_native_function(",", 2, |args| args[1]); // The actual comma operator
+        let _ = self.register_native_function("comma", 2, |args| args[1]); // Function alias for the comma operator
 
         // Simple functions available in core
-        self.register_native_function("abs", 1, |args| args[0].abs());
-        self.register_native_function("max", 2, |args| args[0].max(args[1]));
-        self.register_native_function("min", 2, |args| args[0].min(args[1]));
-        self.register_native_function("sign", 1, |args| {
+        let _ = self.register_native_function("abs", 1, |args| args[0].abs());
+        let _ = self.register_native_function("max", 2, |args| args[0].max(args[1]));
+        let _ = self.register_native_function("min", 2, |args| args[0].min(args[1]));
+        let _ = self.register_native_function("sign", 1, |args| {
             if args[0] > 0.0 {
                 1.0
             } else if args[0] < 0.0 {
@@ -798,36 +851,52 @@ impl EvalContext {
         #[cfg(feature = "f32")]
         self.register_native_function("e", 0, |_| core::f32::consts::E);
         #[cfg(not(feature = "f32"))]
-        self.register_native_function("e", 0, |_| core::f64::consts::E);
+        let _ = self.register_native_function("e", 0, |_| core::f64::consts::E);
 
         #[cfg(feature = "f32")]
         self.register_native_function("pi", 0, |_| core::f32::consts::PI);
         #[cfg(not(feature = "f32"))]
-        self.register_native_function("pi", 0, |_| core::f64::consts::PI);
+        let _ = self.register_native_function("pi", 0, |_| core::f64::consts::PI);
 
         // Register advanced math functions that require libm
         #[cfg(feature = "libm")]
         {
-            self.register_native_function("acos", 1, |args| crate::functions::acos(args[0], 0.0));
-            self.register_native_function("asin", 1, |args| crate::functions::asin(args[0], 0.0));
-            self.register_native_function("atan", 1, |args| crate::functions::atan(args[0], 0.0));
-            self.register_native_function("atan2", 2, |args| {
+            let _ = self
+                .register_native_function("acos", 1, |args| crate::functions::acos(args[0], 0.0));
+            let _ = self
+                .register_native_function("asin", 1, |args| crate::functions::asin(args[0], 0.0));
+            let _ = self
+                .register_native_function("atan", 1, |args| crate::functions::atan(args[0], 0.0));
+            let _ = self.register_native_function("atan2", 2, |args| {
                 crate::functions::atan2(args[0], args[1])
             });
-            self.register_native_function("ceil", 1, |args| crate::functions::ceil(args[0], 0.0));
-            self.register_native_function("cos", 1, |args| crate::functions::cos(args[0], 0.0));
-            self.register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
-            self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
-            self.register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
+            let _ = self
+                .register_native_function("ceil", 1, |args| crate::functions::ceil(args[0], 0.0));
+            let _ =
+                self.register_native_function("cos", 1, |args| crate::functions::cos(args[0], 0.0));
+            let _ = self
+                .register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
+            let _ =
+                self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
+            let _ = self
+                .register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
             // self.register_native_function("round", 1, |args| crate::functions::round(args[0], 0.0));
-            self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
-            self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
-            self.register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
-            self.register_native_function("sin", 1, |args| crate::functions::sin(args[0], 0.0));
-            self.register_native_function("sinh", 1, |args| crate::functions::sinh(args[0], 0.0));
-            self.register_native_function("sqrt", 1, |args| crate::functions::sqrt(args[0], 0.0));
-            self.register_native_function("tan", 1, |args| crate::functions::tan(args[0], 0.0));
-            self.register_native_function("tanh", 1, |args| crate::functions::tanh(args[0], 0.0));
+            let _ =
+                self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
+            let _ =
+                self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
+            let _ = self
+                .register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
+            let _ =
+                self.register_native_function("sin", 1, |args| crate::functions::sin(args[0], 0.0));
+            let _ = self
+                .register_native_function("sinh", 1, |args| crate::functions::sinh(args[0], 0.0));
+            let _ = self
+                .register_native_function("sqrt", 1, |args| crate::functions::sqrt(args[0], 0.0));
+            let _ =
+                self.register_native_function("tan", 1, |args| crate::functions::tan(args[0], 0.0));
+            let _ = self
+                .register_native_function("tanh", 1, |args| crate::functions::tanh(args[0], 0.0));
         }
 
         // In test mode without libm, provide std library implementations for the advanced math functions
@@ -986,7 +1055,6 @@ impl EvalContext {
         }
     }
 
-
     pub fn get_expression_function(&self, name: &str) -> Option<&crate::types::ExpressionFunction> {
         if let Ok(key) = name.try_into_function_name() {
             if let Some(f) = self.function_registry.expression_functions.get(&key) {
@@ -999,6 +1067,58 @@ impl EvalContext {
         } else {
             None
         }
+    }
+
+    /// Get a list of all native function names in this context (including parent contexts)
+    pub fn list_native_functions(&self) -> Vec<String> {
+        let mut functions = Vec::new();
+        let mut seen = alloc::collections::BTreeSet::new();
+
+        // Collect from current context
+        for (name, _) in self.function_registry.native_functions.iter() {
+            let name_str = name.to_string();
+            if seen.insert(name_str.clone()) {
+                functions.push(name_str);
+            }
+        }
+
+        // Collect from parent contexts
+        if let Some(parent) = &self.parent {
+            for name in parent.list_native_functions() {
+                if seen.insert(name.clone()) {
+                    functions.push(name);
+                }
+            }
+        }
+
+        functions.sort();
+        functions
+    }
+
+    /// Get a list of all expression function names in this context (including parent contexts)
+    pub fn list_expression_functions(&self) -> Vec<String> {
+        let mut functions = Vec::new();
+        let mut seen = alloc::collections::BTreeSet::new();
+
+        // Collect from current context
+        for (name, _) in self.function_registry.expression_functions.iter() {
+            let name_str = name.to_string();
+            if seen.insert(name_str.clone()) {
+                functions.push(name_str);
+            }
+        }
+
+        // Collect from parent contexts
+        if let Some(parent) = &self.parent {
+            for name in parent.list_expression_functions() {
+                if seen.insert(name.clone()) {
+                    functions.push(name);
+                }
+            }
+        }
+
+        functions.sort();
+        functions
     }
 }
 
@@ -1040,7 +1160,6 @@ impl Default for EvalContext {
 }
 
 // Helper trait removed - heapless containers support Clone directly
-
 
 #[cfg(test)]
 mod tests {

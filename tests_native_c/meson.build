@@ -58,6 +58,12 @@ test_programs = {
   'test_panic_handler': {
     'sources': ['test_panic_handler.c'],
     'deps': [exp_rs_dep, m_dep]
+  },
+
+  # Empty context tests
+  'test_empty_context': {
+    'sources': ['test_empty_context.c'],
+    'deps': [exp_rs_dep, m_dep]
   }
 }
 

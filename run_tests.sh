@@ -92,20 +92,20 @@ check_reconfigure() {
 	local expected_test_native
 	local expected_qemu_tests
 	local needs_reconfigure=0
-	
+
 	# Get current configuration - meson configure shows values in the second column
 	# The output format is like: "  use_f32  true  Enable 32-bit..."
 	current_use_f32=$(cd "$BUILD_DIR" && meson configure | grep -E "^\s*use_f32" | awk '{print $2}')
 	current_test_native=$(cd "$BUILD_DIR" && meson configure | grep -E "^\s*test_native" | awk '{print $2}')
 	current_qemu_tests=$(cd "$BUILD_DIR" && meson configure | grep -E "^\s*enable_exprs_qemu_tests" | awk '{print $2}')
-	
+
 	# Determine expected values
 	if [ "$FLOAT_MODE" = "f32" ]; then
 		expected_use_f32="true"
 	else
 		expected_use_f32="false"
 	fi
-	
+
 	if [ "$TEST_TARGET" = "native" ]; then
 		expected_test_native="true"
 		expected_qemu_tests="false"
@@ -113,23 +113,23 @@ check_reconfigure() {
 		expected_test_native="false"
 		expected_qemu_tests="true"
 	fi
-	
+
 	# Check if reconfiguration is needed
 	if [ "$current_use_f32" != "$expected_use_f32" ]; then
 		echo "Float mode changed: current=$current_use_f32, expected=$expected_use_f32"
 		needs_reconfigure=1
 	fi
-	
+
 	if [ "$current_test_native" != "$expected_test_native" ]; then
 		echo "Test target changed: native tests current=$current_test_native, expected=$expected_test_native"
 		needs_reconfigure=1
 	fi
-	
+
 	if [ "$current_qemu_tests" != "$expected_qemu_tests" ]; then
 		echo "Test target changed: QEMU tests current=$current_qemu_tests, expected=$expected_qemu_tests"
 		needs_reconfigure=1
 	fi
-	
+
 	if [ "$needs_reconfigure" -eq 1 ]; then
 		echo ""
 		echo "Meson configuration needs to be updated for your selected options."
@@ -155,16 +155,16 @@ setup_meson() {
 	if [ "$1" = "--reconfigure" ]; then
 		reconfigure=true
 	fi
-	
+
 	local meson_args=()
-	
+
 	# Float mode
 	if [ "$FLOAT_MODE" = "f32" ]; then
 		meson_args+=("-Duse_f32=true")
 	else
 		meson_args+=("-Duse_f32=false")
 	fi
-	
+
 	# Test target
 	if [ "$TEST_TARGET" = "native" ]; then
 		meson_args+=("-Dtest_native=true")
@@ -174,7 +174,7 @@ setup_meson() {
 		meson_args+=("-Dtest_native=false")
 		meson_args+=("-Denable_exprs_qemu_tests=true")
 	fi
-	
+
 	if [ "$reconfigure" = true ]; then
 		meson setup --reconfigure "$BUILD_DIR" "${meson_args[@]}"
 	else
@@ -207,12 +207,12 @@ if [ "$LIST_TESTS" -eq 1 ]; then
 fi
 
 # Build the Rust library first
-echo "Building Rust library..."
-if [ "$FLOAT_MODE" = "f32" ]; then
-	cargo build --release --no-default-features --features="f32"
-else
-	cargo build --release # f64 mode (default)
-fi
+# echo "Building Rust library..."
+# if [ "$FLOAT_MODE" = "f32" ]; then
+# 	cargo build --release --no-default-features --features="f32"
+# else
+# 	cargo build --release # f64 mode (default)
+# fi
 
 # Compile the tests
 echo "Compiling $TEST_TARGET tests..."

@@ -41,6 +41,7 @@ if get_option('test_native')
       'build',
       cargo_profile_flag,
       '--features', ','.join(rust_features),
+      '--no-default-features',
       '--target-dir', meson.current_build_dir(),
       '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
       '--lib', '&&',
@@ -50,11 +51,10 @@ if get_option('test_native')
       '&&',
       'cp',
       meson.current_source_dir()
-      + '/target/'
+      + '/target/meson/'
       + cargo_profile
       + '/libexp_rs.a',
-      meson.current_build_dir()
-      + '/libexp_rs.a',
+      meson.current_build_dir() + '/libexp_rs.a',
     ],
     build_always_stale: false,
     build_by_default: false,
@@ -85,8 +85,7 @@ else
       + '/cortex-m7-strict/'
       + cargo_profile
       + '/libexp_rs.a',
-      meson.current_build_dir()
-      + '/libexp_rs.a',
+      meson.current_build_dir() + '/libexp_rs.a',
     ],
     build_always_stale: false,
     build_by_default: false,

@@ -409,6 +409,33 @@ pub extern "C" fn expr_context_new() -> *mut ExprContext {
     Box::into_raw(ctx) as *mut ExprContext
 }
 
+/// Create a new evaluation context without any pre-registered functions
+///
+/// This creates a context with no built-in functions or constants.
+/// Note that basic operators (+, -, *, /, %, <, >, <=, >=, ==, !=) are still
+/// available as they are handled by the parser, not the function registry.
+///
+/// # Returns
+/// Pointer to new empty context, or NULL on allocation failure
+///
+/// # Safety
+/// The returned pointer must be freed with expr_context_free()
+///
+/// # Example
+/// ```c
+/// ExprContext* ctx = expr_context_new_empty();
+/// // Must register all functions manually
+/// expr_context_add_function(ctx, "+", 2, add_func);
+/// expr_context_add_function(ctx, "*", 2, mul_func);
+/// ```
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_context_new_empty() -> *mut ExprContext {
+    let ctx = EvalContext::empty();
+    let ctx_rc = alloc::rc::Rc::new(ctx);
+    let ctx = Box::new(ctx_rc);
+    Box::into_raw(ctx) as *mut ExprContext
+}
+
 /// Free an evaluation context
 ///
 /// # Safety
@@ -421,6 +448,104 @@ pub extern "C" fn expr_context_free(ctx: *mut ExprContext) {
     }
     unsafe {
         let _ = Box::from_raw(ctx as *mut alloc::rc::Rc<EvalContext>);
+    }
+}
+
+/// Get the count of native functions in a context
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_context_native_function_count(ctx: *const ExprContext) -> usize {
+    if ctx.is_null() {
+        return 0;
+    }
+    
+    unsafe {
+        let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
+        ctx.list_native_functions().len()
+    }
+}
+
+/// Get the count of expression functions in a context
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_context_expression_function_count(ctx: *const ExprContext) -> usize {
+    if ctx.is_null() {
+        return 0;
+    }
+    
+    unsafe {
+        let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
+        ctx.list_expression_functions().len()
+    }
+}
+
+/// Get a native function name by index
+/// Returns the length of the name, or 0 if index is out of bounds
+/// If buffer is NULL, just returns the length needed
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_context_get_native_function_name(
+    ctx: *const ExprContext,
+    index: usize,
+    buffer: *mut u8,
+    buffer_size: usize,
+) -> usize {
+    if ctx.is_null() {
+        return 0;
+    }
+    
+    unsafe {
+        let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
+        let functions = ctx.list_native_functions();
+        
+        if index >= functions.len() {
+            return 0;
+        }
+        
+        let name = &functions[index];
+        let name_bytes = name.as_bytes();
+        
+        if buffer.is_null() {
+            return name_bytes.len();
+        }
+        
+        let copy_len = core::cmp::min(name_bytes.len(), buffer_size);
+        core::ptr::copy_nonoverlapping(name_bytes.as_ptr(), buffer, copy_len);
+        
+        name_bytes.len()
+    }
+}
+
+/// Get an expression function name by index
+/// Returns the length of the name, or 0 if index is out of bounds
+/// If buffer is NULL, just returns the length needed
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_context_get_expression_function_name(
+    ctx: *const ExprContext,
+    index: usize,
+    buffer: *mut u8,
+    buffer_size: usize,
+) -> usize {
+    if ctx.is_null() {
+        return 0;
+    }
+    
+    unsafe {
+        let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
+        let functions = ctx.list_expression_functions();
+        
+        if index >= functions.len() {
+            return 0;
+        }
+        
+        let name = &functions[index];
+        let name_bytes = name.as_bytes();
+        
+        if buffer.is_null() {
+            return name_bytes.len();
+        }
+        
+        let copy_len = core::cmp::min(name_bytes.len(), buffer_size);
+        core::ptr::copy_nonoverlapping(name_bytes.as_ptr(), buffer, copy_len);
+        
+        name_bytes.len()
     }
 }
 

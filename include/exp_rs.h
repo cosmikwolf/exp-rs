@@ -158,6 +158,29 @@ __attribute__((aligned(8))) void expr_free_error(char *ptr);
 __attribute__((aligned(8))) struct ExprContext *expr_context_new(void);
 
 /**
+ * Create a new evaluation context without any pre-registered functions
+ *
+ * This creates a context with no built-in functions or constants.
+ * Note that basic operators (+, -, *, /, %, <, >, <=, >=, ==, !=) are still
+ * available as they are handled by the parser, not the function registry.
+ *
+ * # Returns
+ * Pointer to new empty context, or NULL on allocation failure
+ *
+ * # Safety
+ * The returned pointer must be freed with expr_context_free()
+ *
+ * # Example
+ * ```c
+ * ExprContext* ctx = expr_context_new_empty();
+ * // Must register all functions manually
+ * expr_context_add_function(ctx, "+", 2, add_func);
+ * expr_context_add_function(ctx, "*", 2, mul_func);
+ * ```
+ */
+__attribute__((aligned(8))) struct ExprContext *expr_context_new_empty(void);
+
+/**
  * Free an evaluation context
  *
  * # Safety
@@ -165,6 +188,40 @@ __attribute__((aligned(8))) struct ExprContext *expr_context_new(void);
  * - The pointer must not be used after calling this function
  */
 __attribute__((aligned(8))) void expr_context_free(struct ExprContext *ctx);
+
+/**
+ * Get the count of native functions in a context
+ */
+__attribute__((aligned(8)))
+uintptr_t expr_context_native_function_count(const struct ExprContext *ctx);
+
+/**
+ * Get the count of expression functions in a context
+ */
+__attribute__((aligned(8)))
+uintptr_t expr_context_expression_function_count(const struct ExprContext *ctx);
+
+/**
+ * Get a native function name by index
+ * Returns the length of the name, or 0 if index is out of bounds
+ * If buffer is NULL, just returns the length needed
+ */
+__attribute__((aligned(8)))
+uintptr_t expr_context_get_native_function_name(const struct ExprContext *ctx,
+                                                uintptr_t index,
+                                                uint8_t *buffer,
+                                                uintptr_t buffer_size);
+
+/**
+ * Get an expression function name by index
+ * Returns the length of the name, or 0 if index is out of bounds
+ * If buffer is NULL, just returns the length needed
+ */
+__attribute__((aligned(8)))
+uintptr_t expr_context_get_expression_function_name(const struct ExprContext *ctx,
+                                                    uintptr_t index,
+                                                    uint8_t *buffer,
+                                                    uintptr_t buffer_size);
 
 /**
  * Add a native function to the context
