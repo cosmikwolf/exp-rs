@@ -79,9 +79,9 @@ test_programs = {
     'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
-  # Single evaluation profiler
-  'test_single_eval_profile': {
-    'sources': ['test_single_eval_profile.c'],
+  # Memory and arena analysis
+  'test_memory_analysis': {
+    'sources': ['test_memory_analysis.c'],
     'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   }
 }
@@ -116,7 +116,8 @@ run_target('test-performance',
 
 memory_tests = [
   'test_embedded_pool',
-  'test_memory_management'
+  'test_memory_management',
+  'test_memory_analysis'
 ]
 
 run_target('test-memory',

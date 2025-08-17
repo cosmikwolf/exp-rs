@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define EXP_RS_CUSTOM_ALLOC
+
 
 /**
  * FFI error codes (negative to distinguish from ExprError codes)
@@ -444,6 +444,18 @@ int32_t expr_batch_evaluate(struct ExprBatch *batch,
 __attribute__((aligned(8)))
 Real expr_batch_get_result(const struct ExprBatch *batch,
                            uintptr_t index);
+
+/**
+ * Get the high water mark of arena memory usage for a batch
+ *
+ * # Parameters
+ * - `batch`: The batch
+ *
+ * # Returns
+ * Number of bytes currently allocated in the batch's arena.
+ * This represents the maximum memory usage of the arena.
+ */
+__attribute__((aligned(8))) uintptr_t expr_batch_arena_bytes(const struct ExprBatch *batch);
 
 /**
  * Evaluate all expressions in the batch with detailed error reporting

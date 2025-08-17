@@ -44,7 +44,7 @@ pub struct Expression<'arena> {
 
     /// Reusable evaluation engine
     engine: EvalEngine<'arena>,
-    
+
     /// Optional arena-allocated expression functions (lazy-initialized)
     local_functions: Option<&'arena RefCell<crate::types::ExpressionFunctionMap>>,
 }
@@ -129,7 +129,7 @@ impl<'arena> Expression<'arena> {
 
         // Set parameter overrides in engine
         self.engine.set_param_overrides(param_map);
-        
+
         // Set local functions in engine
         self.engine.set_local_functions(self.local_functions);
 
@@ -180,20 +180,20 @@ impl<'arena> Expression<'arena> {
     pub fn get_param_by_name(&self, name: &str) -> Option<&Param> {
         self.params.iter().find(|p| p.name == name)
     }
-    
+
     // === Convenience Methods for Single Expression Use ===
-    
+
     /// Parse and create an Expression for a single expression
     ///
     /// This is a convenience constructor for single expression use cases.
-    /// 
+    ///
     /// # Example
     /// ```
     /// use bumpalo::Bump;
     /// use exp_rs::expression::Expression;
     /// use exp_rs::EvalContext;
     /// use std::rc::Rc;
-    /// 
+    ///
     /// let arena = Bump::new();
     /// let mut expr = Expression::parse("x^2 + y", &arena).unwrap();
     /// expr.add_parameter("x", 2.0).unwrap();
@@ -206,7 +206,7 @@ impl<'arena> Expression<'arena> {
         expression.add_expression(expr)?;
         Ok(expression)
     }
-    
+
     /// Evaluate a single expression without parameters
     ///
     /// This is the simplest way to evaluate an expression that doesn't need variables.
@@ -215,7 +215,7 @@ impl<'arena> Expression<'arena> {
     /// ```
     /// use bumpalo::Bump;
     /// use exp_rs::expression::Expression;
-    /// 
+    ///
     /// let arena = Bump::new();
     /// let result = Expression::eval_simple("2 + 3 * 4", &arena).unwrap();
     /// assert_eq!(result, 14.0);
@@ -224,7 +224,7 @@ impl<'arena> Expression<'arena> {
         let ctx = Rc::new(EvalContext::new());
         Self::eval_with_context(expr, &ctx, arena)
     }
-    
+
     /// Evaluate a single expression with context
     ///
     /// Use this when you have a context with pre-defined variables, constants, or functions.
@@ -234,21 +234,27 @@ impl<'arena> Expression<'arena> {
     /// use bumpalo::Bump;
     /// use exp_rs::{expression::Expression, EvalContext};
     /// use std::rc::Rc;
-    /// 
+    ///
     /// let arena = Bump::new();
     /// let mut ctx = EvalContext::new();
     /// ctx.set_parameter("x", 5.0);
-    /// 
+    ///
     /// let result = Expression::eval_with_context("x * 2", &Rc::new(ctx), &arena).unwrap();
     /// assert_eq!(result, 10.0);
     /// ```
-    pub fn eval_with_context(expr: &str, ctx: &Rc<EvalContext>, arena: &'arena Bump) -> Result<Real, ExprError> {
+    pub fn eval_with_context(
+        expr: &str,
+        ctx: &Rc<EvalContext>,
+        arena: &'arena Bump,
+    ) -> Result<Real, ExprError> {
         let mut expression = Self::new(arena);
         expression.add_expression(expr)?;
         expression.eval(ctx)?;
-        expression.get_result(0).ok_or(ExprError::Other("No result".to_string()))
+        expression
+            .get_result(0)
+            .ok_or(ExprError::Other("No result".to_string()))
     }
-    
+
     /// Evaluate a single expression with parameters
     ///
     /// This is convenient when you want to provide parameters inline without creating a context.
@@ -258,32 +264,34 @@ impl<'arena> Expression<'arena> {
     /// use bumpalo::Bump;
     /// use exp_rs::{expression::Expression, EvalContext};
     /// use std::rc::Rc;
-    /// 
+    ///
     /// let arena = Bump::new();
     /// let params = [("x", 3.0), ("y", 4.0)];
     /// let ctx = Rc::new(EvalContext::new());
-    /// 
+    ///
     /// let result = Expression::eval_with_params("x^2 + y^2", &params, &ctx, &arena).unwrap();
     /// assert_eq!(result, 25.0); // 3^2 + 4^2 = 25
     /// ```
     pub fn eval_with_params(
-        expr: &str, 
-        params: &[(&str, Real)], 
-        ctx: &Rc<EvalContext>, 
-        arena: &'arena Bump
+        expr: &str,
+        params: &[(&str, Real)],
+        ctx: &Rc<EvalContext>,
+        arena: &'arena Bump,
     ) -> Result<Real, ExprError> {
         let mut expression = Self::new(arena);
-        
+
         // Add all parameters
         for (name, value) in params {
             expression.add_parameter(name, *value)?;
         }
-        
+
         expression.add_expression(expr)?;
         expression.eval(ctx)?;
-        expression.get_result(0).ok_or(ExprError::Other("No result".to_string()))
+        expression
+            .get_result(0)
+            .ok_or(ExprError::Other("No result".to_string()))
     }
-    
+
     /// For single expression mode - evaluate and return result directly
     ///
     /// This method assumes you've already added exactly one expression and returns
@@ -294,23 +302,26 @@ impl<'arena> Expression<'arena> {
     /// use bumpalo::Bump;
     /// use exp_rs::{expression::Expression, EvalContext};
     /// use std::rc::Rc;
-    /// 
+    ///
     /// let arena = Bump::new();
     /// let mut expr = Expression::parse("x + 1", &arena).unwrap();
     /// expr.add_parameter("x", 5.0).unwrap();
-    /// 
+    ///
     /// let result = expr.eval_single(&Rc::new(EvalContext::new())).unwrap();
     /// assert_eq!(result, 6.0);
     /// ```
     pub fn eval_single(&mut self, ctx: &Rc<EvalContext>) -> Result<Real, ExprError> {
         if self.expressions.len() != 1 {
-            return Err(ExprError::Other("eval_single requires exactly one expression".to_string()));
+            return Err(ExprError::Other(
+                "eval_single requires exactly one expression".to_string(),
+            ));
         }
-        
+
         self.eval(ctx)?;
-        self.get_result(0).ok_or(ExprError::Other("No result".to_string()))
+        self.get_result(0)
+            .ok_or(ExprError::Other("No result".to_string()))
     }
-    
+
     /// Convenience setter using string slices
     ///
     /// This is an alias for set_param_by_name with a shorter name for convenience.
@@ -319,7 +330,7 @@ impl<'arena> Expression<'arena> {
     /// ```
     /// use bumpalo::Bump;
     /// use exp_rs::expression::Expression;
-    /// 
+    ///
     /// let arena = Bump::new();
     /// let mut expr = Expression::new(&arena);
     /// expr.add_parameter("x", 0.0).unwrap();
@@ -328,7 +339,7 @@ impl<'arena> Expression<'arena> {
     pub fn set(&mut self, name: &str, value: Real) -> Result<(), ExprError> {
         self.set_param_by_name(name, value)
     }
-    
+
     /// Register a local expression function for this batch
     ///
     /// Expression functions are mathematical expressions that can call other functions.
@@ -343,21 +354,26 @@ impl<'arena> Expression<'arena> {
     /// ```
     /// use bumpalo::Bump;
     /// use exp_rs::expression::Expression;
-    /// 
+    ///
     /// let arena = Bump::new();
     /// let mut expr = Expression::new(&arena);
-    /// expr.register_expression_function("distance", &["x1", "y1", "x2", "y2"], 
+    /// expr.register_expression_function("distance", &["x1", "y1", "x2", "y2"],
     ///                                   "sqrt((x2-x1)^2 + (y2-y1)^2)").unwrap();
     /// ```
-    pub fn register_expression_function(&mut self, name: &str, params: &[&str], body: &str) -> Result<(), ExprError> {
+    pub fn register_expression_function(
+        &mut self,
+        name: &str,
+        params: &[&str],
+        body: &str,
+    ) -> Result<(), ExprError> {
         use crate::types::{ExpressionFunction, ExpressionFunctionMap, TryIntoFunctionName};
-        
+
         // Lazy initialization - only allocate map when first function is added
         if self.local_functions.is_none() {
             let map = self.arena.alloc(RefCell::new(ExpressionFunctionMap::new()));
             self.local_functions = Some(map);
         }
-        
+
         // Create the function
         let func_name = name.try_into_function_name()?;
         let expr_func = ExpressionFunction {
@@ -366,14 +382,16 @@ impl<'arena> Expression<'arena> {
             expression: body.to_string(),
             description: None,
         };
-        
+
         // Add to map through RefCell
-        self.local_functions.unwrap().borrow_mut()
+        self.local_functions
+            .unwrap()
+            .borrow_mut()
             .insert(func_name, expr_func)
             .map_err(|_| ExprError::Other("Too many expression functions".to_string()))?;
         Ok(())
     }
-    
+
     /// Remove a local expression function from this batch
     ///
     /// # Arguments
@@ -385,7 +403,7 @@ impl<'arena> Expression<'arena> {
     /// * `Err` if the name is invalid
     pub fn unregister_expression_function(&mut self, name: &str) -> Result<bool, ExprError> {
         use crate::types::TryIntoFunctionName;
-        
+
         if let Some(map) = self.local_functions {
             let func_name = name.try_into_function_name()?;
             Ok(map.borrow_mut().remove(&func_name).is_some())
@@ -416,7 +434,7 @@ pub struct ArenaBatchBuilder<'arena> {
 
     /// Reusable evaluation engine
     engine: EvalEngine<'arena>,
-    
+
     /// Optional arena-allocated expression functions (lazy-initialized)
     local_functions: Option<&'arena RefCell<crate::types::ExpressionFunctionMap>>,
 }
@@ -505,7 +523,7 @@ impl<'arena> ArenaBatchBuilder<'arena> {
 
         // Set parameter overrides in engine
         self.engine.set_param_overrides(param_map);
-        
+
         // Set local functions in engine
         self.engine.set_local_functions(self.local_functions);
 
@@ -546,7 +564,7 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     pub fn expression_count(&self) -> usize {
         self.expressions.len()
     }
-    
+
     /// Register a local expression function for this batch
     ///
     /// Expression functions are mathematical expressions that can call other functions.
@@ -556,15 +574,20 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     /// * `name` - Function name
     /// * `params` - Parameter names
     /// * `body` - Expression string defining the function
-    pub fn register_expression_function(&mut self, name: &str, params: &[&str], body: &str) -> Result<(), ExprError> {
+    pub fn register_expression_function(
+        &mut self,
+        name: &str,
+        params: &[&str],
+        body: &str,
+    ) -> Result<(), ExprError> {
         use crate::types::{ExpressionFunction, ExpressionFunctionMap, TryIntoFunctionName};
-        
+
         // Lazy initialization - only allocate map when first function is added
         if self.local_functions.is_none() {
             let map = self.arena.alloc(RefCell::new(ExpressionFunctionMap::new()));
             self.local_functions = Some(map);
         }
-        
+
         // Create the function
         let func_name = name.try_into_function_name()?;
         let expr_func = ExpressionFunction {
@@ -573,14 +596,16 @@ impl<'arena> ArenaBatchBuilder<'arena> {
             expression: body.to_string(),
             description: None,
         };
-        
+
         // Add to map through RefCell
-        self.local_functions.unwrap().borrow_mut()
+        self.local_functions
+            .unwrap()
+            .borrow_mut()
             .insert(func_name, expr_func)
             .map_err(|_| ExprError::Other("Too many expression functions".to_string()))?;
         Ok(())
     }
-    
+
     /// Remove a local expression function from this batch
     ///
     /// # Arguments
@@ -592,13 +617,18 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     /// * `Err` if the name is invalid
     pub fn unregister_expression_function(&mut self, name: &str) -> Result<bool, ExprError> {
         use crate::types::TryIntoFunctionName;
-        
+
         if let Some(map) = self.local_functions {
             let func_name = name.try_into_function_name()?;
             Ok(map.borrow_mut().remove(&func_name).is_some())
         } else {
             Ok(false)
         }
+    }
+
+    /// Get the current number of bytes allocated in the arena
+    pub fn arena_allocated_bytes(&self) -> usize {
+        self.arena.allocated_bytes()
     }
 }
 
@@ -607,44 +637,47 @@ mod tests {
     use super::*;
     use bumpalo::Bump;
     use proptest::prelude::*;
-    
+
     #[test]
     fn test_local_expression_functions() {
         let arena = Bump::new();
         let mut expr = Expression::new(&arena);
-        
+
         // Register a local function
-        expr.register_expression_function("double", &["x"], "x * 2").unwrap();
-        expr.register_expression_function("add_one", &["x"], "x + 1").unwrap();
-        
+        expr.register_expression_function("double", &["x"], "x * 2")
+            .unwrap();
+        expr.register_expression_function("add_one", &["x"], "x + 1")
+            .unwrap();
+
         // Use the functions in expressions
         expr.add_expression("double(5)").unwrap();
         expr.add_expression("add_one(10)").unwrap();
         expr.add_expression("double(add_one(3))").unwrap(); // Nested
-        
+
         // Evaluate
         let ctx = Rc::new(EvalContext::new());
         expr.eval(&ctx).unwrap();
-        
+
         // Check results
         assert_eq!(expr.get_result(0), Some(10.0)); // double(5) = 10
         assert_eq!(expr.get_result(1), Some(11.0)); // add_one(10) = 11
-        assert_eq!(expr.get_result(2), Some(8.0));  // double(add_one(3)) = double(4) = 8
-        
+        assert_eq!(expr.get_result(2), Some(8.0)); // double(add_one(3)) = double(4) = 8
+
         // Test removing a function
         assert!(expr.unregister_expression_function("double").unwrap());
         assert!(!expr.unregister_expression_function("double").unwrap()); // Already removed
     }
-    
+
     #[test]
     fn test_local_functions_override_context() {
         let arena = Bump::new();
-        
+
         // Create context with a function
         let mut ctx = EvalContext::new();
-        ctx.register_expression_function("calc", &["x"], "x * 2").unwrap();
+        ctx.register_expression_function("calc", &["x"], "x * 2")
+            .unwrap();
         let ctx = Rc::new(ctx);
-        
+
         // Test 1: Use context function
         {
             let mut expr = Expression::new(&arena);
@@ -652,12 +685,13 @@ mod tests {
             expr.eval(&ctx).unwrap();
             assert_eq!(expr.get_result(0), Some(10.0)); // x * 2 = 10
         }
-        
+
         // Test 2: Local function overrides context function
         {
             let mut expr = Expression::new(&arena);
             // Register local function with same name (should override)
-            expr.register_expression_function("calc", &["x"], "x * 3").unwrap();
+            expr.register_expression_function("calc", &["x"], "x * 3")
+                .unwrap();
             expr.add_expression("calc(5)").unwrap();
             expr.eval(&ctx).unwrap();
             assert_eq!(expr.get_result(0), Some(15.0)); // x * 3 = 15
@@ -706,18 +740,21 @@ mod tests {
 
         assert!(matches!(result, Err(ExprError::DuplicateParameter(_))));
     }
-    
+
     // === Tests for Convenience Methods ===
-    
+
     #[test]
     fn test_eval_simple() {
         let arena = Bump::new();
-        
+
         // Test basic arithmetic
         assert_eq!(Expression::eval_simple("2 + 3 * 4", &arena).unwrap(), 14.0);
-        assert_eq!(Expression::eval_simple("(2 + 3) * 4", &arena).unwrap(), 20.0);
+        assert_eq!(
+            Expression::eval_simple("(2 + 3) * 4", &arena).unwrap(),
+            20.0
+        );
         assert_eq!(Expression::eval_simple("10 / 2 - 3", &arena).unwrap(), 2.0);
-        
+
         // Test with constants
         #[cfg(feature = "libm")]
         {
@@ -725,66 +762,78 @@ mod tests {
             assert!(Expression::eval_simple("e", &arena).unwrap() - std::f64::consts::E < 0.0001);
         }
     }
-    
+
     #[test]
     fn test_parse() {
         let arena = Bump::new();
         let ctx = Rc::new(EvalContext::new());
-        
+
         // Test parsing various expressions
         let mut expr = Expression::parse("2 + 3", &arena).unwrap();
         assert_eq!(expr.eval_single(&ctx).unwrap(), 5.0);
-        
+
         // Test with variables (should fail without parameters)
         let mut expr_with_var = Expression::parse("x + 1", &arena).unwrap();
         assert!(expr_with_var.eval_single(&ctx).is_err());
-        
+
         // Add parameter and try again
         expr_with_var.add_parameter("x", 5.0).unwrap();
         assert_eq!(expr_with_var.eval_single(&ctx).unwrap(), 6.0);
     }
-    
+
     #[test]
     fn test_eval_with_context() {
         let arena = Bump::new();
         let mut ctx = EvalContext::new();
-        
+
         // Add some variables to context
         ctx.set_parameter("x", 10.0);
         ctx.set_parameter("y", 20.0);
-        
+
         let ctx_rc = Rc::new(ctx);
-        
+
         // Test evaluation with context variables
-        assert_eq!(Expression::eval_with_context("x + y", &ctx_rc, &arena).unwrap(), 30.0);
-        assert_eq!(Expression::eval_with_context("x * 2 + y / 2", &ctx_rc, &arena).unwrap(), 30.0);
-        
+        assert_eq!(
+            Expression::eval_with_context("x + y", &ctx_rc, &arena).unwrap(),
+            30.0
+        );
+        assert_eq!(
+            Expression::eval_with_context("x * 2 + y / 2", &ctx_rc, &arena).unwrap(),
+            30.0
+        );
+
         // Test with functions if available
         #[cfg(feature = "libm")]
         {
-            assert_eq!(Expression::eval_with_context("sin(0)", &ctx_rc, &arena).unwrap(), 0.0);
-            assert_eq!(Expression::eval_with_context("cos(0)", &ctx_rc, &arena).unwrap(), 1.0);
+            assert_eq!(
+                Expression::eval_with_context("sin(0)", &ctx_rc, &arena).unwrap(),
+                0.0
+            );
+            assert_eq!(
+                Expression::eval_with_context("cos(0)", &ctx_rc, &arena).unwrap(),
+                1.0
+            );
         }
     }
-    
+
     #[test]
     fn test_eval_with_params() {
         let arena = Bump::new();
         let ctx = Rc::new(EvalContext::new());
-        
+
         // Test with simple parameters
         let params = [("x", 3.0), ("y", 4.0)];
         assert_eq!(
             Expression::eval_with_params("x + y", &params, &ctx, &arena).unwrap(),
             7.0
         );
-        
+
         // Test with complex expression
         assert_eq!(
             Expression::eval_with_params("x^2 + y^2", &params, &ctx, &arena).unwrap(),
             25.0
         );
-        
+
         // Test with multiple parameters
         let params3 = [("a", 2.0), ("b", 3.0), ("c", 5.0)];
         assert_eq!(
@@ -792,191 +841,192 @@ mod tests {
             11.0
         );
     }
-    
+
     #[test]
     fn test_eval_single() {
         let arena = Bump::new();
         let ctx = Rc::new(EvalContext::new());
-        
+
         // Test basic usage
         let mut expr = Expression::parse("x^2 + 1", &arena).unwrap();
         expr.add_parameter("x", 3.0).unwrap();
         assert_eq!(expr.eval_single(&ctx).unwrap(), 10.0);
-        
+
         // Test updating parameter
         expr.set("x", 4.0).unwrap();
         assert_eq!(expr.eval_single(&ctx).unwrap(), 17.0);
-        
+
         // Test error when multiple expressions
         let mut multi_expr = Expression::new(&arena);
         multi_expr.add_expression("x + 1").unwrap();
         multi_expr.add_expression("x * 2").unwrap();
         assert!(multi_expr.eval_single(&ctx).is_err());
     }
-    
+
     #[test]
     fn test_set_convenience_method() {
         let arena = Bump::new();
         let ctx = Rc::new(EvalContext::new());
-        
+
         let mut expr = Expression::parse("a + b", &arena).unwrap();
         expr.add_parameter("a", 1.0).unwrap();
         expr.add_parameter("b", 2.0).unwrap();
-        
+
         // Test initial evaluation
         assert_eq!(expr.eval_single(&ctx).unwrap(), 3.0);
-        
+
         // Test using set method
         expr.set("a", 5.0).unwrap();
         assert_eq!(expr.eval_single(&ctx).unwrap(), 7.0);
-        
+
         expr.set("b", 10.0).unwrap();
         assert_eq!(expr.eval_single(&ctx).unwrap(), 15.0);
-        
+
         // Test error on unknown parameter
         assert!(expr.set("c", 100.0).is_err());
     }
-    
+
     #[test]
     fn test_parameter_management() {
         let arena = Bump::new();
-        
+
         let mut expr = Expression::new(&arena);
-        
+
         // Test adding parameters
         let idx0 = expr.add_parameter("x", 1.0).unwrap();
         let idx1 = expr.add_parameter("y", 2.0).unwrap();
         let idx2 = expr.add_parameter("z", 3.0).unwrap();
-        
+
         assert_eq!(idx0, 0);
         assert_eq!(idx1, 1);
         assert_eq!(idx2, 2);
         assert_eq!(expr.param_count(), 3);
-        
+
         // Test getting parameters
         assert_eq!(expr.get_param(0).unwrap().name, "x");
         assert_eq!(expr.get_param(0).unwrap().value, 1.0);
-        
+
         assert_eq!(expr.get_param_by_name("y").unwrap().name, "y");
         assert_eq!(expr.get_param_by_name("y").unwrap().value, 2.0);
-        
+
         // Test updating by index
         expr.set_param(0, 10.0).unwrap();
         assert_eq!(expr.get_param(0).unwrap().value, 10.0);
-        
+
         // Test updating by name
         expr.set_param_by_name("z", 30.0).unwrap();
         assert_eq!(expr.get_param_by_name("z").unwrap().value, 30.0);
-        
+
         // Test invalid operations
         assert!(expr.set_param(10, 100.0).is_err());
         assert!(expr.set_param_by_name("nonexistent", 100.0).is_err());
         assert!(expr.get_param(10).is_none());
         assert!(expr.get_param_by_name("nonexistent").is_none());
     }
-    
+
     #[test]
     fn test_expression_management() {
         let arena = Bump::new();
         let ctx = Rc::new(EvalContext::new());
-        
+
         let mut expr = Expression::new(&arena);
-        
+
         // Add multiple expressions
         let idx0 = expr.add_expression("1 + 2").unwrap();
         let idx1 = expr.add_expression("3 * 4").unwrap();
         let idx2 = expr.add_expression("5 - 6").unwrap();
-        
+
         assert_eq!(idx0, 0);
         assert_eq!(idx1, 1);
         assert_eq!(idx2, 2);
         assert_eq!(expr.expression_count(), 3);
-        
+
         // Evaluate all
         expr.eval(&ctx).unwrap();
-        
+
         // Check results
         assert_eq!(expr.get_result(0), Some(3.0));
         assert_eq!(expr.get_result(1), Some(12.0));
         assert_eq!(expr.get_result(2), Some(-1.0));
-        
+
         // Test get_all_results
         let all_results = expr.get_all_results();
         assert_eq!(all_results.len(), 3);
         assert_eq!(all_results[0], 3.0);
         assert_eq!(all_results[1], 12.0);
         assert_eq!(all_results[2], -1.0);
-        
+
         // Test invalid index
         assert_eq!(expr.get_result(10), None);
     }
-    
+
     #[test]
     fn test_complex_expressions_with_params() {
         let arena = Bump::new();
         let mut ctx = EvalContext::new();
-        
+
         // Register a custom function
-        ctx.register_expression_function("quad", &["a", "b", "c", "x"], "a*x^2 + b*x + c").unwrap();
+        ctx.register_expression_function("quad", &["a", "b", "c", "x"], "a*x^2 + b*x + c")
+            .unwrap();
         let ctx_rc = Rc::new(ctx);
-        
+
         let mut expr = Expression::parse("quad(1, -3, 2, t)", &arena).unwrap();
         expr.add_parameter("t", 0.0).unwrap();
-        
+
         // Test quadratic at different points
         let test_points = [(0.0, 2.0), (1.0, 0.0), (2.0, 0.0), (3.0, 2.0)];
-        
+
         for (t_val, expected) in test_points {
             expr.set("t", t_val).unwrap();
             assert_eq!(expr.eval_single(&ctx_rc).unwrap(), expected);
         }
     }
-    
+
     // === Property-based tests ===
-    
+
     proptest! {
         #[test]
         fn prop_eval_simple_arithmetic_properties(a in -1000.0..1000.0f64, b in -1000.0..1000.0f64) {
             let arena = Bump::new();
-            
+
             // Test commutativity of addition
             let add1 = Expression::eval_simple(&format!("{} + {}", a, b), &arena).unwrap();
             let add2 = Expression::eval_simple(&format!("{} + {}", b, a), &arena).unwrap();
             prop_assert!((add1 - add2).abs() < 1e-10);
-            
+
             // Test commutativity of multiplication
             let mul1 = Expression::eval_simple(&format!("{} * {}", a, b), &arena).unwrap();
             let mul2 = Expression::eval_simple(&format!("{} * {}", b, a), &arena).unwrap();
             prop_assert!((mul1 - mul2).abs() < 1e-10);
-            
+
             // Test identity properties
             let id_add = Expression::eval_simple(&format!("{} + 0", a), &arena).unwrap();
             prop_assert!((id_add - a).abs() < 1e-10);
-            
+
             let id_mul = Expression::eval_simple(&format!("{} * 1", a), &arena).unwrap();
             prop_assert!((id_mul - a).abs() < 1e-10);
         }
-        
+
         #[test]
         fn prop_parameter_names(name in "[a-zA-Z][a-zA-Z0-9_]{0,15}") {
             let arena = Bump::new();
             let mut expr = Expression::new(&arena);
-            
+
             // Valid parameter names should work
             let result = expr.add_parameter(&name, 42.0);
             prop_assert!(result.is_ok());
-            
+
             // Duplicate names should fail
             let duplicate = expr.add_parameter(&name, 100.0);
             prop_assert!(matches!(duplicate, Err(ExprError::DuplicateParameter(_))));
-            
+
             // Should be able to get and set by name
             prop_assert_eq!(expr.get_param_by_name(&name).unwrap().value, 42.0);
-            
+
             expr.set(&name, 123.0).unwrap();
             prop_assert_eq!(expr.get_param_by_name(&name).unwrap().value, 123.0);
         }
-        
+
         #[test]
         fn prop_eval_with_random_params(
             num_params in 1..5usize,
@@ -984,32 +1034,32 @@ mod tests {
         ) {
             let arena = Bump::new();
             let ctx = Rc::new(EvalContext::new());
-            
+
             // Generate unique parameter names
             let params: Vec<(String, f64)> = values.iter()
                 .take(num_params)
                 .enumerate()
                 .map(|(i, val)| (format!("p{}", i), *val))
                 .collect();
-            
+
             // Build expression that sums all parameters
             let param_names: Vec<String> = params.iter().map(|(name, _)| name.clone()).collect();
             let expr_str = param_names.join(" + ");
-            
+
             // Calculate expected sum
             let expected: f64 = params.iter().map(|(_, val)| val).sum();
-            
+
             // Evaluate using eval_with_params
             let param_refs: Vec<(&str, f64)> = params.iter()
                 .map(|(name, val)| (name.as_str(), *val))
                 .collect();
-            
+
             if !params.is_empty() {
                 let result = Expression::eval_with_params(&expr_str, &param_refs, &ctx, &arena).unwrap();
                 prop_assert!((result - expected).abs() < 1e-10);
             }
         }
-        
+
         #[test]
         fn prop_expression_evaluation_consistency(
             a in -100.0..100.0f64,
@@ -1018,33 +1068,33 @@ mod tests {
         ) {
             let arena = Bump::new();
             let ctx = Rc::new(EvalContext::new());
-            
+
             // Test that different evaluation methods give same results
             let expr_str = "a * b + c";
-            
+
             // Method 1: eval_with_params
             let params = [("a", a), ("b", b), ("c", c)];
             let result1 = Expression::eval_with_params(expr_str, &params, &ctx, &arena).unwrap();
-            
+
             // Method 2: parse + add_parameter + eval_single
             let mut expr = Expression::parse(expr_str, &arena).unwrap();
             expr.add_parameter("a", a).unwrap();
             expr.add_parameter("b", b).unwrap();
             expr.add_parameter("c", c).unwrap();
             let result2 = expr.eval_single(&ctx).unwrap();
-            
+
             // Method 3: eval_with_context (after setting up context)
             let mut ctx2 = EvalContext::new();
             ctx2.set_parameter("a", a);
             ctx2.set_parameter("b", b);
             ctx2.set_parameter("c", c);
             let result3 = Expression::eval_with_context(expr_str, &Rc::new(ctx2), &arena).unwrap();
-            
+
             // All methods should give the same result
             prop_assert!((result1 - result2).abs() < 1e-10);
             prop_assert!((result2 - result3).abs() < 1e-10);
         }
-        
+
         #[test]
         fn prop_parameter_updates(
             initial_vals in prop::collection::vec(-100.0..100.0f64, 3..10),
@@ -1053,12 +1103,12 @@ mod tests {
         ) {
             let arena = Bump::new();
             let mut expr = Expression::new(&arena);
-            
+
             // Add parameters with initial values
             for (i, val) in initial_vals.iter().enumerate() {
                 expr.add_parameter(&format!("p{}", i), *val).unwrap();
             }
-            
+
             // Apply updates and verify
             for (idx, val) in update_indices.iter().zip(update_vals.iter()) {
                 if *idx < initial_vals.len() {
@@ -1072,4 +1122,3 @@ mod tests {
         }
     }
 }
-
