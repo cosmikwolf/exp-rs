@@ -54,6 +54,15 @@ void test_single_evaluation_profile() {
            after_setup.total_allocs - after_batch.total_allocs,
            after_setup.total_allocated_bytes - after_batch.total_allocated_bytes);
     
+    // Show memory state before any evaluations
+    printf("\n=== MEMORY USAGE BEFORE EVALUATIONS ===\n");
+    printf("Total allocations:          %zu\n", after_setup.total_allocs);
+    printf("Total deallocations:        %zu\n", after_setup.total_deallocs);
+    printf("Total allocated bytes ever: %zu\n", after_setup.total_allocated_bytes);
+    printf("Currently in use:           %zu bytes\n", after_setup.current_bytes);
+    printf("Peak memory usage:          %zu bytes\n", after_setup.peak_bytes);
+    printf("Leaked allocations:         %zu\n", after_setup.leaked_allocs);
+    
     printf("\n--- FIRST EVALUATION (parsing) ---\n");
     memory_stats_t before_first = get_memory_stats();
     expr_batch_evaluate(builder, ctx);
@@ -85,6 +94,35 @@ void test_single_evaluation_profile() {
            after_third.total_allocs - before_third.total_allocs,
            after_third.total_allocated_bytes - before_third.total_allocated_bytes);
     
+    // Do many more evaluations to check for memory leak
+    printf("\n--- MEMORY LEAK TEST (100 evaluations) ---\n");
+    memory_stats_t before_many = get_memory_stats();
+    size_t allocs_per_eval = 0;
+    size_t bytes_per_eval = 0;
+    
+    for (int i = 0; i < 100; i++) {
+        expr_batch_set_variable(builder, 0, i * 0.1);
+        expr_batch_set_variable(builder, 1, i * 0.2);
+        expr_batch_evaluate(builder, ctx);
+    }
+    
+    memory_stats_t after_many = get_memory_stats();
+    size_t total_allocs_100 = after_many.total_allocs - before_many.total_allocs;
+    size_t total_bytes_100 = after_many.total_allocated_bytes - before_many.total_allocated_bytes;
+    
+    printf("100 evaluations: +%zu allocs, +%zu bytes\n", total_allocs_100, total_bytes_100);
+    printf("Average per eval: %.2f allocs, %.2f bytes\n", 
+           total_allocs_100 / 100.0, total_bytes_100 / 100.0);
+    
+    // Check current memory usage vs deallocations
+    printf("\n=== MEMORY USAGE AFTER ALL EVALUATIONS ===\n");
+    printf("Total allocations:          %zu\n", after_many.total_allocs);
+    printf("Total deallocations:        %zu\n", after_many.total_deallocs);
+    printf("Total allocated bytes ever: %zu\n", after_many.total_allocated_bytes);
+    printf("Currently in use:           %zu bytes\n", after_many.current_bytes);
+    printf("Peak memory usage:          %zu bytes\n", after_many.peak_bytes);
+    printf("Leaked allocations:         %zu\n", after_many.leaked_allocs);
+    
     // Analyze the pattern
     size_t first_eval_allocs = after_first.total_allocs - before_first.total_allocs;
     size_t second_eval_allocs = after_second.total_allocs - before_second.total_allocs;
@@ -101,14 +139,58 @@ void test_single_evaluation_profile() {
         printf("⚠️  PATTERN: Consistent %zu allocations per evaluation\n", second_eval_allocs);
         printf("   This suggests the allocations are NOT for parsing/caching\n");
         printf("   They're likely for evaluation temporaries or intermediate results\n");
+        
+        // Check if memory is being freed properly
+        size_t net_allocs = after_many.total_allocs - after_many.total_deallocs;
+        size_t initial_net_allocs = after_setup.total_allocs - after_setup.total_deallocs;
+        size_t net_bytes_growth = after_many.current_bytes - before_many.current_bytes;
+        
+        if (net_bytes_growth == 0) {
+            printf("   ✅ GOOD: Memory is being properly freed (no leak)\n");
+        } else if (net_bytes_growth < 100) {
+            printf("   ⚠️  MINOR: Small amount of memory retained: %zu bytes per 100 evals\n", net_bytes_growth);
+        } else {
+            printf("   ❌ LEAK: Memory is leaking at %zu bytes per 100 evaluations\n", net_bytes_growth);
+        }
     } else {
         printf("❌ INCONSISTENT: Varying allocation patterns detected\n");
     }
     
-    // Cleanup
+    // Cleanup and verify memory
+    printf("\n=== CLEANUP AND MEMORY VERIFICATION ===\n");
+    
+    // Free batch first
     expr_batch_free(builder);
-    expr_context_free(ctx);
+    memory_stats_t after_batch_free = get_memory_stats();
+    printf("After freeing batch: %zu bytes in use\n", after_batch_free.current_bytes);
+    
+    // Free arena
     expr_arena_free(arena);
+    memory_stats_t after_arena_free = get_memory_stats();
+    printf("After freeing arena: %zu bytes in use\n", after_arena_free.current_bytes);
+    
+    // Free context
+    expr_context_free(ctx);
+    memory_stats_t after_context_free = get_memory_stats();
+    printf("After freeing context: %zu bytes in use\n", after_context_free.current_bytes);
+    
+    // Verify all memory is freed
+    if (after_context_free.current_bytes == 0) {
+        printf("✅ SUCCESS: All memory properly freed!\n");
+    } else {
+        printf("❌ ERROR: %zu bytes still in use after cleanup!\n", after_context_free.current_bytes);
+        printf("   This indicates a memory leak in the library.\n");
+    }
+    
+    // Check that allocations match deallocations
+    if (after_context_free.total_allocs == after_context_free.total_deallocs) {
+        printf("✅ Allocations balanced: %zu allocs == %zu deallocs\n", 
+               after_context_free.total_allocs, after_context_free.total_deallocs);
+    } else {
+        printf("⚠️  Unbalanced: %zu allocs vs %zu deallocs (diff: %zd)\n",
+               after_context_free.total_allocs, after_context_free.total_deallocs,
+               (ssize_t)(after_context_free.total_allocs - after_context_free.total_deallocs));
+    }
     
     disable_allocation_tracking();
 }
