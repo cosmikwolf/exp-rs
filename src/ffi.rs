@@ -109,7 +109,7 @@ pub use crate::expression::Expression as ExpressionExport;
 // Global Allocator for no_std ARM
 // ============================================================================
 
-#[cfg(all(not(test), target_arch = "arm"))]
+#[cfg(feature = "custom_cbindgen_alloc")]
 mod allocator {
     use core::alloc::{GlobalAlloc, Layout};
 
@@ -289,7 +289,7 @@ impl ExprResult {
             error: ptr::null_mut(),
         }
     }
-    
+
     /// Create a success result with an index
     fn success_index(index: usize) -> Self {
         ExprResult {
@@ -299,17 +299,17 @@ impl ExprResult {
             error: ptr::null_mut(),
         }
     }
-    
+
     /// Create an error result from an ExprError
     fn from_expr_error(err: crate::error::ExprError) -> Self {
         let error_code = err.error_code();
         let error_msg = err.to_string(); // Use Display trait
-        
+
         let c_string = match CString::new(error_msg) {
             Ok(s) => s,
             Err(_) => CString::new("Error creating error message").unwrap(),
         };
-        
+
         ExprResult {
             status: error_code,
             value: Real::NAN,
@@ -317,14 +317,14 @@ impl ExprResult {
             error: c_string.into_raw(),
         }
     }
-    
+
     /// Create an error result for FFI-specific errors
     fn from_ffi_error(code: i32, msg: &str) -> Self {
         let c_string = match CString::new(msg) {
             Ok(s) => s,
             Err(_) => CString::new("Error creating error message").unwrap(),
         };
-        
+
         ExprResult {
             status: code,
             value: Real::NAN,
@@ -457,7 +457,7 @@ pub extern "C" fn expr_context_native_function_count(ctx: *const ExprContext) ->
     if ctx.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
         ctx.list_native_functions().len()
@@ -470,7 +470,7 @@ pub extern "C" fn expr_context_expression_function_count(ctx: *const ExprContext
     if ctx.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
         ctx.list_expression_functions().len()
@@ -490,25 +490,25 @@ pub extern "C" fn expr_context_get_native_function_name(
     if ctx.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
         let functions = ctx.list_native_functions();
-        
+
         if index >= functions.len() {
             return 0;
         }
-        
+
         let name = &functions[index];
         let name_bytes = name.as_bytes();
-        
+
         if buffer.is_null() {
             return name_bytes.len();
         }
-        
+
         let copy_len = core::cmp::min(name_bytes.len(), buffer_size);
         core::ptr::copy_nonoverlapping(name_bytes.as_ptr(), buffer, copy_len);
-        
+
         name_bytes.len()
     }
 }
@@ -526,25 +526,25 @@ pub extern "C" fn expr_context_get_expression_function_name(
     if ctx.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
         let functions = ctx.list_expression_functions();
-        
+
         if index >= functions.len() {
             return 0;
         }
-        
+
         let name = &functions[index];
         let name_bytes = name.as_bytes();
-        
+
         if buffer.is_null() {
             return name_bytes.len();
         }
-        
+
         let copy_len = core::cmp::min(name_bytes.len(), buffer_size);
         core::ptr::copy_nonoverlapping(name_bytes.as_ptr(), buffer, copy_len);
-        
+
         name_bytes.len()
     }
 }
@@ -907,9 +907,15 @@ pub extern "C" fn expr_batch_free(batch: *mut ExprBatch) {
 /// # Returns
 /// ExprResult with index on success, or error details on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_batch_add_expression(batch: *mut ExprBatch, expr: *const c_char) -> ExprResult {
+pub extern "C" fn expr_batch_add_expression(
+    batch: *mut ExprBatch,
+    expr: *const c_char,
+) -> ExprResult {
     if batch.is_null() || expr.is_null() {
-        return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null pointer passed to expr_batch_add_expression");
+        return ExprResult::from_ffi_error(
+            FFI_ERROR_NULL_POINTER,
+            "Null pointer passed to expr_batch_add_expression",
+        );
     }
 
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
@@ -917,7 +923,12 @@ pub extern "C" fn expr_batch_add_expression(batch: *mut ExprBatch, expr: *const 
     let expr_cstr = unsafe { CStr::from_ptr(expr) };
     let expr_str = match expr_cstr.to_str() {
         Ok(s) => s,
-        Err(_) => return ExprResult::from_ffi_error(FFI_ERROR_INVALID_UTF8, "Invalid UTF-8 in expression string"),
+        Err(_) => {
+            return ExprResult::from_ffi_error(
+                FFI_ERROR_INVALID_UTF8,
+                "Invalid UTF-8 in expression string",
+            );
+        }
     };
 
     match builder.add_expression(expr_str) {
@@ -942,7 +953,10 @@ pub extern "C" fn expr_batch_add_variable(
     value: Real,
 ) -> ExprResult {
     if batch.is_null() || name.is_null() {
-        return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null pointer passed to expr_batch_add_variable");
+        return ExprResult::from_ffi_error(
+            FFI_ERROR_NULL_POINTER,
+            "Null pointer passed to expr_batch_add_variable",
+        );
     }
 
     let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
@@ -950,7 +964,12 @@ pub extern "C" fn expr_batch_add_variable(
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,
-        Err(_) => return ExprResult::from_ffi_error(FFI_ERROR_INVALID_UTF8, "Invalid UTF-8 in variable name"),
+        Err(_) => {
+            return ExprResult::from_ffi_error(
+                FFI_ERROR_INVALID_UTF8,
+                "Invalid UTF-8 in variable name",
+            );
+        }
     };
 
     match builder.add_parameter(name_str, value) {
@@ -1040,7 +1059,10 @@ pub extern "C" fn expr_batch_get_result(batch: *const ExprBatch, index: usize) -
 /// # Returns
 /// ExprResult with status 0 on success, or error details on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_batch_evaluate_ex(batch: *mut ExprBatch, ctx: *mut ExprContext) -> ExprResult {
+pub extern "C" fn expr_batch_evaluate_ex(
+    batch: *mut ExprBatch,
+    ctx: *mut ExprContext,
+) -> ExprResult {
     if batch.is_null() {
         return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null batch pointer");
     }
@@ -1383,16 +1405,27 @@ pub extern "C" fn expr_session_parse(session: *mut ExprSession, expr: *const c_c
 /// # Returns
 /// ExprResult with status 0 on success, or error details on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_session_parse_ex(session: *mut ExprSession, expr: *const c_char) -> ExprResult {
+pub extern "C" fn expr_session_parse_ex(
+    session: *mut ExprSession,
+    expr: *const c_char,
+) -> ExprResult {
     if session.is_null() || expr.is_null() {
-        return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null pointer passed to expr_session_parse_ex");
+        return ExprResult::from_ffi_error(
+            FFI_ERROR_NULL_POINTER,
+            "Null pointer passed to expr_session_parse_ex",
+        );
     }
 
     // Parse C string
     let expr_cstr = unsafe { CStr::from_ptr(expr) };
     let expr_str = match expr_cstr.to_str() {
         Ok(s) => s,
-        Err(_) => return ExprResult::from_ffi_error(FFI_ERROR_INVALID_UTF8, "Invalid UTF-8 in expression string"),
+        Err(_) => {
+            return ExprResult::from_ffi_error(
+                FFI_ERROR_INVALID_UTF8,
+                "Invalid UTF-8 in expression string",
+            );
+        }
     };
 
     // Get the wrapper
@@ -1730,4 +1763,3 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         }
     }
 }
-

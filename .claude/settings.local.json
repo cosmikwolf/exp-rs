@@ -32,7 +32,8 @@
       "Bash(chmod:*)",
       "Bash(./enable_expression_tests.sh:*)",
       "Bash(SKIP_FFI_BUILD=1 cargo test --lib expression_functions::tests::test_expression_function_with_context_variables -- --nocapture)",
-      "Bash(SKIP_FFI_BUILD=1 cargo test --lib expression_functions::tests::test_expression_function_with_context_variables -- --nocapture --exact)"
+      "Bash(SKIP_FFI_BUILD=1 cargo test --lib expression_functions::tests::test_expression_function_with_context_variables -- --nocapture --exact)",
+      "mcp__tree-sitter__get_file"
     ],
     "deny": []
   },

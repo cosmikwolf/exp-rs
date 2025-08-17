@@ -1,0 +1,25 @@
+# LLDB script to profile allocations during expression evaluation
+# Usage: lldb -s debug_allocations.lldb ./test_memory_management
+
+# Load the program
+file ../target/meson/tests_native_c/test_single_eval_profile
+
+# Set breakpoint on our custom malloc
+breakpoint set -n exp_rs_malloc
+breakpoint command add
+bt
+continue
+DONE
+
+# Set breakpoint on our custom free
+breakpoint set -n exp_rs_free
+breakpoint command add
+bt
+continue
+DONE
+
+# Run the program
+run
+
+# When it hits breakpoints, we'll see stack traces
+# Continue execution to see all allocations

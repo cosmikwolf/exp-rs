@@ -4,66 +4,85 @@ dl_dep = cc.find_library('dl', required: false)
 
 inc = include_directories('.', '../include')
 
+# Common allocator object for all tests (required when custom_cbindgen_alloc is enabled)
+common_allocator_lib = static_library('common_allocator',
+  'common_allocator.c',
+  include_directories: inc,
+  install: false
+)
+
+# Create dependency that includes the library
+common_allocator_dep = declare_dependency(
+  link_with: common_allocator_lib,
+  include_directories: inc
+)
+
 # Define test programs that are still active
 test_programs = {
   # Batch API tests
   'test_batch_api': {
     'sources': ['test_batch_api.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
   # Session API tests
   'test_session_api': {
     'sources': ['test_session_api.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
   # Memory management tests
   'test_memory_management': {
     'sources': ['test_memory_management.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
   # Embedded tests
   'test_embedded_pool': {
     'sources': ['test_embedded_pool.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
   # Performance tests (consolidated)
   'test_performance': {
     'sources': ['test_performance.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
   # Error handling tests
   'test_error_handling': {
     'sources': ['test_error_handling.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
   # Expression function tests
   'test_expression_functions': {
     'sources': ['test_expression_functions.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
   # Pattern isolation tests
   'test_pattern_isolation': {
     'sources': ['test_pattern_isolation.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
   # Panic handler tests
   'test_panic_handler': {
     'sources': ['test_panic_handler.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
   # Empty context tests
   'test_empty_context': {
     'sources': ['test_empty_context.c'],
-    'deps': [exp_rs_dep, m_dep]
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
+  },
+
+  # Single evaluation profiler
+  'test_single_eval_profile': {
+    'sources': ['test_single_eval_profile.c'],
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   }
 }
 

@@ -606,19 +606,19 @@ uintptr_t expr_estimate_arena_size(uintptr_t expression_count,
  */
 __attribute__((aligned(8))) void exp_rs_test_trigger_panic(void);
 
-#if defined(EXP_RS_CUSTOM_ALLOC)
+#if (defined(EXP_RS_CUSTOM_ALLOC) && defined(EXP_RS_CUSTOM_ALLOC))
 extern void *exp_rs_malloc(uintptr_t size);
 #endif
 
-#if defined(EXP_RS_CUSTOM_ALLOC)
+#if (defined(EXP_RS_CUSTOM_ALLOC) && defined(EXP_RS_CUSTOM_ALLOC))
 extern void exp_rs_free(void *ptr);
 #endif
 
-#if !defined(EXP_RS_CUSTOM_ALLOC)
+#if (defined(EXP_RS_CUSTOM_ALLOC) && !defined(EXP_RS_CUSTOM_ALLOC))
 extern void *malloc(uintptr_t size);
 #endif
 
-#if !defined(EXP_RS_CUSTOM_ALLOC)
+#if (defined(EXP_RS_CUSTOM_ALLOC) && !defined(EXP_RS_CUSTOM_ALLOC))
 extern void free(void *ptr);
 #endif
 

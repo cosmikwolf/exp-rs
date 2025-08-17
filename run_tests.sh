@@ -168,6 +168,7 @@ setup_meson() {
 	# Test target
 	if [ "$TEST_TARGET" = "native" ]; then
 		meson_args+=("-Dtest_native=true")
+		meson_args+=("-Dcustom_cbindgen_alloc=true")
 		meson_args+=("-Denable_exprs_qemu_tests=false")
 	else
 		meson_args+=("--cross-file=qemu_test/qemu_harness/arm-cortex-m7-qemu.ini")

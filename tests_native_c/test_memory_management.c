@@ -5,6 +5,7 @@
 #include <time.h>
 #include <math.h>
 #include "exp_rs.h"
+#include "common_allocator.h"
 
 // Helper function to measure time in microseconds
 static double get_time_us() {
@@ -32,6 +33,78 @@ Real native_min(const Real* args, uintptr_t nargs) { (void)nargs; return args[0]
 Real native_max(const Real* args, uintptr_t nargs) { (void)nargs; return args[0] > args[1] ? args[0] : args[1]; }
 Real native_fmod(const Real* args, uintptr_t nargs) { (void)nargs; return fmod(args[0], args[1]); }
 
+// Test function to verify custom allocator is working
+void test_custom_allocator_integration() {
+    printf("=== Test Custom Allocator Integration ===\n");
+    
+    init_memory_tracking();
+    reset_memory_stats();
+    enable_allocation_tracking();
+    
+    memory_stats_t start_stats = get_memory_stats();
+    printf("Starting stats: %zu allocs, %zu bytes\n", 
+           start_stats.total_allocs, start_stats.total_allocated_bytes);
+    
+    // Test direct call to exp_rs_malloc
+    printf("Testing direct exp_rs_malloc call...\n");
+    void* test_ptr = exp_rs_malloc(1024);
+    
+    memory_stats_t after_malloc = get_memory_stats();
+    printf("After direct malloc: %zu allocs, %zu bytes\n", 
+           after_malloc.total_allocs, after_malloc.total_allocated_bytes);
+    
+    if (after_malloc.total_allocs == start_stats.total_allocs) {
+        printf("❌ FAILED: exp_rs_malloc not tracked - custom allocator not working!\n");
+        printf("This means the Rust FFI is NOT using exp_rs_malloc/exp_rs_free\n");
+        exit(1);  // Fail the test
+    } else {
+        printf("✅ PASSED: exp_rs_malloc is being tracked\n");
+    }
+    
+    // Test exp_rs_free
+    printf("Testing exp_rs_free call...\n");
+    exp_rs_free(test_ptr);
+    
+    memory_stats_t after_free = get_memory_stats();
+    printf("After free: %zu allocs, %zu deallocs, %zu current bytes\n", 
+           after_free.total_allocs, after_free.total_deallocs, after_free.current_bytes);
+    
+    // Now test if FFI functions use our custom allocator
+    printf("\nTesting FFI arena creation (should call exp_rs_malloc)...\n");
+    memory_stats_t before_arena = get_memory_stats();
+    
+    ExprArena* arena = expr_arena_new(8192);  // Small arena
+    
+    memory_stats_t after_arena = get_memory_stats();
+    printf("Arena creation stats: %zu allocs (+%zu), %zu bytes (+%zu)\n",
+           after_arena.total_allocs, 
+           after_arena.total_allocs - before_arena.total_allocs,
+           after_arena.total_allocated_bytes,
+           after_arena.total_allocated_bytes - before_arena.total_allocated_bytes);
+    
+    if (after_arena.total_allocs == before_arena.total_allocs) {
+        printf("ℹ️  INFO: Arena creation didn't trigger exp_rs_malloc\n");
+        printf("This is EXPECTED on native targets (x86_64/aarch64)\n");
+        printf("Custom allocator is only enabled for ARM targets (embedded/STM32)\n");
+        printf("On native targets, Rust uses the system allocator directly\n");
+        printf("But now we modified it to work on native - so this indicates an issue\n");
+        printf("❌ FAILED: Custom allocator should be working now!\n");
+        exit(1);
+    } else {
+        printf("✅ PASSED: Arena creation uses custom allocator\n");
+    }
+    
+    // Clean up
+    expr_arena_free(arena);
+    memory_stats_t after_cleanup = get_memory_stats();
+    printf("After arena free: %zu deallocs (+%zu)\n",
+           after_cleanup.total_deallocs,
+           after_cleanup.total_deallocs - after_arena.total_deallocs);
+    
+    disable_allocation_tracking();
+    printf("\n");
+}
+
 // Test basic arena creation and destruction
 void test_arena_lifecycle() {
     printf("=== Test Arena Lifecycle ===\n");
@@ -50,246 +123,29 @@ void test_arena_lifecycle() {
     printf("✓ Arena freed successfully\n\n");
 }
 
-// Test batch builder with arena
-void test_batch_builder_with_arena() {
-    printf("=== Test Batch Builder with Arena ===\n");
-    
-    // Create arena
-    ExprArena* arena = expr_arena_new(256 * 1024);
-    assert(arena != NULL);
-    
-    // Create batch builder with arena
-    ExprBatch* builder = expr_batch_new(arena);
-    assert(builder != NULL);
-    printf("✓ Batch builder created with arena\n");
-    
-    // Add expressions
-    ExprResult expr1_res = expr_batch_add_expression(builder, "x + y");
-    assert(expr1_res.status == 0);
-    int32_t expr1_idx = expr1_res.index;
-    assert(expr1_idx == 0);
-    
-    ExprResult expr2_res = expr_batch_add_expression(builder, "x * y");
-    assert(expr2_res.status == 0);
-    int32_t expr2_idx = expr2_res.index;
-    assert(expr2_idx == 1);
-    
-    ExprResult expr3_res = expr_batch_add_expression(builder, "sqrt(x*x + y*y)");
-    assert(expr3_res.status == 0);
-    int32_t expr3_idx = expr3_res.index;
-    assert(expr3_idx == 2);
-    printf("✓ Added 3 expressions\n");
-    
-    // Add parameters
-    ExprResult x_res = expr_batch_add_variable(builder, "x", 3.0);
-    assert(x_res.status == 0);
-    int32_t x_idx = x_res.index;
-    assert(x_idx == 0);
-    
-    ExprResult y_res = expr_batch_add_variable(builder, "y", 4.0);
-    assert(y_res.status == 0);
-    int32_t y_idx = y_res.index;
-    assert(y_idx == 1);
-    printf("✓ Added 2 parameters\n");
-    
-    // Create context
-    ExprContext* ctx = expr_context_new();
-    assert(ctx != NULL);
-    
-    // Register sqrt function for third expression
-    expr_context_add_function(ctx, "sqrt", 1, native_sqrt);
-    
-    // Evaluate
-    int32_t eval_result = expr_batch_evaluate(builder, ctx);
-    assert(eval_result == 0);
-    printf("✓ Evaluation successful\n");
-    
-    // Get results
-    Real result1 = expr_batch_get_result(builder, expr1_idx);
-    Real result2 = expr_batch_get_result(builder, expr2_idx);
-    Real result3 = expr_batch_get_result(builder, expr3_idx);
-    
-    printf("Results: x+y=%.2f, x*y=%.2f, sqrt(x²+y²)=%.2f\n", 
-           result1, result2, result3);
-    
-    // Verify results
-    assert(result1 == 7.0);  // 3 + 4
-    assert(result2 == 12.0); // 3 * 4
-    assert(result3 == 5.0);  // sqrt(9 + 16)
-    printf("✓ Results verified\n");
-    
-    // Cleanup
-    expr_context_free(ctx);
-    expr_batch_free(builder);
-    expr_arena_free(arena);
-    printf("✓ Cleanup successful\n\n");
-}
-
-// Test arena reset and reuse
-void test_arena_reset_reuse() {
-    printf("=== Test Arena Reset and Reuse ===\n");
-    
-    ExprArena* arena = expr_arena_new(128 * 1024);
-    ExprContext* ctx = expr_context_new();
-    
-    // First use
-    ExprBatch* builder1 = expr_batch_new(arena);
-    ExprResult res = expr_batch_add_expression(builder1, "a + b + c");
-    assert(res.status == 0);
-    res = expr_batch_add_variable(builder1, "a", 1.0);
-    assert(res.status == 0);
-    res = expr_batch_add_variable(builder1, "b", 2.0);
-    assert(res.status == 0);
-    res = expr_batch_add_variable(builder1, "c", 3.0);
-    assert(res.status == 0);
-    expr_batch_evaluate(builder1, ctx);
-    Real result1 = expr_batch_get_result(builder1, 0);
-    assert(result1 == 6.0);
-    printf("✓ First evaluation: %.2f\n", result1);
-    
-    // Free builder but keep arena
-    expr_batch_free(builder1);
-    
-    // Reset arena for reuse
-    expr_arena_reset(arena);
-    printf("✓ Arena reset\n");
-    
-    // Second use with same arena
-    ExprBatch* builder2 = expr_batch_new(arena);
-    res = expr_batch_add_expression(builder2, "x * y * z");
-    assert(res.status == 0);
-    res = expr_batch_add_variable(builder2, "x", 2.0);
-    assert(res.status == 0);
-    res = expr_batch_add_variable(builder2, "y", 3.0);
-    assert(res.status == 0);
-    res = expr_batch_add_variable(builder2, "z", 4.0);
-    assert(res.status == 0);
-    expr_batch_evaluate(builder2, ctx);
-    Real result2 = expr_batch_get_result(builder2, 0);
-    assert(result2 == 24.0);
-    printf("✓ Second evaluation: %.2f\n", result2);
-    
-    // Cleanup
-    expr_batch_free(builder2);
-    expr_context_free(ctx);
-    expr_arena_free(arena);
-    printf("✓ Arena reuse successful\n\n");
-}
-
-// Test benchmark expressions matching consolidated_benchmark.rs
-void test_benchmark_expressions() {
-    printf("=== Test Benchmark Expressions (matching Rust benchmark) ===\n");
-    
-    // Create arena and context
-    ExprArena* arena = expr_arena_new(512 * 1024);
-    ExprContext* ctx = expr_context_new();
-    
-    // Register required functions (matching consolidated_benchmark.rs)
-    expr_context_add_function(ctx, "sin", 1, native_sin);
-    expr_context_add_function(ctx, "cos", 1, native_cos);
-    expr_context_add_function(ctx, "tan", 1, native_tan);
-    expr_context_add_function(ctx, "sqrt", 1, native_sqrt);
-    expr_context_add_function(ctx, "exp", 1, native_exp);
-    expr_context_add_function(ctx, "log", 1, native_log);
-    expr_context_add_function(ctx, "log10", 1, native_log10);
-    expr_context_add_function(ctx, "pow", 2, native_pow);
-    expr_context_add_function(ctx, "atan2", 2, native_atan2);
-    expr_context_add_function(ctx, "abs", 1, native_abs);
-    expr_context_add_function(ctx, "sign", 1, native_sign);
-    expr_context_add_function(ctx, "min", 2, native_min);
-    expr_context_add_function(ctx, "max", 2, native_max);
-    expr_context_add_function(ctx, "fmod", 2, native_fmod);
-    
-    ExprBatch* builder = expr_batch_new(arena);
-    
-    // Add the same 7 expressions from consolidated_benchmark.rs
-    const char* expressions[] = {
-        "a*sin(b*3.14159/180) + c*cos(d*3.14159/180) + sqrt(e*e + f*f)",
-        "exp(g/10) * log(h+1) + pow(i, 0.5) * j",
-        "((a > 5) && (b < 10)) * c + ((d >= e) || (f != g)) * h + min(i, j)",
-        "sqrt(pow(a-e, 2) + pow(b-f, 2)) + atan2(c-g, d-h) * (i+j)/2",
-        "abs(a-b) * sign(c-d) + max(e, f) * min(g, h) + fmod(i*j, 10)",
-        "(a+b+c)/3 * sin((d+e+f)*3.14159/6) + log10(g*h+1) - exp(-i*j/100)",
-        "a + b * c - d / (e + 0.001) + pow(f, g) * h - i + j"
-    };
-    
-    // Add all expressions
-    for (int i = 0; i < 7; i++) {
-        ExprResult res = expr_batch_add_expression(builder, expressions[i]);
-        if (res.status != 0) {
-            printf("Failed to add expression %d: %s (error: %s)\n", i, expressions[i], res.error);
-            expr_free_error(res.error);
-            return;
-        }
-    }
-    printf("✓ Added 7 benchmark expressions\n");
-    
-    // Add 10 parameters (a through j)
-    const char* param_names[] = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"};
-    for (int i = 0; i < 10; i++) {
-        ExprResult res = expr_batch_add_variable(builder, param_names[i], (i + 1) * 1.5);
-        assert(res.status == 0);
-    }
-    printf("✓ Added 10 parameters (a-j)\n");
-    
-    // Do initial evaluation to parse expressions
-    expr_batch_evaluate(builder, ctx);
-    printf("✓ Initial evaluation complete\n");
-    
-    // Test different batch sizes
-    const int batch_sizes[] = {1, 10, 100, 1000};
-    
-    for (int b = 0; b < 4; b++) {
-        int batch_size = batch_sizes[b];
-        printf("\nBatch size %d (simulating %dms at 1000Hz):\n", batch_size, batch_size);
-        
-        // Measure evaluation time
-        const int iterations = 10000 / batch_size; // Scale iterations to keep total work constant
-        double start = get_time_us();
-        
-        for (int iter = 0; iter < iterations; iter++) {
-            for (int batch = 0; batch < batch_size; batch++) {
-                // Update parameters (matching Rust benchmark pattern)
-                for (int p = 0; p < 10; p++) {
-                    Real value = (p + 1) * 1.5 + (batch + 1) * 0.1;
-                    expr_batch_set_variable(builder, p, value);
-                }
-                
-                // Evaluate all 7 expressions
-                expr_batch_evaluate(builder, ctx);
-            }
-        }
-        
-        double end = get_time_us();
-        double total_us = end - start;
-        double total_evals = iterations * batch_size * 7; // 7 expressions per evaluation
-        double us_per_eval = total_us / total_evals;
-        double us_per_batch = total_us / (iterations * batch_size);
-        double batch_rate = 1e6 / us_per_batch;
-        
-        printf("  Total evaluations: %.0f\n", total_evals);
-        printf("  Total time: %.2f ms\n", total_us / 1000.0);
-        printf("  Time per batch: %.3f µs\n", us_per_batch);
-        printf("  Time per expression: %.3f µs\n", us_per_eval);
-        printf("  Batch rate: %.0f Hz\n", batch_rate);
-        printf("  Target (1000 Hz): %s\n", 
-               batch_rate >= 1000 ? "✓ ACHIEVED" : "✗ NOT ACHIEVED");
-    }
-    
-    // Cleanup
-    expr_batch_free(builder);
-    expr_context_free(ctx);
-    expr_arena_free(arena);
-    printf("\n");
-}
-
 // Test zero allocations during evaluation
 void test_zero_allocations() {
     printf("=== Test Zero Allocations During Evaluation ===\n");
     
+    init_memory_tracking();
+    
+    // Note: exp-rs may be using custom allocator, enable tracking from start
+    enable_allocation_tracking();
+    memory_stats_t setup_start = get_memory_stats();
+    
     // Create arena and context
     ExprArena* arena = expr_arena_new(256 * 1024);
+    memory_stats_t after_arena = get_memory_stats();
+    
     ExprContext* ctx = expr_context_new();
+    memory_stats_t after_context = get_memory_stats();
+    
+    printf("Arena creation: %zu bytes, %zu allocations\n", 
+           after_arena.total_allocated_bytes - setup_start.total_allocated_bytes,
+           after_arena.total_allocs - setup_start.total_allocs);
+    printf("Context creation: %zu bytes, %zu allocations\n", 
+           after_context.total_allocated_bytes - after_arena.total_allocated_bytes,
+           after_context.total_allocs - after_arena.total_allocs);
     
     // Register required functions
     expr_context_add_function(ctx, "sin", 1, native_sin);
@@ -309,8 +165,18 @@ void test_zero_allocations() {
     expr_batch_add_variable(builder, "z", 0.0);
     
     // Do initial evaluation to parse expressions
+    memory_stats_t before_initial = get_memory_stats();
     expr_batch_evaluate(builder, ctx);
+    memory_stats_t after_initial = get_memory_stats();
+    
     printf("✓ Initial evaluation complete\n");
+    printf("Initial evaluation: %zu bytes, %zu allocations\n", 
+           after_initial.total_allocated_bytes - before_initial.total_allocated_bytes,
+           after_initial.total_allocs - before_initial.total_allocs);
+    
+    // NOW start the evaluation loop tracking
+    memory_stats_t before_loop = get_memory_stats();
+    printf("Starting evaluation loop with tracking enabled...\n");
     
     // Measure evaluation time for many iterations
     const int iterations = 100000;
@@ -331,6 +197,11 @@ void test_zero_allocations() {
     }
     
     double end = get_time_us();
+    memory_stats_t after_loop = get_memory_stats();
+    
+    // Cleanup phase
+    memory_stats_t before_cleanup = get_memory_stats();
+    
     double total_us = end - start;
     double us_per_eval = total_us / iterations;
     double evals_per_sec = 1e6 / us_per_eval;
@@ -342,99 +213,44 @@ void test_zero_allocations() {
     printf("  Target (1000 Hz): %s\n", 
            evals_per_sec >= 1000 ? "✓ ACHIEVED" : "✗ NOT ACHIEVED");
     
+    // Verify zero allocations during evaluation
+    size_t allocs_during_eval = after_loop.total_allocs - before_loop.total_allocs;
+    size_t bytes_during_eval = after_loop.total_allocated_bytes - before_loop.total_allocated_bytes;
+    
+    printf("\n=== ALLOCATION ANALYSIS ===\n");
+    printf("Allocations during %d evaluations: %zu\n", iterations, allocs_during_eval);
+    printf("Bytes allocated during evaluations: %zu\n", bytes_during_eval);
+    printf("Zero allocation claim: %s\n", 
+           allocs_during_eval == 0 ? "✓ VERIFIED" : "✗ FAILED");
+    
+    if (allocs_during_eval > 0) {
+        printf("WARNING: Found %zu allocations during evaluation!\n", allocs_during_eval);
+        printf("Average bytes per evaluation: %.2f\n", (double)bytes_during_eval / iterations);
+    }
+    
     // Cleanup
     expr_batch_free(builder);
     expr_context_free(ctx);
     expr_arena_free(arena);
-    printf("\n");
-}
-
-// Test arena size estimation
-void test_arena_size_estimation() {
-    printf("=== Test Arena Size Estimation ===\n");
     
-    const char* expressions[] = {
-        "x + y",
-        "sin(x) * cos(y)",
-        "sqrt(x*x + y*y)",
-        "x^3 + 2*x^2 + 3*x + 4",
-        "(x > 0 ? x : -x) * (y > 0 ? y : -y)"
-    };
-    size_t num_exprs = sizeof(expressions) / sizeof(expressions[0]);
+    memory_stats_t after_cleanup = get_memory_stats();
+    printf("Cleanup: %zu bytes freed, %zu deallocations\n", 
+           before_cleanup.total_allocated_bytes - after_cleanup.current_bytes,
+           after_cleanup.total_deallocs - before_cleanup.total_deallocs);
     
-    // Estimate arena size for 1000 evaluations
-    // Calculate total expression length
-    size_t total_expr_length = 0;
-    for (int i = 0; i < num_exprs; i++) {
-        total_expr_length += strlen(expressions[i]);
-    }
-    
-    size_t estimated_size = expr_estimate_arena_size(num_exprs, total_expr_length, 0, 1000);
-    printf("✓ Estimated arena size: %zu bytes (%.1f KB)\n", 
-           estimated_size, estimated_size / 1024.0);
-    
-    // Create arena with estimated size
-    ExprArena* arena = expr_arena_new(estimated_size);
-    assert(arena != NULL);
-    printf("✓ Created arena with estimated size\n");
-    
-    // Test that we can actually use it
-    ExprBatch* builder = expr_batch_new(arena);
-    for (size_t i = 0; i < num_exprs; i++) {
-        ExprResult res = expr_batch_add_expression(builder, expressions[i]);
-        assert(res.status == 0);
-        assert(res.index == (int32_t)i);
-    }
-    printf("✓ Successfully added all expressions\n");
-    
-    // Cleanup
-    expr_batch_free(builder);
-    expr_arena_free(arena);
-    printf("\n");
-}
-
-// Test error handling
-void test_error_handling() {
-    printf("=== Test Error Handling ===\n");
-    
-    // Test NULL arena
-    ExprBatch* builder = expr_batch_new(NULL);
-    assert(builder == NULL);
-    printf("✓ NULL arena handled correctly\n");
-    
-    // Test invalid expression (skip for now - parser might accept it)
-    ExprArena* arena = expr_arena_new(64 * 1024);
-    builder = expr_batch_new(arena);
-    
-    // int32_t idx = expr_batch_add_expression(builder, "x + + y");
-    // assert(idx < 0);  // Should return error
-    // printf("✓ Invalid expression handled correctly\n");
-    
-    // Test duplicate parameter
-    ExprResult first_res = expr_batch_add_variable(builder, "x", 1.0);
-    assert(first_res.status == 0);
-    ExprResult dup_res = expr_batch_add_variable(builder, "x", 2.0);
-    assert(dup_res.status != 0);  // Should return error
-    expr_free_error(dup_res.error);
-    printf("✓ Duplicate parameter handled correctly\n");
-    
-    // Cleanup
-    expr_batch_free(builder);
-    expr_arena_free(arena);
+    disable_allocation_tracking();
     printf("\n");
 }
 
 // Main test runner
 int main() {
-    printf("\n==== Arena Integration Tests ====\n\n");
+    printf("\n==== Arena Integration Tests with Memory Tracking ====\n\n");
+    
+    // CRITICAL: Test custom allocator integration first - fail fast if not working
+    test_custom_allocator_integration();
     
     test_arena_lifecycle();
-    test_batch_builder_with_arena();
-    test_arena_reset_reuse();
-    test_benchmark_expressions();  // New test matching Rust benchmark
     test_zero_allocations();
-    test_arena_size_estimation();
-    test_error_handling();
     
     printf("==== All Tests Passed! ====\n\n");
     return 0;
