@@ -64,7 +64,7 @@ impl Evaluator {
         let ast = parse_expression(expression, &self.arena)?;
 
         // Evaluate
-        eval_ast(&ast, Some(ctx))
+        eval_ast(&ast, Some(ctx), &self.arena)
     }
 
     /// Resets the arena, freeing all allocated memory.

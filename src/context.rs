@@ -1658,7 +1658,7 @@ mod tests {
         println!("AST for foo.bar: {:?}", ast);
 
         let ctx_copy = ctx.clone();
-        let eval_result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx_copy)));
+        let eval_result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx_copy)), &arena);
         println!("Direct eval_ast result: {:?}", eval_result);
 
         let ctx_copy2 = ctx.clone();

@@ -20,11 +20,12 @@ use std::rc::Rc;
 /// Evaluates an expression function with the given arguments.
 ///
 /// This is a helper function used internally by the evaluation logic.
-pub fn eval_expression_function<'a>(
-    ast: &AstExpr,
+pub fn eval_expression_function<'a, 'arena>(
+    ast: &'arena AstExpr<'arena>,
     param_names: &[Cow<'a, str>],
     arg_values: &[Real],
     parent_ctx: Option<Rc<EvalContext>>,
+    arena: &'arena bumpalo::Bump,
 ) -> Result<Real> {
     let mut temp_ctx = EvalContext::new();
     if let Some(parent) = parent_ctx {
@@ -35,7 +36,7 @@ pub fn eval_expression_function<'a>(
             let _ = temp_ctx.variables.insert(key, arg_val);
         }
     }
-    eval_ast(ast, Some(Rc::new(temp_ctx)))
+    eval_ast(ast, Some(Rc::new(temp_ctx)), arena)
 }
 
 #[cfg(test)]

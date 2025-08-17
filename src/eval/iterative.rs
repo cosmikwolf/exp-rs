@@ -27,21 +27,41 @@ const MAX_STACK_DEPTH: usize = 1000;
 const INITIAL_OP_CAPACITY: usize = 32;
 const INITIAL_VALUE_CAPACITY: usize = 16;
 
+/// Arena-based stack capacities (increased to reduce reallocation likelihood)
+/// Note: These use fixed constants following existing codebase patterns.
+/// Users needing different sizes should modify these constants and recompile.
+const ARENA_OP_CAPACITY: usize = 128;      // Increased from INITIAL_OP_CAPACITY
+const ARENA_VALUE_CAPACITY: usize = 64;    // Increased from INITIAL_VALUE_CAPACITY
+const ARENA_ARG_BUFFER_CAPACITY: usize = 32; // New buffer for function args
+
 /// Main iterative evaluation function
 pub fn eval_iterative<'arena>(
     ast: &'arena AstExpr<'arena>,
     ctx: Option<Rc<EvalContext>>,
+    arena: &'arena bumpalo::Bump,
 ) -> Result<Real, ExprError> {
-    let mut engine = EvalEngine::new();
+    let mut engine = EvalEngine::new(arena);
     engine.eval(ast, ctx)
 }
 
 /// Reusable evaluation engine to avoid allocations
 pub struct EvalEngine<'arena> {
-    /// Operation stack
-    op_stack: Vec<EvalOp<'arena>>,
-    /// Value stack for intermediate results
-    value_stack: Vec<Real>,
+    /// Optional arena for parsing expression functions on-demand
+    arena: Option<&'arena bumpalo::Bump>,
+    
+    /// Operation stack (arena-allocated when arena is available)
+    op_stack: bumpalo::collections::Vec<'arena, EvalOp<'arena>>,
+    /// Value stack for intermediate results (arena-allocated when arena is available)
+    value_stack: bumpalo::collections::Vec<'arena, Real>,
+    
+    /// Shared buffer for function arguments to avoid per-call allocations
+    arg_buffer: bumpalo::collections::Vec<'arena, Real>,
+    
+    /// Track high water marks for capacity optimization
+    op_stack_hwm: usize,
+    value_stack_hwm: usize,
+    arg_buffer_hwm: usize,
+    
     /// Context management
     ctx_stack: ContextStack,
     /// Function cache
@@ -50,43 +70,42 @@ pub struct EvalEngine<'arena> {
     param_overrides: Option<FnvIndexMap<HString, Real, 16>>,
     /// Optional reference to local expression functions
     local_functions: Option<&'arena core::cell::RefCell<crate::types::ExpressionFunctionMap>>,
-    /// Optional arena for parsing expression functions on-demand
-    arena: Option<&'arena bumpalo::Bump>,
     /// Cache for parsed expression functions
     expr_func_cache: BTreeMap<HString, &'arena AstExpr<'arena>>,
 }
 
-impl<'arena> Default for EvalEngine<'arena> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// Note: Default trait removed since EvalEngine now requires an arena parameter
 
 impl<'arena> EvalEngine<'arena> {
-    /// Create a new evaluation engine
-    pub fn new() -> Self {
+    /// Create a new evaluation engine with arena for zero-allocation evaluation
+    pub fn new(arena: &'arena bumpalo::Bump) -> Self {
         Self {
-            op_stack: Vec::with_capacity(INITIAL_OP_CAPACITY),
-            value_stack: Vec::with_capacity(INITIAL_VALUE_CAPACITY),
-            ctx_stack: ContextStack::new(),
-            func_cache: BTreeMap::new(),
-            param_overrides: None,
-            local_functions: None,
-            arena: None,
-            expr_func_cache: BTreeMap::new(),
-        }
-    }
-
-    /// Create a new evaluation engine with arena for expression functions
-    pub fn new_with_arena(arena: &'arena bumpalo::Bump) -> Self {
-        Self {
-            op_stack: Vec::with_capacity(INITIAL_OP_CAPACITY),
-            value_stack: Vec::with_capacity(INITIAL_VALUE_CAPACITY),
-            ctx_stack: ContextStack::new(),
-            func_cache: BTreeMap::new(),
-            param_overrides: None,
-            local_functions: None,
             arena: Some(arena),
+            
+            // Use arena for all allocations with module-level constants
+            op_stack: bumpalo::collections::Vec::with_capacity_in(
+                ARENA_OP_CAPACITY, 
+                arena
+            ),
+            value_stack: bumpalo::collections::Vec::with_capacity_in(
+                ARENA_VALUE_CAPACITY, 
+                arena
+            ),
+            arg_buffer: bumpalo::collections::Vec::with_capacity_in(
+                ARENA_ARG_BUFFER_CAPACITY,
+                arena
+            ),
+            
+            // Initialize high water marks
+            op_stack_hwm: 0,
+            value_stack_hwm: 0,
+            arg_buffer_hwm: 0,
+            
+            // Other fields
+            ctx_stack: ContextStack::new(),
+            func_cache: BTreeMap::new(),
+            param_overrides: None,
+            local_functions: None,
             expr_func_cache: BTreeMap::new(),
         }
     }
@@ -95,6 +114,32 @@ impl<'arena> EvalEngine<'arena> {
     pub fn set_local_functions(&mut self, functions: Option<&'arena core::cell::RefCell<crate::types::ExpressionFunctionMap>>) {
         self.local_functions = functions;
     }
+    
+    /// Arena-aware clearing of internal stacks
+    /// Uses unsafe set_len(0) to avoid triggering Drop on arena-allocated elements
+    fn arena_clear_stacks(&mut self) {
+        // SAFETY: For arena-allocated vectors, we can safely set length to 0
+        // without dropping elements since the arena handles all cleanup
+        unsafe {
+            self.op_stack.set_len(0);
+            self.value_stack.set_len(0);
+            self.arg_buffer.set_len(0);
+        }
+    }
+    
+    /// Reset the engine for reuse with new expression
+    /// More comprehensive than arena_clear_stacks - also clears caches and context
+    pub fn arena_reset(&mut self) {
+        self.arena_clear_stacks();
+        self.ctx_stack.clear();
+        self.func_cache.clear();
+        self.expr_func_cache.clear();
+        
+        // Reset high water marks
+        self.op_stack_hwm = 0;
+        self.value_stack_hwm = 0;
+        self.arg_buffer_hwm = 0;
+    }
 
     /// Evaluate an expression
     pub fn eval(
@@ -102,9 +147,8 @@ impl<'arena> EvalEngine<'arena> {
         ast: &'arena AstExpr<'arena>,
         ctx: Option<Rc<EvalContext>>,
     ) -> Result<Real, ExprError> {
-        // Clear stacks but keep capacity
-        self.op_stack.clear();
-        self.value_stack.clear();
+        // Clear stacks efficiently for arena allocation
+        self.arena_clear_stacks();
         self.ctx_stack.clear();
         self.func_cache.clear();
 
@@ -240,43 +284,12 @@ impl<'arena> EvalEngine<'arena> {
                 self.process_attribute_access(object_name, attr_name, ctx_id)?;
             }
 
-            EvalOp::CollectFunctionArgs {
-                name,
-                total_args,
-                mut args_so_far,
-                ctx_id,
-            } => {
-                // Pop one argument from value stack and insert at the beginning
-                // to preserve the original order (since we evaluate args in reverse)
-                let arg = self.pop_value()?;
-                args_so_far.insert(0, arg);
-
-                if args_so_far.len() == total_args {
-                    // All arguments collected, apply function
-                    self.op_stack.push(EvalOp::ApplyFunction {
-                        name,
-                        args_needed: total_args,
-                        args_collected: args_so_far,
-                        ctx_id,
-                    });
-                } else {
-                    // Still need more arguments
-                    self.op_stack.push(EvalOp::CollectFunctionArgs {
-                        name,
-                        total_args,
-                        args_so_far,
-                        ctx_id,
-                    });
-                }
-            }
-
             EvalOp::ApplyFunction {
                 name,
-                args_needed,
-                args_collected,
+                arg_count,
                 ctx_id,
             } => {
-                self.process_function_call(name, args_needed, args_collected, ctx_id)?;
+                self.process_function_call(name, arg_count, ctx_id)?;
             }
         }
 
@@ -370,27 +383,18 @@ impl<'arena> EvalEngine<'arena> {
                         // So we treat them all uniformly to allow user overrides
                         let fname = name.try_into_function_name()?;
 
-                        if args.is_empty() {
-                            // No arguments to evaluate
-                            self.op_stack.push(EvalOp::ApplyFunction {
-                                name: fname,
-                                args_needed: 0,
-                                args_collected: Vec::new(),
-                                ctx_id,
-                            });
-                        } else {
-                            // Push collection operation
-                            self.op_stack.push(EvalOp::CollectFunctionArgs {
-                                name: fname,
-                                total_args: args.len(),
-                                args_so_far: Vec::new(),
-                                ctx_id,
-                            });
+                        // Push function application operation
+                        // This will execute after all arguments are evaluated
+                        self.op_stack.push(EvalOp::ApplyFunction {
+                            name: fname,
+                            arg_count: args.len(),
+                            ctx_id,
+                        });
 
-                            // Push argument evaluations in reverse order
-                            for arg in args.iter().rev() {
-                                self.op_stack.push(EvalOp::Eval { expr: arg, ctx_id });
-                            }
+                        // Push argument evaluations in reverse order
+                        // (they'll be evaluated left-to-right, results accumulate on value stack)
+                        for arg in args.iter().rev() {
+                            self.op_stack.push(EvalOp::Eval { expr: arg, ctx_id });
                         }
                     }
                 }
@@ -525,10 +529,12 @@ impl<'arena> EvalEngine<'arena> {
     fn process_function_call(
         &mut self,
         name: FunctionName,
-        args_needed: usize,
-        args: Vec<Real>,
+        arg_count: usize,
         ctx_id: usize,
     ) -> Result<(), ExprError> {
+        // Arguments are the last arg_count values on the value stack
+        let args_start = self.value_stack.len().saturating_sub(arg_count);
+        
         // Get context
         let ctx = self
             .ctx_stack
@@ -538,28 +544,35 @@ impl<'arena> EvalEngine<'arena> {
         // Check local functions first (highest priority)
         if let Some(local_funcs) = self.local_functions {
             if let Some(func) = local_funcs.borrow().get(&name).cloned() {
-                return self.process_expression_function(&func, args, ctx_id);
+                return self.process_expression_function(&func, args_start, arg_count, ctx_id);
             }
         }
 
         // Try expression function from context (second priority) - clone it to avoid borrowing issues
         let expr_func = ctx.get_expression_function(&name).cloned();
         if let Some(func) = expr_func {
-            return self.process_expression_function(&func, args, ctx_id);
+            return self.process_expression_function(&func, args_start, arg_count, ctx_id);
         }
 
-        // Try native function second
+        // Try native function
         if let Some(func) = ctx.get_native_function(&name) {
-            if args.len() != func.arity {
+            if arg_count != func.arity {
                 return Err(ExprError::InvalidFunctionCall {
                     name: name.to_string(),
                     expected: func.arity,
-                    found: args.len(),
+                    found: arg_count,
                 });
             }
 
+            // Get args slice from value stack
+            let args = &self.value_stack[args_start..];
             let owned_fn = OwnedNativeFunction::from(func);
-            let result = (owned_fn.implementation)(&args);
+            let result = (owned_fn.implementation)(args);
+            
+            // Pop arguments from stack
+            self.value_stack.truncate(args_start);
+            
+            // Push result
             self.value_stack.push(result);
             return Ok(());
         }
@@ -605,16 +618,17 @@ impl<'arena> EvalEngine<'arena> {
     fn process_expression_function(
         &mut self,
         func: &crate::types::ExpressionFunction,
-        args: Vec<Real>,
+        args_start: usize,
+        arg_count: usize,
         ctx_id: usize,
     ) -> Result<(), ExprError> {
         use crate::types::TryIntoHeaplessString;
         
-        if args.len() != func.params.len() {
+        if arg_count != func.params.len() {
             return Err(ExprError::InvalidFunctionCall {
                 name: func.name.to_string(),
                 expected: func.params.len(),
-                found: args.len(),
+                found: arg_count,
             });
         }
 
@@ -627,10 +641,14 @@ impl<'arena> EvalEngine<'arena> {
         // Create new context for function evaluation
         let mut func_ctx = EvalContext::new();
 
-        // Set parameters
-        for (param, value) in func.params.iter().zip(args.iter()) {
-            func_ctx.set_parameter(param, *value)?;
+        // Set parameters from value stack
+        for (i, param) in func.params.iter().enumerate() {
+            let value = self.value_stack[args_start + i];
+            func_ctx.set_parameter(param, value)?;
         }
+        
+        // Pop arguments from stack now that they're captured in context
+        self.value_stack.truncate(args_start);
 
         // Copy function registry
         func_ctx.function_registry = ctx.function_registry.clone();
@@ -706,7 +724,7 @@ impl<'arena> EvalEngine<'arena> {
 ///
 /// let arena = Bump::new();
 /// let ast = parse_expression("2 + 3", &arena).unwrap();
-/// let mut engine = EvalEngine::new_with_arena(&arena);
+/// let mut engine = EvalEngine::new(&arena);
 /// let result = eval_with_engine(&ast, None, &mut engine).unwrap();
 /// assert_eq!(result, 5.0);
 /// ```

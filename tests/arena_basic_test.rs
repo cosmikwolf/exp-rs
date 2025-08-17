@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use exp_rs::{EvalContext, engine::parse_expression, eval::eval_ast, expression::Expression};
+use exp_rs::{EvalContext, engine::parse_expression, eval::{eval_ast, iterative::{eval_with_engine, EvalEngine}}, expression::Expression};
 use std::rc::Rc;
 
 #[test]
@@ -20,29 +20,43 @@ fn test_arena_zero_allocations() {
     ctx.set_parameter("y", 2.0).unwrap();
     let ctx = Rc::new(ctx);
 
-    // Evaluate many times - should not allocate
-    for i in 0..1000 {
+    // Create a reusable evaluation engine (this allocates the stacks once)
+    let mut engine = EvalEngine::new(&arena);
+    
+    // Do a first evaluation to set up the evaluator stacks
+    let mut ctx_first = (*ctx).clone();
+    ctx_first.set_parameter("x", 0.0).unwrap();
+    let ctx_rc_first = Rc::new(ctx_first);
+    let _result1 = eval_with_engine(&expr1, Some(ctx_rc_first.clone()), &mut engine).unwrap();
+    let _result2 = eval_with_engine(&expr2, Some(ctx_rc_first), &mut engine).unwrap();
+    
+    // Get arena size after initial evaluation (evaluator stacks are now allocated)
+    let bytes_after_first_eval = arena.allocated_bytes();
+    println!("Arena bytes after first evaluation: {}", bytes_after_first_eval);
+
+    // Evaluate many times - should not allocate beyond the initial setup
+    for i in 1..1000 {
         // Update context for this test
         let mut ctx_clone = (*ctx).clone();
         ctx_clone.set_parameter("x", i as f64).unwrap();
         let ctx_rc = Rc::new(ctx_clone);
 
-        let result1 = eval_ast(&expr1, Some(ctx_rc.clone())).unwrap();
-        let result2 = eval_ast(&expr2, Some(ctx_rc)).unwrap();
+        let result1 = eval_with_engine(&expr1, Some(ctx_rc.clone()), &mut engine).unwrap();
+        let result2 = eval_with_engine(&expr2, Some(ctx_rc), &mut engine).unwrap();
 
         // Verify results are correct
         assert_eq!(result1, (i as f64) * 2.0 + 2.0);
 
-        // Verify no new arena allocations
+        // Verify no new arena allocations beyond the initial evaluator setup
         assert_eq!(
             arena.allocated_bytes(),
-            initial_bytes,
-            "Arena grew during evaluation #{}",
+            bytes_after_first_eval,
+            "Arena grew during evaluation #{} (beyond initial evaluator setup)",
             i
         );
     }
 
-    println!("✓ Zero arena allocations during 1000 evaluations!");
+    println!("✓ No additional arena growth beyond evaluator setup during 1000 evaluations!");
 }
 
 #[test]

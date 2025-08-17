@@ -639,6 +639,9 @@ fn test_expression_performance() {
     // Parse the expression once
     let ast = parse_expression(expr).unwrap();
 
+    // Create arena for evaluation
+    let arena = Bump::new();
+
     // Measure time to evaluate the expression 10,000 times
     let iterations = 10_000;
     let start = Instant::now();
@@ -646,7 +649,7 @@ fn test_expression_performance() {
     for i in 0..iterations {
         // Update a variable to ensure we're not just caching the result
         set_var(&mut ctx, "x", (i % 100) as Real / 100.0);
-        let _ = eval_ast(&ast, Some(Rc::new(ctx.clone()))).unwrap();
+        let _ = eval_ast(&ast, Some(Rc::new(ctx.clone())), &arena).unwrap();
     }
 
     let duration = start.elapsed();

@@ -434,7 +434,7 @@ mod tests {
         let arena = Bump::new();
         let ast = crate::engine::parse_expression("abs(-42)", &arena).unwrap();
 
-        let val = crate::eval::ast::eval_ast(&ast, Some(Rc::new(ctx))).unwrap();
+        let val = crate::eval::ast::eval_ast(&ast, Some(Rc::new(ctx)), &arena).unwrap();
         assert_eq!(val, 42.0);
     }
 
@@ -798,22 +798,22 @@ mod tests {
         use bumpalo::Bump;
         let arena = Bump::new();
         let ast = crate::engine::parse_expression("x^3", &arena).unwrap();
-        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
+        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc.clone()), &arena).unwrap();
         assert_eq!(result, 8.0);
 
         // 2*x^2
         let ast = crate::engine::parse_expression("2*x^2", &arena).unwrap();
-        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
+        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc.clone()), &arena).unwrap();
         assert_eq!(result, 8.0);
 
         // 3*x
         let ast = crate::engine::parse_expression("3*x", &arena).unwrap();
-        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc.clone())).unwrap();
+        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc.clone()), &arena).unwrap();
         assert_eq!(result, 6.0);
 
         // 4
         let ast = crate::engine::parse_expression("4", &arena).unwrap();
-        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc)).unwrap();
+        let result = crate::eval::ast::eval_ast(&ast, Some(ctx_rc), &arena).unwrap();
         assert_eq!(result, 4.0);
     }
 
@@ -833,7 +833,7 @@ mod tests {
         use bumpalo::Bump;
         let arena = Bump::new();
         let ast = crate::engine::parse_expression("2 + 3 * 4 ^ 2", &arena).unwrap();
-        let result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx))).unwrap();
+        let result = crate::eval::eval_ast(&ast, Some(Rc::new(ctx)), &arena).unwrap();
         assert_eq!(result, 2.0 + 3.0 * 16.0); // 2 + 3*16 = 50
     }
 
@@ -931,8 +931,9 @@ mod tests {
         // Instead, it uses a context stack with a fixed capacity
 
         // We'll test that simple expressions evaluate correctly
+        let arena = bumpalo::Bump::new();
         let ast = AstExpr::Constant(42.0);
-        let result = crate::eval::ast::eval_ast(&ast, None);
+        let result = crate::eval::ast::eval_ast(&ast, None, &arena);
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42.0);

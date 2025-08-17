@@ -494,7 +494,7 @@ fn run_memory_analysis() {
     // Stage 8: Using evaluation engine directly
     let engine_arena = Bump::new();
     let (mut engine, _) = measure_stage("Creating evaluation engine", || {
-        EvalEngine::new_with_arena(&engine_arena)
+        EvalEngine::new(&engine_arena)
     });
 
     let (_, stats) = measure_stage("1000 evaluations with engine", || {

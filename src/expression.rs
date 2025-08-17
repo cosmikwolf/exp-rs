@@ -57,7 +57,7 @@ impl<'arena> Expression<'arena> {
             expressions: Vec::new(),
             params: Vec::new(),
             results: Vec::new(),
-            engine: EvalEngine::new_with_arena(arena),
+            engine: EvalEngine::new(arena),
             local_functions: None,
         }
     }
@@ -429,7 +429,7 @@ impl<'arena> ArenaBatchBuilder<'arena> {
             expressions: Vec::new(),
             params: Vec::new(),
             results: Vec::new(),
-            engine: EvalEngine::new_with_arena(arena),
+            engine: EvalEngine::new(arena),
             local_functions: None,
         }
     }

@@ -1274,8 +1274,9 @@ mod tests {
     #[test]
     fn test_unknown_variable_and_function_eval() {
         // Test that using 'sin' as a variable (when it's a function) produces an error
-        let sin_var_ast = parse_test("sin").unwrap();
-        let err = crate::eval::ast::eval_ast(&sin_var_ast, None).unwrap_err();
+        let arena = bumpalo::Bump::new();
+        let sin_var_ast = parse_expression("sin", &arena).unwrap();
+        let err = crate::eval::ast::eval_ast(&sin_var_ast, None, &arena).unwrap_err();
 
         // Accept any error type, just verify it's an error when using a function name as a variable
         println!("Error when evaluating 'sin' as a variable: {:?}", err);

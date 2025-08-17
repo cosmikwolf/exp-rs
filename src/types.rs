@@ -283,17 +283,21 @@ mod tests {
     use crate::context::EvalContext;
     use crate::error::ExprError;
     use crate::eval::eval_ast;
+    use bumpalo::Bump;
 
     use std::rc::Rc;
 
     #[test]
     fn test_eval_ast_array_and_attribute_errors() {
+        let arena = Bump::new();
+        
         // Array not found
+        let index_ast = arena.alloc(AstExpr::Constant(0.0));
         let ast = AstExpr::Array {
             name: "arr",
-            index: &AstExpr::Constant(0.0),
+            index: index_ast,
         };
-        let err = eval_ast(&ast, None).unwrap_err();
+        let err = eval_ast(&ast, None, &arena).unwrap_err();
         match err {
             ExprError::UnknownVariable { name } => assert_eq!(name, "arr"),
             _ => panic!("Expected UnknownVariable error"),
@@ -303,7 +307,7 @@ mod tests {
             base: "foo",
             attr: "bar",
         };
-        let err2 = eval_ast(&ast2, None).unwrap_err();
+        let err2 = eval_ast(&ast2, None, &arena).unwrap_err();
         match err2 {
             ExprError::AttributeNotFound { base, attr } => {
                 assert_eq!(base, "foo");
@@ -315,6 +319,8 @@ mod tests {
 
     #[test]
     fn test_eval_ast_function_wrong_arity() {
+        let arena = Bump::new();
+        
         // Create a context that has 'sin' registered
         let mut ctx = EvalContext::new();
 
@@ -323,14 +329,14 @@ mod tests {
         let ctx = Rc::new(ctx);
 
         // Create AST for sin with 2 args (should be 1)
-        let args = [AstExpr::Constant(1.0), AstExpr::Constant(2.0)];
+        let args = arena.alloc([AstExpr::Constant(1.0), AstExpr::Constant(2.0)]);
         let ast = AstExpr::Function {
             name: "sin",
-            args: &args,
+            args: args,
         };
 
         // Should give InvalidFunctionCall error because sin takes 1 arg but we gave 2
-        let err = eval_ast(&ast, Some(ctx)).unwrap_err();
+        let err = eval_ast(&ast, Some(ctx), &arena).unwrap_err();
         match err {
             ExprError::InvalidFunctionCall {
                 name,
@@ -347,20 +353,22 @@ mod tests {
 
     #[test]
     fn test_eval_ast_unknown_function_and_variable() {
+        let arena = Bump::new();
+        
         // Unknown function
-        let args = [AstExpr::Constant(1.0)];
+        let args = arena.alloc([AstExpr::Constant(1.0)]);
         let ast = AstExpr::Function {
             name: "notafunc",
-            args: &args,
+            args: args,
         };
-        let err = eval_ast(&ast, None).unwrap_err();
+        let err = eval_ast(&ast, None, &arena).unwrap_err();
         match err {
             ExprError::UnknownFunction { name } => assert_eq!(name, "notafunc"),
             _ => panic!("Expected UnknownFunction error"),
         }
         // Unknown variable
         let ast2 = AstExpr::Variable("notavar");
-        let err2 = eval_ast(&ast2, None).unwrap_err();
+        let err2 = eval_ast(&ast2, None, &arena).unwrap_err();
         match err2 {
             ExprError::UnknownVariable { name } => assert_eq!(name, "notavar"),
             _ => panic!("Expected UnknownVariable error"),

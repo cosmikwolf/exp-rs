@@ -532,8 +532,6 @@ pub mod expression_functions;
 pub mod ffi;
 pub mod functions;
 pub mod lexer;
-#[cfg(test)]
-mod test_expr_func_arena;
 pub mod types;
 
 pub use context::*;

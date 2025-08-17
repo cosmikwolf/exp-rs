@@ -391,16 +391,18 @@ mod unit {
     #[test]
     fn test_eval_ast_array_and_attribute_errors() {
         use exp_rs::eval::eval_ast;
+        let arena = Bump::new();
+        
         // Array not found
         let ast = parse_expression("arr[0]").unwrap();
-        let err = eval_ast(&ast, None).unwrap_err();
+        let err = eval_ast(&ast, None, &arena).unwrap_err();
         match err {
             ExprError::UnknownVariable { name } => assert_eq!(name, "arr"),
             _ => panic!("Expected UnknownVariable error"),
         }
         // Attribute not found
         let ast2 = parse_expression("foo.bar").unwrap();
-        let err2 = eval_ast(&ast2, None).unwrap_err();
+        let err2 = eval_ast(&ast2, None, &arena).unwrap_err();
         match err2 {
             ExprError::AttributeNotFound { base, attr } => {
                 assert_eq!(base, "foo");
@@ -413,9 +415,11 @@ mod unit {
     #[test]
     fn test_eval_ast_function_wrong_arity() {
         use exp_rs::eval::eval_ast;
+        let arena = Bump::new();
+        
         // sin with 2 args (should be 1)
         let ast = parse_expression("sin(1, 2)").unwrap();
-        let err = eval_ast(&ast, Some(create_math_context())).unwrap_err();
+        let err = eval_ast(&ast, Some(create_math_context()), &arena).unwrap_err();
         match err {
             ExprError::InvalidFunctionCall {
                 name,
@@ -433,16 +437,18 @@ mod unit {
     #[test]
     fn test_eval_ast_unknown_function_and_variable() {
         use exp_rs::eval::eval_ast;
+        let arena = Bump::new();
+        
         // Unknown function
         let ast = parse_expression("notafunc(1)").unwrap();
-        let err = eval_ast(&ast, None).unwrap_err();
+        let err = eval_ast(&ast, None, &arena).unwrap_err();
         match err {
             ExprError::UnknownFunction { name } => assert_eq!(name, "notafunc"),
             _ => panic!("Expected UnknownFunction error"),
         }
         // Unknown variable
         let ast2 = parse_expression("notavar").unwrap();
-        let err2 = eval_ast(&ast2, None).unwrap_err();
+        let err2 = eval_ast(&ast2, None, &arena).unwrap_err();
         match err2 {
             ExprError::UnknownVariable { name } => assert_eq!(name, "notavar"),
             _ => panic!("Expected UnknownVariable error"),
@@ -1091,10 +1097,11 @@ mod unit {
     fn test_eval_unknown_variable_and_function() {
         // use exp_rs::engine::parse_expression; // Using the helper function instead
         use exp_rs::error::ExprError;
+        let arena = Bump::new();
 
         // Unknown variable
         let ast = parse_expression("foo").unwrap();
-        let err = exp_rs::eval::eval_ast(&ast, None).unwrap_err();
+        let err = exp_rs::eval::eval_ast(&ast, None, &arena).unwrap_err();
         match err {
             ExprError::UnknownVariable { name } => assert_eq!(name, "foo"),
             _ => panic!("Expected UnknownVariable error"),
@@ -1102,7 +1109,7 @@ mod unit {
 
         // Unknown function
         let ast2 = parse_expression("bar(1)").unwrap();
-        let err2 = exp_rs::eval::eval_ast(&ast2, None).unwrap_err();
+        let err2 = exp_rs::eval::eval_ast(&ast2, None, &arena).unwrap_err();
         match err2 {
             ExprError::UnknownFunction { name } => assert_eq!(name, "bar"),
             _ => panic!("Expected UnknownFunction error"),
@@ -1114,10 +1121,11 @@ mod unit {
         // use exp_rs::engine::parse_expression; // Using the helper function instead
         use exp_rs::error::ExprError;
         use exp_rs::eval::eval_ast;
+        let arena = Bump::new();
 
         // Use sin with 2 args instead of pow(2) since pow now has special handling
         let ast = parse_expression("sin(1, 2)").unwrap();
-        let err = eval_ast(&ast, Some(create_math_context())).unwrap_err();
+        let err = eval_ast(&ast, Some(create_math_context()), &arena).unwrap_err();
         match err {
             ExprError::InvalidFunctionCall {
                 name,

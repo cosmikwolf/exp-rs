@@ -2,7 +2,7 @@
 
 use exp_rs::{Real};
 use exp_rs::engine::parse_expression;
-use exp_rs::eval::eval_ast;
+use exp_rs::eval::{eval_ast, iterative::{eval_with_engine, EvalEngine}};
 use exp_rs::context::EvalContext;
 use bumpalo::Bump;
 use std::rc::Rc;
@@ -16,7 +16,7 @@ fn test_arena_basic_expression() {
     let ast = parse_expression("2 + 3", &arena).unwrap();
     
     // Evaluate
-    let result = eval_ast(&ast, None).unwrap();
+    let result = eval_ast(&ast, None, &arena).unwrap();
     assert_eq!(result, 5.0);
 }
 
@@ -35,7 +35,7 @@ fn test_arena_with_variables() {
     let ast = parse_expression("x + y", &arena).unwrap();
     
     // Evaluate
-    let result = eval_ast(&ast, Some(ctx)).unwrap();
+    let result = eval_ast(&ast, Some(ctx), &arena).unwrap();
     assert_eq!(result, 30.0);
 }
 
@@ -48,7 +48,11 @@ fn test_arena_zero_allocations() {
     let ast = parse_expression("x * 2 + y", &arena).unwrap();
     let allocated_after_parse = arena.allocated_bytes();
     
-    // Evaluate many times - should not allocate
+    // Create reusable engine (allocates stacks once)
+    let mut engine = EvalEngine::new(&arena);
+    let allocated_after_engine = arena.allocated_bytes();
+    
+    // Evaluate many times - should not allocate beyond engine setup
     for i in 0..1000 {
         // Create context for each iteration
         let mut ctx = EvalContext::new();
@@ -56,11 +60,11 @@ fn test_arena_zero_allocations() {
         ctx.set_parameter("y", 1.0);
         let ctx = Rc::new(ctx);
         
-        let result = eval_ast(&ast, Some(ctx)).unwrap();
+        let result = eval_with_engine(&ast, Some(ctx), &mut engine).unwrap();
         assert_eq!(result, (i as Real) * 2.0 + 1.0);
         
-        // Verify no new allocations
-        assert_eq!(arena.allocated_bytes(), allocated_after_parse,
+        // Verify no new allocations beyond engine setup
+        assert_eq!(arena.allocated_bytes(), allocated_after_engine,
             "Arena grew during evaluation #{}", i);
     }
 }

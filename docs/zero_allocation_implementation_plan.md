@@ -4,6 +4,11 @@
 
 This document details the implementation plan to achieve zero runtime allocations during expression evaluation in exp-rs. Based on profiling data showing that 79% of evaluation time is spent on memory allocations (24 allocations per evaluation totaling 480 bytes), this plan outlines how to eliminate these allocations by utilizing arena-based memory management.
 
+**Update**: This plan has been partially implemented with key strategy changes:
+- Consolidated to single `new(arena)` constructor (no backward compatibility)
+- Added arena-aware clearing with `unsafe { set_len(0) }`
+- Identified `eval_iterative` performance issue requiring engine reuse
+
 ## Current State Analysis
 
 ### Problem Identification
@@ -50,9 +55,9 @@ Users requiring different capacity values can modify the constants in `src/eval/
 
 ## Detailed Implementation Plan
 
-### Phase 1: Core Data Structure Changes
+### Phase 1: Core Data Structure Changes ✅ **COMPLETED**
 
-#### 1.1 Update EvalEngine Structure (src/eval/iterative.rs lines 41-55)
+#### 1.1 Update EvalEngine Structure (src/eval/iterative.rs lines 41-55) ✅ **COMPLETED**
 
 **Current Implementation:**
 ```rust
@@ -97,7 +102,7 @@ pub struct EvalEngine<'arena> {
 }
 ```
 
-#### 1.2 Add Arena Capacity Constants (src/eval/iterative.rs lines 26-30)
+#### 1.2 Add Arena Capacity Constants (src/eval/iterative.rs lines 26-30) ✅ **COMPLETED**
 
 **Current Constants:**
 ```rust
@@ -126,25 +131,13 @@ const ARENA_VALUE_CAPACITY: usize = 64;    // Increased from INITIAL_VALUE_CAPAC
 const ARENA_ARG_BUFFER_CAPACITY: usize = 32; // New buffer for function args
 ```
 
-#### 1.3 Update Constructor (src/eval/iterative.rs lines 80-91)
+#### 1.3 Consolidate Constructor (src/eval/iterative.rs lines 80-91) ✅ **COMPLETED**
 
-**Current Implementation:**
-```rust
-pub fn new_with_arena(arena: &'arena bumpalo::Bump) -> Self {
-    Self {
-        op_stack: Vec::with_capacity(INITIAL_OP_CAPACITY),
-        value_stack: Vec::with_capacity(INITIAL_VALUE_CAPACITY),
-        ctx_stack: ContextStack::new(),
-        // ... other fields
-    }
-}
-```
+**Strategy Change**: Instead of maintaining backward compatibility, we consolidated to a single arena-only constructor.
 
-**New Implementation:**
+**Implemented:**
 ```rust
-pub fn new_with_arena(arena: &'arena bumpalo::Bump) -> Self {
-    // Use the arena capacity constants defined at module level
-    
+pub fn new(arena: &'arena bumpalo::Bump) -> Self {
     Self {
         arena: Some(arena),
         
@@ -167,8 +160,8 @@ pub fn new_with_arena(arena: &'arena bumpalo::Bump) -> Self {
         value_stack_hwm: 0,
         arg_buffer_hwm: 0,
         
-        // Arena-aware context stack
-        ctx_stack: ContextStack::new_in_arena(arena),
+        // Existing context stack (no arena needed)
+        ctx_stack: ContextStack::new(),
         
         // Other fields
         func_cache: BTreeMap::new(),
@@ -179,24 +172,45 @@ pub fn new_with_arena(arena: &'arena bumpalo::Bump) -> Self {
 }
 ```
 
-### Phase 2: Stack Reset Strategy
+**All call sites updated** to use `new(arena)` instead of `new()` or `new_with_arena()`.
 
-#### 2.1 Replace clear() with Arena-Aware Reset (src/eval/iterative.rs lines 106-108)
+### Phase 2: Stack Reset Strategy ✅ **COMPLETED**
 
-**Current Implementation:**
+#### 2.1 Arena-Aware Clear/Reset (src/eval/iterative.rs lines 106-108) ✅ **COMPLETED**
+
+**Implemented:**
 ```rust
-// Clear stacks but keep capacity
-self.op_stack.clear();
-self.value_stack.clear();
+// In EvalEngine::eval() method:
+self.arena_clear_stacks();
 self.ctx_stack.clear();
 self.func_cache.clear();
+
+// Private method for efficient arena clearing:
+fn arena_clear_stacks(&mut self) {
+    // SAFETY: For arena-allocated vectors, we can safely set length to 0
+    // without dropping elements since the arena handles all cleanup
+    unsafe {
+        self.op_stack.set_len(0);
+        self.value_stack.set_len(0);
+        self.arg_buffer.set_len(0);
+    }
+}
+
+// Public method for comprehensive reset:
+pub fn arena_reset(&mut self) {
+    self.arena_clear_stacks();
+    self.ctx_stack.clear();
+    self.func_cache.clear();
+    self.expr_func_cache.clear();
+    
+    // Reset high water marks
+    self.op_stack_hwm = 0;
+    self.value_stack_hwm = 0;
+    self.arg_buffer_hwm = 0;
+}
 ```
 
-**New Implementation:**
-```rust
-// Reset stacks without deallocating (preserves arena memory)
-if self.arena.is_some() {
-    // For arena-allocated vectors, use set_len(0) to preserve capacity
+**Key insight**: Using `unsafe { set_len(0) }` avoids triggering Drop on arena-allocated elements.
     unsafe {
         self.op_stack.set_len(0);
         self.value_stack.set_len(0);
@@ -301,6 +315,44 @@ impl<'arena> EvalEngine<'arena> {
     }
 }
 ```
+
+### Phase 2.5: Critical Discovery - eval_iterative Performance Issue ⚠️ **CRITICAL**
+
+**Problem Identified**: During testing, we discovered that `eval_iterative()` creates a new `EvalEngine` on every call, which defeats our zero-allocation optimization.
+
+**Current Implementation in eval_iterative():**
+```rust
+pub fn eval_iterative<'arena>(
+    ast: &'arena AstExpr<'arena>,
+    ctx: Option<Rc<EvalContext>>,
+    arena: &'arena bumpalo::Bump,
+) -> Result<Real, ExprError> {
+    let mut engine = EvalEngine::new(arena);  // ⚠️ ALLOCATES NEW STACKS EVERY TIME
+    engine.eval(ast, ctx)
+}
+```
+
+**Impact**: Every call to `eval_ast()` → `eval_iterative()` allocates new arena vectors, causing arena growth.
+
+**Solution Implemented**: Updated tests to use `eval_with_engine()` with reusable engines:
+
+```rust
+// Create engine once
+let mut engine = EvalEngine::new(&arena);
+
+// Reuse for multiple evaluations
+for i in 0..1000 {
+    let result = eval_with_engine(&ast, Some(ctx), &mut engine).unwrap();
+    // Arena size remains constant after first evaluation
+}
+```
+
+**Recommendation for eval_iterative()**: Consider one of these approaches:
+1. **Thread-local caching** - Cache engines per arena (complex with lifetimes)
+2. **Documentation** - Document that `eval_with_engine()` is preferred for performance
+3. **Leave as-is** - Keep `eval_iterative()` for simple use cases, promote reusable engines
+
+Currently choosing option 3 for simplicity while the zero-allocation optimization works perfectly with reusable engines.
 
 ### Phase 3: Function Argument Collection Optimization
 

@@ -6,7 +6,6 @@
 use crate::types::{AstExpr, HString, FunctionName};
 use crate::error::ExprError;
 use crate::Real;
-use alloc::vec::Vec;
 use alloc::format;
 
 /// Operations that can be pushed onto the evaluation stack
@@ -46,19 +45,10 @@ pub enum EvalOp<'arena> {
     /// Complete OR operation (when not short-circuited)
     CompleteOr,
     
-    /// Apply a function with N arguments
+    /// Apply a function with N arguments from the value stack
     ApplyFunction { 
         name: FunctionName,
-        args_needed: usize,
-        args_collected: Vec<Real>,
-        ctx_id: usize,
-    },
-    
-    /// Collect function arguments from the value stack
-    CollectFunctionArgs {
-        name: FunctionName,
-        total_args: usize,
-        args_so_far: Vec<Real>,
+        arg_count: usize,
         ctx_id: usize,
     },
     
@@ -202,13 +192,9 @@ impl<'arena> core::fmt::Debug for EvalOp<'arena> {
             }
             EvalOp::CompleteAnd => write!(f, "CompleteAnd"),
             EvalOp::CompleteOr => write!(f, "CompleteOr"),
-            EvalOp::ApplyFunction { name, args_needed, args_collected, ctx_id } => {
-                write!(f, "ApplyFunction {{ name: {:?}, args_needed: {}, args_collected: {:?}, ctx_id: {} }}", 
-                    name, args_needed, args_collected, ctx_id)
-            }
-            EvalOp::CollectFunctionArgs { name, total_args, args_so_far, ctx_id } => {
-                write!(f, "CollectFunctionArgs {{ name: {:?}, total_args: {}, args_so_far: {:?}, ctx_id: {} }}", 
-                    name, total_args, args_so_far, ctx_id)
+            EvalOp::ApplyFunction { name, arg_count, ctx_id } => {
+                write!(f, "ApplyFunction {{ name: {:?}, arg_count: {}, ctx_id: {} }}", 
+                    name, arg_count, ctx_id)
             }
             EvalOp::LookupVariable { name, ctx_id } => {
                 write!(f, "LookupVariable {{ name: {:?}, ctx_id: {} }}", name, ctx_id)

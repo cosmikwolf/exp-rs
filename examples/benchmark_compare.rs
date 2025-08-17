@@ -161,7 +161,7 @@ fn main() {
             let mut ctx = ctx_base.clone();
             ctx.set_parameter("a", j as Real);
             let ctx_rc = Rc::new(ctx);
-            evalctx_sum += exp_rs::eval::ast::eval_ast(&ast, Some(ctx_rc)).unwrap();
+            evalctx_sum += exp_rs::eval::ast::eval_ast(&ast, Some(ctx_rc), &arena).unwrap();
         }
         let evalctx_time = start.elapsed();
         std::hint::black_box(evalctx_sum);
