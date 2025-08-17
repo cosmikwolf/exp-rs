@@ -1056,6 +1056,24 @@ pub extern "C" fn expr_batch_get_result(batch: *const ExprBatch, index: usize) -
     builder.get_result(index).unwrap_or(Real::NAN)
 }
 
+/// Get the high water mark of arena memory usage for a batch
+///
+/// # Parameters
+/// - `batch`: The batch
+///
+/// # Returns
+/// Number of bytes currently allocated in the batch's arena.
+/// This represents the maximum memory usage of the arena.
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_batch_arena_bytes(batch: *const ExprBatch) -> usize {
+    if batch.is_null() {
+        return 0;
+    }
+    
+    let builder = unsafe { &*(batch as *const ArenaBatchBuilder) };
+    builder.arena_allocated_bytes()
+}
+
 /// Evaluate all expressions in the batch with detailed error reporting
 ///
 /// # Parameters
@@ -1762,10 +1780,22 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         }
     }
 
-    // Enter an infinite loop with WFI (Wait For Interrupt) to save power
+    // Trigger a fault that the debugger can catch
+    #[cfg(target_arch = "arm")]
     loop {
         unsafe {
-            core::arch::asm!("wfi");
+            // Trigger a HardFault by executing an undefined instruction
+            // This allows the debugger to catch the fault and inspect the state
+            core::arch::asm!("udf #0");
         }
+        // If the fault handler returns, we'll trigger it again
+        // This prevents execution from continuing past the panic
+    }
+    
+    // Fallback for non-ARM architectures
+    #[cfg(not(target_arch = "arm"))]
+    loop {
+        // Busy loop for debugging - debugger can break here
+        core::hint::spin_loop();
     }
 }
