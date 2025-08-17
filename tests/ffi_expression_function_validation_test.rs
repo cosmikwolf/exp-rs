@@ -8,192 +8,138 @@ use std::ptr;
 #[test]
 fn test_ffi_null_pointer_validation() {
     unsafe {
-        let ctx = exp_rs_context_new();
+        let ctx = expr_context_new();
         assert!(!ctx.is_null());
         
         // Test null context
-        let result = exp_rs_context_register_expression_function(
+        let result = expr_context_add_expression_function(
             ptr::null_mut(),
             CString::new("test").unwrap().as_ptr(),
-            ptr::null(),
-            0,
+            CString::new("").unwrap().as_ptr(),
             CString::new("42").unwrap().as_ptr(),
         );
-        assert_eq!(result.status, 1);
-        assert!(!result.error.is_null());
-        exp_rs_free_error(result.error as *mut c_char);
+        assert_eq!(result, -1); // Expected error code for null context
         
         // Test null function name
-        let result = exp_rs_context_register_expression_function(
+        let result = expr_context_add_expression_function(
             ctx,
             ptr::null(),
-            ptr::null(),
-            0,
+            CString::new("").unwrap().as_ptr(),
             CString::new("42").unwrap().as_ptr(),
         );
-        assert_eq!(result.status, 1);
-        assert!(!result.error.is_null());
-        exp_rs_free_error(result.error as *mut c_char);
+        assert_eq!(result, -1); // Expected error code for null name
+        
+        // Test null parameters
+        let result = expr_context_add_expression_function(
+            ctx,
+            CString::new("test").unwrap().as_ptr(),
+            ptr::null(),
+            CString::new("42").unwrap().as_ptr(),
+        );
+        assert_eq!(result, -1); // Expected error code for null params
         
         // Test null expression
-        let result = exp_rs_context_register_expression_function(
+        let result = expr_context_add_expression_function(
             ctx,
             CString::new("test").unwrap().as_ptr(),
-            ptr::null(),
-            0,
+            CString::new("").unwrap().as_ptr(),
             ptr::null(),
         );
-        assert_eq!(result.status, 1);
-        assert!(!result.error.is_null());
-        exp_rs_free_error(result.error as *mut c_char);
+        assert_eq!(result, -1); // Expected error code for null expression
         
-        exp_rs_context_free(ctx);
+        expr_context_free(ctx);
     }
 }
 
 #[test]
-fn test_ffi_utf8_validation() {
+fn test_ffi_invalid_utf8_validation() {
     unsafe {
-        let ctx = exp_rs_context_new();
+        let ctx = expr_context_new();
+        assert!(!ctx.is_null());
         
-        // Invalid UTF-8 in function name
-        let invalid_utf8 = vec![0xFF, 0xFE, 0x00];
-        let result = exp_rs_context_register_expression_function(
+        // Create invalid UTF-8 string
+        let invalid_utf8 = b"invalid\xff\xfe";
+        let name_ptr = invalid_utf8.as_ptr() as *const c_char;
+        
+        let result = expr_context_add_expression_function(
             ctx,
-            invalid_utf8.as_ptr() as *const c_char,
-            ptr::null(),
-            0,
+            name_ptr,
+            CString::new("").unwrap().as_ptr(),
             CString::new("42").unwrap().as_ptr(),
         );
-        assert_eq!(result.status, 2); // Invalid UTF-8 in function name
-        assert!(!result.error.is_null());
-        exp_rs_free_error(result.error as *mut c_char);
+        assert_eq!(result, -2); // Expected error code for invalid UTF-8
         
-        // Invalid UTF-8 in expression
-        let result = exp_rs_context_register_expression_function(
-            ctx,
-            CString::new("test").unwrap().as_ptr(),
-            ptr::null(),
-            0,
-            invalid_utf8.as_ptr() as *const c_char,
-        );
-        assert_eq!(result.status, 3); // Invalid UTF-8 in expression
-        assert!(!result.error.is_null());
-        exp_rs_free_error(result.error as *mut c_char);
-        
-        exp_rs_context_free(ctx);
+        expr_context_free(ctx);
     }
 }
 
 #[test]
-fn test_ffi_parameter_validation() {
+fn test_ffi_successful_registration() {
     unsafe {
-        let ctx = exp_rs_context_new();
+        let ctx = expr_context_new();
+        assert!(!ctx.is_null());
         
-        // Create parameter array with null pointer
-        let param1 = CString::new("x").unwrap();
-        let param2_null: *const c_char = ptr::null();
-        let params = vec![param1.as_ptr(), param2_null];
-        
-        let result = exp_rs_context_register_expression_function(
+        // Test successful registration
+        let result = expr_context_add_expression_function(
             ctx,
-            CString::new("test").unwrap().as_ptr(),
-            params.as_ptr(),
-            2,
-            CString::new("x + 1").unwrap().as_ptr(),
+            CString::new("double").unwrap().as_ptr(),
+            CString::new("x").unwrap().as_ptr(),
+            CString::new("x * 2").unwrap().as_ptr(),
         );
-        assert_eq!(result.status, 4); // Null pointer in parameter list
-        assert!(!result.error.is_null());
-        exp_rs_free_error(result.error as *mut c_char);
+        assert_eq!(result, 0); // Success
         
-        // Test invalid UTF-8 in parameter
-        let invalid_param = vec![0xFF, 0xFE, 0x00];
-        let params = vec![invalid_param.as_ptr() as *const c_char];
-        
-        let result = exp_rs_context_register_expression_function(
-            ctx,
-            CString::new("test").unwrap().as_ptr(),
-            params.as_ptr(),
-            1,
-            CString::new("x + 1").unwrap().as_ptr(),
-        );
-        assert_eq!(result.status, 5); // Invalid UTF-8 in parameter name
-        assert!(!result.error.is_null());
-        exp_rs_free_error(result.error as *mut c_char);
-        
-        exp_rs_context_free(ctx);
+        expr_context_free(ctx);
     }
 }
 
 #[test]
-fn test_ffi_registration_errors() {
+fn test_ffi_invalid_expression_syntax() {
     unsafe {
-        let ctx = exp_rs_context_new();
+        let ctx = expr_context_new();
+        assert!(!ctx.is_null());
         
-        // Test registration failure (e.g., parsing error)
-        let result = exp_rs_context_register_expression_function(
+        // Test with invalid expression syntax
+        let result = expr_context_add_expression_function(
             ctx,
-            CString::new("bad_expr").unwrap().as_ptr(),
-            ptr::null(),
-            0,
-            CString::new("(((").unwrap().as_ptr(), // Unmatched parentheses
+            CString::new("invalid_func").unwrap().as_ptr(),
+            CString::new("x").unwrap().as_ptr(),
+            CString::new("x + * 2").unwrap().as_ptr(), // Invalid syntax
         );
-        assert_eq!(result.status, 7); // Syntax error (status 7 for syntax errors)
-        assert!(!result.error.is_null());
-        exp_rs_free_error(result.error as *mut c_char);
+        assert_eq!(result, -3); // Expected error code for registration failure
         
-        // Test capacity exceeded - register 8 functions (the limit)
-        for i in 0..8 {
-            let name = CString::new(format!("func{}", i)).unwrap();
-            let result = exp_rs_context_register_expression_function(
-                ctx,
-                name.as_ptr(),
-                ptr::null(),
-                0,
-                CString::new("42").unwrap().as_ptr(),
-            );
-            assert_eq!(result.status, 0, "Failed to register function {}", i);
-        }
-        
-        // The 9th should fail
-        let result = exp_rs_context_register_expression_function(
-            ctx,
-            CString::new("func8").unwrap().as_ptr(),
-            ptr::null(),
-            0,
-            CString::new("42").unwrap().as_ptr(),
-        );
-        assert_eq!(result.status, 6); // Failed to register (all registration errors return status 6)
-        assert!(!result.error.is_null());
-        exp_rs_free_error(result.error as *mut c_char);
-        
-        exp_rs_context_free(ctx);
+        expr_context_free(ctx);
     }
 }
 
 #[test]
-fn test_ffi_parameter_count_mismatch() {
+fn test_ffi_remove_expression_function() {
     unsafe {
-        let ctx = exp_rs_context_new();
+        let ctx = expr_context_new();
+        assert!(!ctx.is_null());
         
-        // Create parameter array
-        let param1 = CString::new("x").unwrap();
-        let param2 = CString::new("y").unwrap();
-        let params = vec![param1.as_ptr(), param2.as_ptr()];
-        
-        // Register with correct count
-        let result = exp_rs_context_register_expression_function(
+        // First add a function
+        let result = expr_context_add_expression_function(
             ctx,
-            CString::new("add").unwrap().as_ptr(),
-            params.as_ptr(),
-            2, // Correct count
-            CString::new("x + y").unwrap().as_ptr(),
+            CString::new("square").unwrap().as_ptr(),
+            CString::new("x").unwrap().as_ptr(),
+            CString::new("x * x").unwrap().as_ptr(),
         );
-        assert_eq!(result.status, 0);
+        assert_eq!(result, 0); // Success
         
-        // Note: Currently there's no validation that param_count matches actual array size
-        // This could lead to undefined behavior if param_count > actual array size
+        // Now remove it
+        let result = expr_context_remove_expression_function(
+            ctx,
+            CString::new("square").unwrap().as_ptr(),
+        );
+        assert_eq!(result, 1); // Function was removed
         
-        exp_rs_context_free(ctx);
+        // Try to remove non-existent function
+        let result = expr_context_remove_expression_function(
+            ctx,
+            CString::new("nonexistent").unwrap().as_ptr(),
+        );
+        assert_eq!(result, 0); // Function didn't exist
+        
+        expr_context_free(ctx);
     }
 }

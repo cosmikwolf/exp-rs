@@ -770,15 +770,14 @@ impl EvalContext {
 
     /// Registers all built-in math functions as native functions in the context.
     pub fn register_default_math_functions(&mut self) {
-        // Basic operators as functions
+        // Basic operators as functions (always available)
         let _ = self.register_native_function("+", 2, |args| args[0] + args[1]);
         let _ = self.register_native_function("-", 2, |args| args[0] - args[1]);
         let _ = self.register_native_function("*", 2, |args| args[0] * args[1]);
         let _ = self.register_native_function("/", 2, |args| args[0] / args[1]);
         let _ = self.register_native_function("%", 2, |args| args[0] % args[1]);
-        // self.register_native_function("^", 2, |args| args[0].powf(args[1]));
 
-        // Comparison operators
+        // Comparison operators (always available)
         let _ =
             self.register_native_function("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
         let _ =
@@ -804,7 +803,7 @@ impl EvalContext {
             |args| if args[0] != args[1] { 1.0 } else { 0.0 },
         );
 
-        // Logical operators
+        // Logical operators (always available)
         let _ = self.register_native_function("&&", 2, |args| {
             if args[0] != 0.0 && args[1] != 0.0 {
                 1.0
@@ -820,20 +819,19 @@ impl EvalContext {
             }
         });
 
-        // Function aliases for the operators
+        // Function aliases for the operators (always available)
         let _ = self.register_native_function("add", 2, |args| args[0] + args[1]);
         let _ = self.register_native_function("sub", 2, |args| args[0] - args[1]);
         let _ = self.register_native_function("mul", 2, |args| args[0] * args[1]);
         let _ = self.register_native_function("div", 2, |args| args[0] / args[1]);
         let _ = self.register_native_function("fmod", 2, |args| args[0] % args[1]);
-        // self.register_native_function("pow", 2, |args| args[0].powf(args[1]));
         let _ = self.register_native_function("neg", 1, |args| -args[0]);
 
-        // Sequence operators
+        // Sequence operators (always available)
         let _ = self.register_native_function(",", 2, |args| args[1]); // The actual comma operator
         let _ = self.register_native_function("comma", 2, |args| args[1]); // Function alias for the comma operator
 
-        // Simple functions available in core
+        // Core math functions that don't require libm (always available)
         let _ = self.register_native_function("abs", 1, |args| args[0].abs());
         let _ = self.register_native_function("max", 2, |args| args[0].max(args[1]));
         let _ = self.register_native_function("min", 2, |args| args[0].min(args[1]));
@@ -847,18 +845,18 @@ impl EvalContext {
             }
         });
 
-        // Constants
+        // Math constants (always available)
         #[cfg(feature = "f32")]
-        self.register_native_function("e", 0, |_| core::f32::consts::E);
+        let _ = self.register_native_function("e", 0, |_| core::f32::consts::E);
         #[cfg(not(feature = "f32"))]
         let _ = self.register_native_function("e", 0, |_| core::f64::consts::E);
 
         #[cfg(feature = "f32")]
-        self.register_native_function("pi", 0, |_| core::f32::consts::PI);
+        let _ = self.register_native_function("pi", 0, |_| core::f32::consts::PI);
         #[cfg(not(feature = "f32"))]
         let _ = self.register_native_function("pi", 0, |_| core::f64::consts::PI);
 
-        // Register advanced math functions that require libm
+        // Advanced math functions with libm
         #[cfg(feature = "libm")]
         {
             let _ = self
@@ -880,13 +878,18 @@ impl EvalContext {
                 self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
             let _ = self
                 .register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
-            // self.register_native_function("round", 1, |args| crate::functions::round(args[0], 0.0));
+            let _ = self
+                .register_native_function("round", 1, |args| crate::functions::round(args[0], 0.0));
             let _ =
                 self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
             let _ =
                 self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
             let _ = self
                 .register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
+            let _ = self
+                .register_native_function("pow", 2, |args| crate::functions::pow(args[0], args[1]));
+            let _ = self
+                .register_native_function("^", 2, |args| crate::functions::pow(args[0], args[1]));
             let _ =
                 self.register_native_function("sin", 1, |args| crate::functions::sin(args[0], 0.0));
             let _ = self
@@ -899,27 +902,29 @@ impl EvalContext {
                 .register_native_function("tanh", 1, |args| crate::functions::tanh(args[0], 0.0));
         }
 
-        // In test mode without libm, provide std library implementations for the advanced math functions
+        // In test mode without libm, provide std library implementations
         #[cfg(all(not(feature = "libm"), test))]
         {
-            self.register_native_function("acos", 1, |args| args[0].acos());
-            self.register_native_function("asin", 1, |args| args[0].asin());
-            self.register_native_function("atan", 1, |args| args[0].atan());
-            self.register_native_function("atan2", 2, |args| args[0].atan2(args[1]));
-            self.register_native_function("ceil", 1, |args| args[0].ceil());
-            self.register_native_function("cos", 1, |args| args[0].cos());
-            self.register_native_function("cosh", 1, |args| args[0].cosh());
-            self.register_native_function("exp", 1, |args| args[0].exp());
-            self.register_native_function("floor", 1, |args| args[0].floor());
-            self.register_native_function("round", 1, |args| args[0].round());
-            self.register_native_function("ln", 1, |args| args[0].ln());
-            self.register_native_function("log", 1, |args| args[0].log10());
-            self.register_native_function("log10", 1, |args| args[0].log10());
-            self.register_native_function("sin", 1, |args| args[0].sin());
-            self.register_native_function("sinh", 1, |args| args[0].sinh());
-            self.register_native_function("sqrt", 1, |args| args[0].sqrt());
-            self.register_native_function("tan", 1, |args| args[0].tan());
-            self.register_native_function("tanh", 1, |args| args[0].tanh());
+            let _ = self.register_native_function("acos", 1, |args| args[0].acos());
+            let _ = self.register_native_function("asin", 1, |args| args[0].asin());
+            let _ = self.register_native_function("atan", 1, |args| args[0].atan());
+            let _ = self.register_native_function("atan2", 2, |args| args[0].atan2(args[1]));
+            let _ = self.register_native_function("ceil", 1, |args| args[0].ceil());
+            let _ = self.register_native_function("cos", 1, |args| args[0].cos());
+            let _ = self.register_native_function("cosh", 1, |args| args[0].cosh());
+            let _ = self.register_native_function("exp", 1, |args| args[0].exp());
+            let _ = self.register_native_function("floor", 1, |args| args[0].floor());
+            let _ = self.register_native_function("round", 1, |args| args[0].round());
+            let _ = self.register_native_function("ln", 1, |args| args[0].ln());
+            let _ = self.register_native_function("log", 1, |args| args[0].log10());
+            let _ = self.register_native_function("log10", 1, |args| args[0].log10());
+            let _ = self.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+            let _ = self.register_native_function("^", 2, |args| args[0].powf(args[1]));
+            let _ = self.register_native_function("sin", 1, |args| args[0].sin());
+            let _ = self.register_native_function("sinh", 1, |args| args[0].sinh());
+            let _ = self.register_native_function("sqrt", 1, |args| args[0].sqrt());
+            let _ = self.register_native_function("tan", 1, |args| args[0].tan());
+            let _ = self.register_native_function("tanh", 1, |args| args[0].tanh());
         }
 
         // In non-test no_std mode without libm, we don't register advanced math functions

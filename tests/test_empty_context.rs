@@ -4,9 +4,12 @@ use std::rc::Rc;
 
 #[test]
 fn test_empty_context_has_no_functions() {
-    let ctx = EvalContext::empty();
+    let mut ctx = EvalContext::empty();
     
-    // Basic operators still work (they're handled by the parser)
+    // Register basic operators for this test
+    ctx.register_native_function("+", 2, |args| args[0] + args[1]).unwrap();
+    
+    // Basic operators work when manually registered
     let result = interp("2 + 3", Some(Rc::new(ctx.clone())));
     assert_eq!(result.unwrap(), 5.0);
     
@@ -43,11 +46,14 @@ fn test_empty_context_has_no_functions() {
 fn test_empty_context_with_manual_functions() {
     let mut ctx = EvalContext::empty();
     
-    // Manually register only the functions we need
+    // Manually register basic operators and the functions we need
+    ctx.register_native_function("+", 2, |args| args[0] + args[1]).unwrap();
+    ctx.register_native_function("*", 2, |args| args[0] * args[1]).unwrap();
+    ctx.register_native_function("neg", 1, |args| -args[0]).unwrap(); // For unary negation
     ctx.register_native_function("abs", 1, |args| args[0].abs()).unwrap();
     ctx.register_native_function("max", 2, |args| args[0].max(args[1])).unwrap();
     
-    // Basic operators work without registration
+    // Basic operators work when manually registered
     let result = interp("2 + 3", Some(Rc::new(ctx.clone())));
     assert_eq!(result.unwrap(), 5.0);
     

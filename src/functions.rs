@@ -692,6 +692,28 @@ pub fn sign(a: Real, _: Real) -> Real {
     }
 }
 
+#[cfg(feature = "libm")]
+pub fn round(a: Real, _: Real) -> Real {
+    #[cfg(feature = "f32")]
+    {
+        libm::roundf(a)
+    }
+    #[cfg(not(feature = "f32"))]
+    {
+        libm::round(a)
+    }
+}
+
+#[cfg(all(not(feature = "libm"), test))]
+pub fn round(a: Real, _: Real) -> Real {
+    a.round()
+}
+
+#[cfg(all(not(feature = "libm"), not(test)))]
+pub fn round(_: Real, _: Real) -> Real {
+    panic!("round requires libm or custom implementation")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

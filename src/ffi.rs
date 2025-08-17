@@ -109,7 +109,6 @@ pub use crate::expression::Expression as ExpressionExport;
 // Global Allocator for no_std ARM
 // ============================================================================
 
-#[cfg(feature = "custom_cbindgen_alloc")]
 mod allocator {
     use core::alloc::{GlobalAlloc, Layout};
 
@@ -655,8 +654,15 @@ pub extern "C" fn expr_context_add_expression_function(
     // Get mutable access to register the function
     match alloc::rc::Rc::get_mut(ctx_handle) {
         Some(ctx_mut) => {
-            match ctx_mut.register_expression_function(name_str, &param_vec, expr_str) {
-                Ok(_) => 0,
+            // Use validated registration to catch syntax errors during registration
+            match ctx_mut.register_expression_function_validated(name_str, &param_vec, expr_str, false) {
+                Ok(report) => {
+                    if report.syntax_valid {
+                        0 // Success
+                    } else {
+                        -3 // Syntax validation failed
+                    }
+                }
                 Err(_) => -3, // Registration failed
             }
         }
