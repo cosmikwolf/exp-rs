@@ -6,12 +6,12 @@ use alloc::rc::Rc;
 use std::rc::Rc;
 
 use crate::Real;
+#[cfg(not(test))]
+use crate::Vec;
 use crate::context::EvalContext;
 use crate::error::ExprError;
 use crate::lexer::{Lexer, Token};
 use crate::types::{AstExpr, TokenKind};
-#[cfg(not(test))]
-use crate::Vec;
 use bumpalo::Bump;
 
 use alloc::borrow::Cow;
@@ -346,9 +346,9 @@ impl<'input, 'arena> PrattParser<'input, 'arena> {
             // No-op, just clarity: polynomial(x)
         }
 
-        Ok(AstExpr::Function { 
-            name, 
-            args: args.into_bump_slice() 
+        Ok(AstExpr::Function {
+            name,
+            args: args.into_bump_slice(),
         })
     }
 
@@ -381,7 +381,10 @@ impl<'input, 'arena> PrattParser<'input, 'arena> {
     }
 
     // Helper method for parsing attribute access
-    fn parse_attribute_access(&mut self, expr: AstExpr<'arena>) -> Result<AstExpr<'arena>, ExprError> {
+    fn parse_attribute_access(
+        &mut self,
+        expr: AstExpr<'arena>,
+    ) -> Result<AstExpr<'arena>, ExprError> {
         let dot_position = self.peek().map(|t| t.position).unwrap_or(0);
         self.next(); // consume '.'
 
@@ -416,7 +419,11 @@ impl<'input, 'arena> PrattParser<'input, 'arena> {
     }
 
     // Unified method for parsing expressions with a flag for comma handling
-    fn parse_expr_unified(&mut self, min_bp: u8, allow_comma: bool) -> Result<AstExpr<'arena>, ExprError> {
+    fn parse_expr_unified(
+        &mut self,
+        min_bp: u8,
+        allow_comma: bool,
+    ) -> Result<AstExpr<'arena>, ExprError> {
         // Check recursion depth to prevent stack overflow
         self.recursion_depth += 1;
         if self.recursion_depth > self.max_recursion_depth {
@@ -853,11 +860,10 @@ impl<'input, 'arena> PrattParser<'input, 'arena> {
 /// ```
 pub fn parse_expression<'arena>(
     input: &str,
-    arena: &'arena Bump
+    arena: &'arena Bump,
 ) -> Result<AstExpr<'arena>, ExprError> {
     parse_expression_arena_with_context(input, arena, None, None)
 }
-
 
 /// Parse an expression with function parameters that should be treated as variables.
 ///
@@ -873,12 +879,12 @@ pub fn parse_expression<'arena>(
 /// use bumpalo::Bump;
 ///
 /// let arena = Bump::new();
-/// 
+///
 /// // Parse expression function body with parameters
 /// let params = vec!["x".to_string(), "y".to_string()];
 /// let expr = parse_expression_with_parameters("x * y + 2", &arena, &params).unwrap();
 /// // In this case, 'x' and 'y' are treated as variables, not potential function calls
-/// 
+///
 /// // Without this, "x(y)" would be parsed as a function call
 /// let expr = parse_expression_with_parameters("x(y)", &arena, &params).unwrap();
 /// // This correctly parses as multiplication due to juxtaposition: x * y
@@ -890,7 +896,6 @@ pub fn parse_expression_with_parameters<'arena>(
 ) -> Result<AstExpr<'arena>, ExprError> {
     parse_expression_arena_with_context(input, arena, Some(parameters), None)
 }
-
 
 /// Parse an expression with reserved variables and context variable names.
 ///
@@ -985,8 +990,8 @@ pub fn parse_expression_arena_with_context<'arena>(
 /// }
 /// ```
 pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::error::Result<Real> {
-    use alloc::rc::Rc;
     use crate::expression::Expression;
+    use alloc::rc::Rc;
 
     // Create a new context if none provided
     let eval_ctx = match ctx {
@@ -1019,15 +1024,15 @@ mod tests {
     use bumpalo::Bump;
 
     use std::vec; // Import functions from our own module
-    
+
     // Simple test helper to parse with a temporary arena
     fn parse_test(expr: &str) -> Result<AstExpr<'static>, ExprError> {
         use std::cell::RefCell;
-        
+
         thread_local! {
             static TEST_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(64 * 1024));
         }
-        
+
         TEST_ARENA.with(|arena| {
             let arena = arena.borrow();
             let ast = parse_expression(expr, &*arena)?;
@@ -1035,7 +1040,6 @@ mod tests {
             Ok(unsafe { std::mem::transmute::<AstExpr<'_>, AstExpr<'static>>(ast) })
         })
     }
-    
 
     // Tests for the ternary operator
     #[test]
@@ -1315,7 +1319,7 @@ mod tests {
         // Test array indexing through parsing
         let arena = Bump::new();
         let ast = parse_expression("sin(arr[0])", &arena).unwrap();
-        
+
         // Verify the parsed structure
         match &ast {
             AstExpr::Function { name, args } => {
@@ -1339,7 +1343,7 @@ mod tests {
         // Note: foo.bar(x) would parse as a function call with foo.bar as the function name
         // For pure attribute access, test foo.bar
         let ast2 = parse_expression("foo.bar", &arena).unwrap();
-        
+
         // Verify the parsed structure
         match &ast2 {
             AstExpr::Attribute { base, attr } => {
@@ -1433,7 +1437,7 @@ mod tests {
     #[cfg(feature = "libm")] // This test requires libm for built-in sin/cos/abs
     fn test_function_composition() {
         // Test function composition through parsing and evaluation
-        
+
         // Test sin(0.5)
         let result = interp("sin(0.5)", None).unwrap();
         println!("sin 0.5 = {}", result);
@@ -1539,7 +1543,7 @@ mod tests {
     #[cfg(feature = "libm")] // This test requires libm for built-in sin/asin
     fn test_function_recognition() {
         // Test function recognition through parsing and evaluation
-        
+
         // Test asin(sin(0.5))
         let result = interp("asin(sin(0.5))", None).unwrap();
         println!("asin(sin(0.5)) = {}", result);
@@ -1589,7 +1593,7 @@ mod tests {
         // This test verifies that attribute access on function results is rejected
         // Since juxtaposition is disabled, "sin x" will fail, so test with parentheses
         let ast = parse_test("sin(x).foo");
-        
+
         // Currently, this might parse as sin(x.foo) due to precedence
         // Let's test with parentheses to be explicit
         let ast2 = parse_test("(sin(x)).foo");

@@ -30,8 +30,8 @@ const INITIAL_VALUE_CAPACITY: usize = 16;
 /// Arena-based stack capacities (increased to reduce reallocation likelihood)
 /// Note: These use fixed constants following existing codebase patterns.
 /// Users needing different sizes should modify these constants and recompile.
-const ARENA_OP_CAPACITY: usize = 128;      // Increased from INITIAL_OP_CAPACITY
-const ARENA_VALUE_CAPACITY: usize = 64;    // Increased from INITIAL_VALUE_CAPACITY
+const ARENA_OP_CAPACITY: usize = 128; // Increased from INITIAL_OP_CAPACITY
+const ARENA_VALUE_CAPACITY: usize = 64; // Increased from INITIAL_VALUE_CAPACITY
 const ARENA_ARG_BUFFER_CAPACITY: usize = 32; // New buffer for function args
 
 /// Main iterative evaluation function
@@ -48,20 +48,20 @@ pub fn eval_iterative<'arena>(
 pub struct EvalEngine<'arena> {
     /// Optional arena for parsing expression functions on-demand
     arena: Option<&'arena bumpalo::Bump>,
-    
+
     /// Operation stack (arena-allocated when arena is available)
     op_stack: bumpalo::collections::Vec<'arena, EvalOp<'arena>>,
     /// Value stack for intermediate results (arena-allocated when arena is available)
     value_stack: bumpalo::collections::Vec<'arena, Real>,
-    
+
     /// Shared buffer for function arguments to avoid per-call allocations
     arg_buffer: bumpalo::collections::Vec<'arena, Real>,
-    
+
     /// Track high water marks for capacity optimization
     op_stack_hwm: usize,
     value_stack_hwm: usize,
     arg_buffer_hwm: usize,
-    
+
     /// Context management
     ctx_stack: ContextStack,
     /// Function cache
@@ -81,26 +81,20 @@ impl<'arena> EvalEngine<'arena> {
     pub fn new(arena: &'arena bumpalo::Bump) -> Self {
         Self {
             arena: Some(arena),
-            
+
             // Use arena for all allocations with module-level constants
-            op_stack: bumpalo::collections::Vec::with_capacity_in(
-                ARENA_OP_CAPACITY, 
-                arena
-            ),
-            value_stack: bumpalo::collections::Vec::with_capacity_in(
-                ARENA_VALUE_CAPACITY, 
-                arena
-            ),
+            op_stack: bumpalo::collections::Vec::with_capacity_in(ARENA_OP_CAPACITY, arena),
+            value_stack: bumpalo::collections::Vec::with_capacity_in(ARENA_VALUE_CAPACITY, arena),
             arg_buffer: bumpalo::collections::Vec::with_capacity_in(
                 ARENA_ARG_BUFFER_CAPACITY,
-                arena
+                arena,
             ),
-            
+
             // Initialize high water marks
             op_stack_hwm: 0,
             value_stack_hwm: 0,
             arg_buffer_hwm: 0,
-            
+
             // Other fields
             ctx_stack: ContextStack::new(),
             func_cache: BTreeMap::new(),
@@ -109,12 +103,15 @@ impl<'arena> EvalEngine<'arena> {
             expr_func_cache: BTreeMap::new(),
         }
     }
-    
+
     /// Set the local expression functions for this evaluation
-    pub fn set_local_functions(&mut self, functions: Option<&'arena core::cell::RefCell<crate::types::ExpressionFunctionMap>>) {
+    pub fn set_local_functions(
+        &mut self,
+        functions: Option<&'arena core::cell::RefCell<crate::types::ExpressionFunctionMap>>,
+    ) {
         self.local_functions = functions;
     }
-    
+
     /// Arena-aware clearing of internal stacks
     /// Uses unsafe set_len(0) to avoid triggering Drop on arena-allocated elements
     fn arena_clear_stacks(&mut self) {
@@ -126,7 +123,7 @@ impl<'arena> EvalEngine<'arena> {
             self.arg_buffer.set_len(0);
         }
     }
-    
+
     /// Reset the engine for reuse with new expression
     /// More comprehensive than arena_clear_stacks - also clears caches and context
     pub fn arena_reset(&mut self) {
@@ -134,7 +131,7 @@ impl<'arena> EvalEngine<'arena> {
         self.ctx_stack.clear();
         self.func_cache.clear();
         self.expr_func_cache.clear();
-        
+
         // Reset high water marks
         self.op_stack_hwm = 0;
         self.value_stack_hwm = 0;
@@ -534,7 +531,7 @@ impl<'arena> EvalEngine<'arena> {
     ) -> Result<(), ExprError> {
         // Arguments are the last arg_count values on the value stack
         let args_start = self.value_stack.len().saturating_sub(arg_count);
-        
+
         // Get context
         let ctx = self
             .ctx_stack
@@ -568,10 +565,10 @@ impl<'arena> EvalEngine<'arena> {
             let args = &self.value_stack[args_start..];
             let owned_fn = OwnedNativeFunction::from(func);
             let result = (owned_fn.implementation)(args);
-            
+
             // Pop arguments from stack
             self.value_stack.truncate(args_start);
-            
+
             // Push result
             self.value_stack.push(result);
             return Ok(());
@@ -581,7 +578,6 @@ impl<'arena> EvalEngine<'arena> {
             name: name.to_string(),
         })
     }
-
 
     /// Pop a value from the value stack
     fn pop_value(&mut self) -> Result<Real, ExprError> {
@@ -613,7 +609,7 @@ impl<'arena> EvalEngine<'arena> {
         self.param_overrides = old_overrides;
         result
     }
-    
+
     /// Process an expression function call
     fn process_expression_function(
         &mut self,
@@ -623,7 +619,7 @@ impl<'arena> EvalEngine<'arena> {
         ctx_id: usize,
     ) -> Result<(), ExprError> {
         use crate::types::TryIntoHeaplessString;
-        
+
         if arg_count != func.params.len() {
             return Err(ExprError::InvalidFunctionCall {
                 name: func.name.to_string(),
@@ -646,7 +642,7 @@ impl<'arena> EvalEngine<'arena> {
             let value = self.value_stack[args_start + i];
             func_ctx.set_parameter(param, value)?;
         }
-        
+
         // Pop arguments from stack now that they're captured in context
         self.value_stack.truncate(args_start);
 
@@ -735,4 +731,3 @@ pub fn eval_with_engine<'arena>(
 ) -> Result<Real, ExprError> {
     engine.eval(ast, ctx)
 }
-

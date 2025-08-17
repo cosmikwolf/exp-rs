@@ -5,11 +5,11 @@ extern crate alloc;
 extern crate libm;
 
 use alloc::rc::Rc;
+use bumpalo::Bump;
 use exp_rs::Real;
 use exp_rs::context::EvalContext;
 use exp_rs::engine::parse_expression;
 use std::time::Instant;
-use bumpalo::Bump;
 
 // Native Rust implementations for benchmarking
 fn native_sqrt_expr(a: Real) -> Real {

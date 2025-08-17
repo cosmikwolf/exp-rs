@@ -154,4 +154,3 @@ fn main() {
     println!("    - No AST allocation");
     println!("    - Reuse result storage");
 }
-

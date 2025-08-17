@@ -83,4 +83,3 @@ fn main() {
     );
     println!("Savings: 9.55 MB per second at 1000Hz!");
 }
-

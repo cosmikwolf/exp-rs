@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn test_eval_ast_array_and_attribute_errors() {
         let arena = Bump::new();
-        
+
         // Array not found
         let index_ast = arena.alloc(AstExpr::Constant(0.0));
         let ast = AstExpr::Array {
@@ -320,7 +320,7 @@ mod tests {
     #[test]
     fn test_eval_ast_function_wrong_arity() {
         let arena = Bump::new();
-        
+
         // Create a context that has 'sin' registered
         let mut ctx = EvalContext::new();
 
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn test_eval_ast_unknown_function_and_variable() {
         let arena = Bump::new();
-        
+
         // Unknown function
         let args = arena.alloc([AstExpr::Constant(1.0)]);
         let ast = AstExpr::Function {

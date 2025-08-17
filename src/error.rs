@@ -33,25 +33,25 @@ pub enum ExprError {
     /// This occurs when a string cannot be converted to a floating point number.
     /// For example, "3.a" is not a valid floating point number.
     Parse(ParseFloatError),
-    
+
     /// Error during lexical analysis (tokenization).
     ///
     /// This occurs when the tokenizer encounters invalid tokens or unknown characters
     /// that cannot be processed. The string contains a detailed error message.
     Tokenizer(String),
-    
+
     /// Error during syntax analysis.
     ///
     /// This occurs when the parser encounters unexpected tokens, incorrect expression
     /// structure, or other syntax issues. The string contains a detailed error message.
     Syntax(String),
-    
+
     /// Error for unmatched parentheses in an expression.
     ///
     /// This provides the position of the unmatched parenthesis and the specific
     /// parenthesis character that was found without a matching pair.
     UnmatchedParenthesis { position: usize, found: String },
-    
+
     /// Error when a variable referenced in an expression is not defined.
     ///
     /// To resolve this error, make sure the variable is registered in the
@@ -62,7 +62,7 @@ pub enum ExprError {
     /// This error is returned when a function is called that is not registered in the context
     /// and is not a built-in (if built-ins are enabled). If the `libm` feature is not enabled,
     /// users must register their own native functions for all required math operations.
-    /// 
+    ///
     /// To resolve this error, register a native function with `EvalContext::register_native_function`
     /// or an expression function with `EvalContext::register_expression_function`.
     UnknownFunction { name: String },
@@ -92,52 +92,52 @@ pub enum ExprError {
         /// Actual length of the array
         len: usize,
     },
-    
+
     /// Error when an attribute access is attempted on an object that doesn't have that attribute.
     ///
     /// This occurs when using the dot notation (e.g., `object.attribute`) and the attribute
     /// does not exist on the specified object.
-    AttributeNotFound { 
+    AttributeNotFound {
         /// The base object name
-        base: String, 
+        base: String,
         /// The attribute name that was not found
-        attr: String 
+        attr: String,
     },
-    
+
     /// Error when division by zero is attempted.
     ///
     /// This occurs when a division operation has a zero divisor.
     DivideByZero,
-    
+
     /// General-purpose error for any other error conditions.
     ///
     /// This is used for errors that don't fit into other specific categories.
     /// The string contains a detailed error message.
     Other(String),
-    
+
     /// Error when the recursion limit is exceeded during expression evaluation.
     ///
     /// This usually happens with deeply nested expressions or recursive function calls.
     /// To resolve this, simplify the expression or increase the recursion limit if possible.
     RecursionLimit(String),
-    
+
     /// Error when capacity is exceeded for a heapless container.
     ///
     /// This occurs when trying to insert into a full heapless container.
     /// The string indicates which container type exceeded capacity.
     CapacityExceeded(&'static str),
-    
+
     /// Error when a string is too long for heapless string buffer.
     ///
     /// This occurs when trying to create a heapless string that exceeds
     /// the maximum string length limit.
     StringTooLong,
-    
+
     /// Error when attempting to add a parameter with a name that already exists.
     ///
     /// This occurs when trying to register a parameter that has already been registered.
     DuplicateParameter(String),
-    
+
     /// Error when attempting to access a parameter by an invalid index.
     ///
     /// This occurs when the provided index is out of bounds for the parameter list.

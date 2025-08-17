@@ -234,7 +234,7 @@ impl<'a> Lexer<'a> {
 
         // Operators and punctuation
         // Support multi-character operators for tinyexpr++ grammar
-        let op_start = "+-*/^%.<>=!&|~?:";  // Added ? and : for ternary operators
+        let op_start = "+-*/^%.<>=!&|~?:"; // Added ? and : for ternary operators
         if op_start.contains(c) {
             let kind = TokenKind::Operator;
             let mut text = String::from(c);
@@ -448,12 +448,17 @@ mod tests {
 
     #[test]
     fn test_lexer_tokenization_multichar_operators() {
-        let mut lexer = Lexer::new("a && b || c == d != e <= f >= g << h >> i <<< j >>> k ** l <> m ; n");
+        let mut lexer =
+            Lexer::new("a && b || c == d != e <= f >= g << h >> i <<< j >>> k ** l <> m ; n");
         let mut tokens = Vec::new();
         while let Some(tok) = lexer.next_token() {
             tokens.push(tok);
         }
-        let ops: Vec<_> = tokens.iter().filter(|t| t.kind == TokenKind::Operator || t.kind == TokenKind::Separator).map(|t| t.text.as_deref().unwrap()).collect();
+        let ops: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.kind == TokenKind::Operator || t.kind == TokenKind::Separator)
+            .map(|t| t.text.as_deref().unwrap())
+            .collect();
         assert!(ops.contains(&"&&"));
         assert!(ops.contains(&"||"));
         assert!(ops.contains(&"=="));
@@ -469,7 +474,7 @@ mod tests {
         assert!(ops.contains(&"<>"));
         assert!(ops.contains(&";"));
     }
-    
+
     #[test]
     fn test_lexer_tokenization_ternary_operators() {
         let mut lexer = Lexer::new("x > 0 ? y : z");
@@ -477,14 +482,14 @@ mod tests {
         while let Some(tok) = lexer.next_token() {
             tokens.push(tok);
         }
-        
+
         // Check that we have the right number of tokens
         assert_eq!(tokens.len(), 7);
-        
+
         // Verify the ternary operator tokens
         assert_eq!(tokens[0].kind, TokenKind::Variable); // x
         assert_eq!(tokens[1].kind, TokenKind::Operator); // >
-        assert_eq!(tokens[2].kind, TokenKind::Number);   // 0
+        assert_eq!(tokens[2].kind, TokenKind::Number); // 0
         assert_eq!(tokens[3].kind, TokenKind::Operator); // ?
         assert_eq!(tokens[3].text.as_deref(), Some("?"));
         assert_eq!(tokens[4].kind, TokenKind::Variable); // y

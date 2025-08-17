@@ -93,7 +93,7 @@ fn main() {
             ctx.register_native_function("log", 1, c_fn!(logf));
             ctx.register_native_function("sqrt", 1, c_fn!(sqrtf));
         }
-        
+
         #[cfg(not(feature = "libm"))]
         {
             ctx.register_native_function("sin", 1, c_fn!(sin));
@@ -103,7 +103,7 @@ fn main() {
             ctx.register_native_function("log", 1, c_fn!(log));
             ctx.register_native_function("sqrt", 1, c_fn!(sqrt));
         }
-        
+
         ctx.register_expression_function("fancy", &["x"], "sin(x) + cos(x) + 42")
             .unwrap();
     }

@@ -10,7 +10,7 @@ fn test_ffi_null_pointer_validation() {
     unsafe {
         let ctx = expr_context_new();
         assert!(!ctx.is_null());
-        
+
         // Test null context
         let result = expr_context_add_expression_function(
             ptr::null_mut(),
@@ -19,7 +19,7 @@ fn test_ffi_null_pointer_validation() {
             CString::new("42").unwrap().as_ptr(),
         );
         assert_eq!(result, -1); // Expected error code for null context
-        
+
         // Test null function name
         let result = expr_context_add_expression_function(
             ctx,
@@ -28,7 +28,7 @@ fn test_ffi_null_pointer_validation() {
             CString::new("42").unwrap().as_ptr(),
         );
         assert_eq!(result, -1); // Expected error code for null name
-        
+
         // Test null parameters
         let result = expr_context_add_expression_function(
             ctx,
@@ -37,7 +37,7 @@ fn test_ffi_null_pointer_validation() {
             CString::new("42").unwrap().as_ptr(),
         );
         assert_eq!(result, -1); // Expected error code for null params
-        
+
         // Test null expression
         let result = expr_context_add_expression_function(
             ctx,
@@ -46,7 +46,7 @@ fn test_ffi_null_pointer_validation() {
             ptr::null(),
         );
         assert_eq!(result, -1); // Expected error code for null expression
-        
+
         expr_context_free(ctx);
     }
 }
@@ -56,11 +56,11 @@ fn test_ffi_invalid_utf8_validation() {
     unsafe {
         let ctx = expr_context_new();
         assert!(!ctx.is_null());
-        
+
         // Create invalid UTF-8 string
         let invalid_utf8 = b"invalid\xff\xfe";
         let name_ptr = invalid_utf8.as_ptr() as *const c_char;
-        
+
         let result = expr_context_add_expression_function(
             ctx,
             name_ptr,
@@ -68,7 +68,7 @@ fn test_ffi_invalid_utf8_validation() {
             CString::new("42").unwrap().as_ptr(),
         );
         assert_eq!(result, -2); // Expected error code for invalid UTF-8
-        
+
         expr_context_free(ctx);
     }
 }
@@ -78,7 +78,7 @@ fn test_ffi_successful_registration() {
     unsafe {
         let ctx = expr_context_new();
         assert!(!ctx.is_null());
-        
+
         // Test successful registration
         let result = expr_context_add_expression_function(
             ctx,
@@ -87,7 +87,7 @@ fn test_ffi_successful_registration() {
             CString::new("x * 2").unwrap().as_ptr(),
         );
         assert_eq!(result, 0); // Success
-        
+
         expr_context_free(ctx);
     }
 }
@@ -97,7 +97,7 @@ fn test_ffi_invalid_expression_syntax() {
     unsafe {
         let ctx = expr_context_new();
         assert!(!ctx.is_null());
-        
+
         // Test with invalid expression syntax
         let result = expr_context_add_expression_function(
             ctx,
@@ -106,7 +106,7 @@ fn test_ffi_invalid_expression_syntax() {
             CString::new("x + * 2").unwrap().as_ptr(), // Invalid syntax
         );
         assert_eq!(result, -3); // Expected error code for registration failure
-        
+
         expr_context_free(ctx);
     }
 }
@@ -116,7 +116,7 @@ fn test_ffi_remove_expression_function() {
     unsafe {
         let ctx = expr_context_new();
         assert!(!ctx.is_null());
-        
+
         // First add a function
         let result = expr_context_add_expression_function(
             ctx,
@@ -125,21 +125,19 @@ fn test_ffi_remove_expression_function() {
             CString::new("x * x").unwrap().as_ptr(),
         );
         assert_eq!(result, 0); // Success
-        
+
         // Now remove it
-        let result = expr_context_remove_expression_function(
-            ctx,
-            CString::new("square").unwrap().as_ptr(),
-        );
+        let result =
+            expr_context_remove_expression_function(ctx, CString::new("square").unwrap().as_ptr());
         assert_eq!(result, 1); // Function was removed
-        
+
         // Try to remove non-existent function
         let result = expr_context_remove_expression_function(
             ctx,
             CString::new("nonexistent").unwrap().as_ptr(),
         );
         assert_eq!(result, 0); // Function didn't exist
-        
+
         expr_context_free(ctx);
     }
 }

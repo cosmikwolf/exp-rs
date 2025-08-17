@@ -655,7 +655,9 @@ pub extern "C" fn expr_context_add_expression_function(
     match alloc::rc::Rc::get_mut(ctx_handle) {
         Some(ctx_mut) => {
             // Use validated registration to catch syntax errors during registration
-            match ctx_mut.register_expression_function_validated(name_str, &param_vec, expr_str, false) {
+            match ctx_mut
+                .register_expression_function_validated(name_str, &param_vec, expr_str, false)
+            {
                 Ok(report) => {
                     if report.syntax_valid {
                         0 // Success
@@ -1069,7 +1071,7 @@ pub extern "C" fn expr_batch_arena_bytes(batch: *const ExprBatch) -> usize {
     if batch.is_null() {
         return 0;
     }
-    
+
     let builder = unsafe { &*(batch as *const ArenaBatchBuilder) };
     builder.arena_allocated_bytes()
 }
@@ -1791,7 +1793,7 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         // If the fault handler returns, we'll trigger it again
         // This prevents execution from continuing past the panic
     }
-    
+
     // Fallback for non-ARM architectures
     #[cfg(not(target_arch = "arm"))]
     loop {

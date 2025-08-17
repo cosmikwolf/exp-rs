@@ -43,19 +43,19 @@ proptest! {
         let arena = Bump::new();
         let mut builder = ArenaBatchBuilder::new(&arena);
         let mut ctx = EvalContext::new();
-        
+
         // Register some basic functions
         ctx.register_expression_function(&func_name, &[&param_name], &format!("{} * 2", param_name))
             .unwrap();
-        
+
         // Add expression
         let expr = format!("{}({})", func_name, x);
         builder.add_expression(&expr).unwrap();
-        
+
         // Evaluate
         let ctx_rc = Rc::new(ctx);
         builder.eval(&ctx_rc).unwrap();
-        
+
         // Check result
         let result = builder.get_result(0).unwrap();
         prop_assert_eq!(result, x * 2.0);
@@ -70,21 +70,21 @@ proptest! {
         let arena = Bump::new();
         let mut builder = ArenaBatchBuilder::new(&arena);
         let mut ctx = EvalContext::new();
-        
+
         // Register functions that compose
         ctx.register_expression_function("add_one", &["x"], "x + 1").unwrap();
         ctx.register_expression_function("double", &["x"], "x * 2").unwrap();
         ctx.register_expression_function("compose", &["x"], "double(add_one(x))").unwrap();
         ctx.register_expression_function("f", &["x", "y"], "x + y").unwrap();
         ctx.register_expression_function("g", &["x"], "f(x, x)").unwrap();
-        
+
         // Test various compositions
         builder.add_expression(&format!("compose({})", x)).unwrap();
         builder.add_expression(&format!("g({})", y)).unwrap();
-        
+
         let ctx_rc = Rc::new(ctx);
         builder.eval(&ctx_rc).unwrap();
-        
+
         prop_assert_eq!(builder.get_result(0).unwrap(), (x + 1.0) * 2.0);
         prop_assert_eq!(builder.get_result(1).unwrap(), y + y);
     }
@@ -100,11 +100,11 @@ proptest! {
         if unique_params.len() != params.len() {
             return Ok(());
         }
-        
+
         let arena = Bump::new();
         let mut builder = ArenaBatchBuilder::new(&arena);
         let mut ctx = EvalContext::new();
-        
+
         if params.is_empty() {
             // Zero-parameter function
             ctx.register_expression_function("constant", &[], "42").unwrap();
@@ -117,19 +117,19 @@ proptest! {
             let param_refs: Vec<&str> = params.iter().map(|s| s.as_str()).collect();
             let expr = params.join(" + ");
             ctx.register_expression_function("sum", &param_refs, &expr).unwrap();
-            
+
             // Build function call with the actual args we have
             let args_str = args.iter()
                 .map(|a| a.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
-            
+
             // Only test if we have a valid expression to test
             if !args_str.is_empty() {
                 builder.add_expression(&format!("sum({})", args_str)).unwrap();
                 let ctx_rc = Rc::new(ctx);
                 let result = builder.eval(&ctx_rc);
-                
+
                 if args.len() == params.len() {
                     // Correct number of arguments - should succeed
                     prop_assert!(result.is_ok());
@@ -145,23 +145,23 @@ proptest! {
     }
 
     /// Test expression validation
-    #[test] 
+    #[test]
     fn prop_expression_validation(
         valid_expr in arithmetic_expr_strategy(),
         param_count in 1..4usize,
     ) {
         let mut ctx = EvalContext::new();
-        
+
         // Generate parameter names
         let params: Vec<String> = (0..param_count)
             .map(|i| format!("p{}", i))
             .collect();
         let param_refs: Vec<&str> = params.iter().map(|s| s.as_str()).collect();
-        
+
         // Valid expression should register successfully
         let result = ctx.register_expression_function("test_func", &param_refs, &valid_expr);
         prop_assert!(result.is_ok());
-        
+
         // Invalid expressions
         let invalid_exprs = vec![
             "x +",           // Incomplete
@@ -169,11 +169,11 @@ proptest! {
             "x ) + 1",       // Extra paren
             "x x",           // Missing operator
         ];
-        
+
         for invalid in invalid_exprs {
             let result = ctx.register_expression_function_validated(
-                "invalid_func", 
-                &param_refs, 
+                "invalid_func",
+                &param_refs,
                 invalid,
                 false
             );
@@ -184,22 +184,22 @@ proptest! {
         }
     }
 
-    /// Test function name validation  
+    /// Test function name validation
     #[test]
     fn prop_function_name_validation(
         name in "([a-zA-Z][a-zA-Z0-9_]*)?", // Optional: empty or starts with letter
         starts_with_digit in any::<bool>(),
     ) {
         let mut ctx = EvalContext::new();
-        
+
         let test_name = if starts_with_digit && !name.is_empty() {
             format!("1{}", name)
         } else {
             name.clone()
         };
-        
+
         let result = ctx.register_expression_function(&test_name, &["x"], "x + 1");
-        
+
         // Check various name validation rules
         if test_name.len() > 32 {
             // Names that are too long should fail
@@ -215,7 +215,7 @@ proptest! {
             // Valid names should generally succeed
             if result.is_err() {
                 // But some names might be reserved or have other issues
-                prop_assert!(test_name.len() > 32 || test_name.is_empty(), 
+                prop_assert!(test_name.len() > 32 || test_name.is_empty(),
                     "Valid function name '{}' unexpectedly failed", test_name);
             }
         }
@@ -228,7 +228,7 @@ fn test_recursive_with_arena_batch() {
     let arena = Bump::new();
     let mut builder = ArenaBatchBuilder::new(&arena);
     let mut ctx = EvalContext::new();
-    
+
     // Register operators if not using libm
     #[cfg(not(feature = "libm"))]
     {
@@ -236,22 +236,21 @@ fn test_recursive_with_arena_batch() {
         ctx.register_native_function("-", 2, |args| args[0] - args[1]);
         ctx.register_native_function("*", 2, |args| args[0] * args[1]);
     }
-    
+
     // Register factorial
-    ctx.register_expression_function(
-        "factorial",
-        &["n"],
-        "n <= 1 ? 1 : n * factorial(n - 1)"
-    ).unwrap();
-    
+    ctx.register_expression_function("factorial", &["n"], "n <= 1 ? 1 : n * factorial(n - 1)")
+        .unwrap();
+
     // Test multiple factorial calls in batch
     for n in 0..8 {
-        builder.add_expression(&format!("factorial({})", n)).unwrap();
+        builder
+            .add_expression(&format!("factorial({})", n))
+            .unwrap();
     }
-    
+
     let ctx_rc = Rc::new(ctx);
     builder.eval(&ctx_rc).unwrap();
-    
+
     // Verify results
     let expected = vec![1.0, 1.0, 2.0, 6.0, 24.0, 120.0, 720.0, 5040.0];
     for (i, &exp) in expected.iter().enumerate() {
@@ -265,25 +264,26 @@ fn test_long_expression_handling() {
     let arena = Bump::new();
     let mut builder = ArenaBatchBuilder::new(&arena);
     let mut ctx = EvalContext::new();
-    
+
     // Register operators if not using libm
     #[cfg(not(feature = "libm"))]
     {
         ctx.register_native_function("+", 2, |args| args[0] + args[1]);
     }
-    
+
     // Create a long but valid expression
     let long_expr = (0..50)
         .map(|i| format!("x + {}", i))
         .collect::<Vec<_>>()
         .join(" + ");
-    
-    ctx.register_expression_function("long_func", &["x"], &long_expr).unwrap();
+
+    ctx.register_expression_function("long_func", &["x"], &long_expr)
+        .unwrap();
     builder.add_expression("long_func(1)").unwrap();
-    
+
     let ctx_rc = Rc::new(ctx);
     builder.eval(&ctx_rc).unwrap();
-    
+
     // x=1, plus sum of 0..49 = 1 + (49*50/2) = 1 + 1225 = 1226
     // But each term is (x + i), so it's 50*1 + sum(0..49) = 50 + 1225 = 1275
     let expected = 50.0 + (0..50).sum::<i32>() as f64;
@@ -291,27 +291,28 @@ fn test_long_expression_handling() {
 }
 
 /// Test semantic validation
-#[test] 
+#[test]
 fn test_semantic_validation() {
     let mut ctx = EvalContext::new();
-    
+
     // Register operators if not using libm
     #[cfg(not(feature = "libm"))]
     {
         ctx.register_native_function("*", 2, |args| args[0] * args[1]);
     }
-    
+
     // Register a function
-    ctx.register_expression_function("helper", &["x"], "x * 2").unwrap();
-    
+    ctx.register_expression_function("helper", &["x"], "x * 2")
+        .unwrap();
+
     // Test semantic validation - undefined function
     let result = ctx.register_expression_function_validated(
         "uses_undefined",
         &["x"],
         "undefined_func(x)",
-        true // Enable semantic validation
+        true, // Enable semantic validation
     );
-    
+
     match result {
         Ok(report) => {
             assert!(report.syntax_valid);
@@ -320,15 +321,15 @@ fn test_semantic_validation() {
         }
         Err(_) => panic!("Should return report, not error"),
     }
-    
+
     // Test semantic validation - wrong arity
     let result = ctx.register_expression_function_validated(
         "wrong_arity",
         &["x"],
         "helper(x, 42)", // helper expects 1 arg, given 2
-        true
+        true,
     );
-    
+
     match result {
         Ok(report) => {
             assert!(report.syntax_valid);

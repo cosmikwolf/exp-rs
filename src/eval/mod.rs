@@ -28,16 +28,16 @@ mod tests {
 
     use super::*;
     use crate::AstExpr;
+    use crate::FunctionRegistry;
     use crate::Real;
     use crate::context::EvalContext;
     use crate::engine::interp;
     use crate::error::ExprError;
-    use std::sync::atomic::Ordering;
-    use std::rc::Rc;
     use crate::parse_expression;
-    use crate::FunctionRegistry;
     use std::collections::BTreeMap;
-    
+    use std::rc::Rc;
+    use std::sync::atomic::Ordering;
+
     // Import functions used in tests
     #[cfg(feature = "libm")]
     use crate::{abs, cos, max, min, neg, pow, sin};
@@ -63,13 +63,13 @@ mod tests {
     #[test]
     fn test_eval_expression_function_simple() {
         let mut ctx = EvalContext::new();
-        
+
         // Test double function
         ctx.register_expression_function("double", &["x"], "x*2")
             .unwrap();
         let val = interp("double(7)", Some(Rc::new(ctx.clone()))).unwrap();
         assert_eq!(val, 14.0);
-        
+
         // Test increment function
         ctx.register_expression_function("inc", &["x"], "x+1")
             .unwrap();
@@ -200,7 +200,6 @@ mod tests {
         let val2 = interp("double(5)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val2, 10.0);
     }
-
 
     #[test]
     fn test_eval_function_builtin_fallback() {
@@ -343,7 +342,8 @@ mod tests {
         // AST structure test - independent of evaluation context or features
         use bumpalo::Bump;
         let arena = Bump::new();
-        let ast = parse_expression("(-2)^2", &arena).unwrap_or_else(|e| panic!("Parse error: {}", e));
+        let ast =
+            parse_expression("(-2)^2", &arena).unwrap_or_else(|e| panic!("Parse error: {}", e));
         // ... (assertions remain the same) ...
         match ast {
             AstExpr::Function { ref name, ref args } if *name == "^" => {
@@ -445,7 +445,8 @@ mod tests {
         // If the parser produces pow(2), the evaluator handles the default exponent.
         use bumpalo::Bump;
         let arena = Bump::new();
-        let ast = parse_expression("pow(2)", &arena).unwrap_or_else(|e| panic!("Parse error: {}", e));
+        let ast =
+            parse_expression("pow(2)", &arena).unwrap_or_else(|e| panic!("Parse error: {}", e));
         match ast {
             AstExpr::Function { ref name, ref args } if *name == "pow" => {
                 // The parser might produce 1 or 2 args depending on its logic.
@@ -549,7 +550,10 @@ mod tests {
         let err = interp("sin", Some(ctx_rc.clone())).unwrap_err();
         match err {
             ExprError::Syntax(msg) => {
-                assert!(msg.contains("Unexpected token") || msg.contains("Function 'sin' used without arguments"));
+                assert!(
+                    msg.contains("Unexpected token")
+                        || msg.contains("Function 'sin' used without arguments")
+                );
             }
             _ => panic!("Expected Syntax error, got {:?}", err),
         }
@@ -558,7 +562,10 @@ mod tests {
         let err2 = interp("abs", Some(ctx_rc.clone())).unwrap_err();
         match err2 {
             ExprError::Syntax(msg) => {
-                assert!(msg.contains("Unexpected token") || msg.contains("Function 'abs' used without arguments"));
+                assert!(
+                    msg.contains("Unexpected token")
+                        || msg.contains("Function 'abs' used without arguments")
+                );
             }
             _ => panic!("Expected Syntax error, got {:?}", err2),
         }

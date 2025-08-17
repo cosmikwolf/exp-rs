@@ -33,37 +33,71 @@ use crate::Real;
 #[cfg(all(not(feature = "libm"), test))]
 mod internal_math {
     use crate::Real;
-    
+
     // When not using libm, provide implementations only for tests
-    // In real embedded environments, these functions would need to be 
+    // In real embedded environments, these functions would need to be
     // registered explicitly by the user
-    
+
     // Trigonometric functions
-    pub fn libm_sin(x: Real) -> Real { x.sin() }
-    pub fn libm_cos(x: Real) -> Real { x.cos() }
-    pub fn libm_tan(x: Real) -> Real { x.tan() }
-    pub fn libm_asin(x: Real) -> Real { x.asin() }
-    pub fn libm_acos(x: Real) -> Real { x.acos() }
-    pub fn libm_atan(x: Real) -> Real { x.atan() }
-    pub fn libm_atan2(y: Real, x: Real) -> Real { y.atan2(x) }
-    
+    pub fn libm_sin(x: Real) -> Real {
+        x.sin()
+    }
+    pub fn libm_cos(x: Real) -> Real {
+        x.cos()
+    }
+    pub fn libm_tan(x: Real) -> Real {
+        x.tan()
+    }
+    pub fn libm_asin(x: Real) -> Real {
+        x.asin()
+    }
+    pub fn libm_acos(x: Real) -> Real {
+        x.acos()
+    }
+    pub fn libm_atan(x: Real) -> Real {
+        x.atan()
+    }
+    pub fn libm_atan2(y: Real, x: Real) -> Real {
+        y.atan2(x)
+    }
+
     // Hyperbolic functions
-    pub fn libm_sinh(x: Real) -> Real { x.sinh() }
-    pub fn libm_cosh(x: Real) -> Real { x.cosh() }
-    pub fn libm_tanh(x: Real) -> Real { x.tanh() }
-    
+    pub fn libm_sinh(x: Real) -> Real {
+        x.sinh()
+    }
+    pub fn libm_cosh(x: Real) -> Real {
+        x.cosh()
+    }
+    pub fn libm_tanh(x: Real) -> Real {
+        x.tanh()
+    }
+
     // Exponential and logarithmic functions
-    pub fn libm_exp(x: Real) -> Real { x.exp() }
-    pub fn libm_ln(x: Real) -> Real { x.ln() }
-    pub fn libm_log10(x: Real) -> Real { x.log10() }
-    
+    pub fn libm_exp(x: Real) -> Real {
+        x.exp()
+    }
+    pub fn libm_ln(x: Real) -> Real {
+        x.ln()
+    }
+    pub fn libm_log10(x: Real) -> Real {
+        x.log10()
+    }
+
     // Power and root functions
-    pub fn libm_pow(x: Real, y: Real) -> Real { x.powf(y) }
-    pub fn libm_sqrt(x: Real) -> Real { x.sqrt() }
-    
+    pub fn libm_pow(x: Real, y: Real) -> Real {
+        x.powf(y)
+    }
+    pub fn libm_sqrt(x: Real) -> Real {
+        x.sqrt()
+    }
+
     // Rounding functions
-    pub fn libm_ceil(x: Real) -> Real { x.ceil() }
-    pub fn libm_floor(x: Real) -> Real { x.floor() }
+    pub fn libm_ceil(x: Real) -> Real {
+        x.ceil()
+    }
+    pub fn libm_floor(x: Real) -> Real {
+        x.floor()
+    }
 }
 
 // Import our math functions when libm is disabled
@@ -89,11 +123,7 @@ pub fn dummy(_: Real, _: Real) -> Real {
 ///
 /// The larger of `a` and `b`.
 pub fn max(a: Real, b: Real) -> Real {
-    if a > b {
-        a
-    } else {
-        b
-    }
+    if a > b { a } else { b }
 }
 
 /// Adds two values.
@@ -121,11 +151,7 @@ pub fn add(a: Real, b: Real) -> Real {
 ///
 /// The smaller of `a` and `b`.
 pub fn min(a: Real, b: Real) -> Real {
-    if a < b {
-        a
-    } else {
-        b
-    }
+    if a < b { a } else { b }
 }
 
 /// Subtracts the second value from the first.
@@ -317,11 +343,7 @@ pub fn ceil(a: Real, _: Real) -> Real {
 pub fn ceil(a: Real, _: Real) -> Real {
     // Simple implementation that works without libm
     let i = a as i64 as Real;
-    if a > 0.0 && a > i {
-        i + 1.0
-    } else {
-        i
-    }
+    if a > 0.0 && a > i { i + 1.0 } else { i }
 }
 
 #[cfg(feature = "libm")]
@@ -387,11 +409,7 @@ pub fn floor(a: Real, _: Real) -> Real {
 pub fn floor(a: Real, _: Real) -> Real {
     // Simple implementation that works without libm
     let i = a as i64 as Real;
-    if a < 0.0 && a < i {
-        i - 1.0
-    } else {
-        i
-    }
+    if a < 0.0 && a < i { i - 1.0 } else { i }
 }
 
 #[cfg(feature = "libm")]
@@ -559,7 +577,7 @@ pub fn pow(a: Real, b: Real) -> Real {
     if a == 0.0 && b == 0.0 {
         return 1.0;
     }
-    
+
     libm_pow(a, b)
 }
 
@@ -567,12 +585,22 @@ pub fn pow(a: Real, b: Real) -> Real {
 pub fn pow(a: Real, b: Real) -> Real {
     // Basic implementation for non-libm, non-test builds
     // Handles only a few special cases
-    if b == 0.0 { return 1.0; }
-    if b == 1.0 { return a; }
-    if b == 2.0 { return a * a; }
-    if b == 0.5 && a >= 0.0 { return sqrt(a, 0.0); }
-    if b == -1.0 { return 1.0 / a; }
-    
+    if b == 0.0 {
+        return 1.0;
+    }
+    if b == 1.0 {
+        return a;
+    }
+    if b == 2.0 {
+        return a * a;
+    }
+    if b == 0.5 && a >= 0.0 {
+        return sqrt(a, 0.0);
+    }
+    if b == -1.0 {
+        return 1.0 / a;
+    }
+
     panic!("pow requires libm or custom implementation for general cases")
 }
 
@@ -638,17 +666,19 @@ pub fn sqrt(a: Real, _: Real) -> Real {
         #[cfg(not(feature = "f32"))]
         return f64::NAN;
     }
-    
+
     // Very simplified Newton-Raphson for sqrt approximation
-    if a == 0.0 { return 0.0; }
+    if a == 0.0 {
+        return 0.0;
+    }
     let mut x = a;
     let mut y = 1.0;
-    
+
     // Just a couple of iterations
     for _ in 0..3 {
         y = 0.5 * (y + x / y);
     }
-    
+
     y
 }
 

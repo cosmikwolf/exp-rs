@@ -1,5 +1,13 @@
 use bumpalo::Bump;
-use exp_rs::{EvalContext, engine::parse_expression, eval::{eval_ast, iterative::{eval_with_engine, EvalEngine}}, expression::Expression};
+use exp_rs::{
+    EvalContext,
+    engine::parse_expression,
+    eval::{
+        eval_ast,
+        iterative::{EvalEngine, eval_with_engine},
+    },
+    expression::Expression,
+};
 use std::rc::Rc;
 
 #[test]
@@ -22,17 +30,20 @@ fn test_arena_zero_allocations() {
 
     // Create a reusable evaluation engine (this allocates the stacks once)
     let mut engine = EvalEngine::new(&arena);
-    
+
     // Do a first evaluation to set up the evaluator stacks
     let mut ctx_first = (*ctx).clone();
     ctx_first.set_parameter("x", 0.0).unwrap();
     let ctx_rc_first = Rc::new(ctx_first);
     let _result1 = eval_with_engine(&expr1, Some(ctx_rc_first.clone()), &mut engine).unwrap();
     let _result2 = eval_with_engine(&expr2, Some(ctx_rc_first), &mut engine).unwrap();
-    
+
     // Get arena size after initial evaluation (evaluator stacks are now allocated)
     let bytes_after_first_eval = arena.allocated_bytes();
-    println!("Arena bytes after first evaluation: {}", bytes_after_first_eval);
+    println!(
+        "Arena bytes after first evaluation: {}",
+        bytes_after_first_eval
+    );
 
     // Evaluate many times - should not allocate beyond the initial setup
     for i in 1..1000 {
@@ -109,4 +120,3 @@ fn test_batch_builder_arena() {
 
     println!("✓ Zero arena allocations during 1000 batch evaluations!");
 }
-

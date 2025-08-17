@@ -2,10 +2,10 @@ mod test_helpers;
 
 #[cfg(test)]
 mod unit {
+    use bumpalo::Bump;
     use exp_rs::context::EvalContext;
     use exp_rs::engine::interp;
     use exp_rs::error::ExprError;
-    use bumpalo::Bump;
     use exp_rs::functions::{
         abs, acos, asin, atan, atan2, ceil, comma, cos, cosh, div, dummy, e, exp, floor, fmod, ln,
         log10, mul, neg, pi, pow, sin, sinh, sqrt, sub, tan, tanh,
@@ -14,16 +14,14 @@ mod unit {
     use exp_rs::types::{AstExpr, TokenKind};
     use std::rc::Rc;
 
-    
-
     use crate::test_helpers::{create_context, hstr, set_attr};
-    
+
     // Helper function to parse expressions in tests using arena
     fn parse_expression(expr: &str) -> Result<AstExpr<'static>, ExprError> {
         thread_local! {
             static TEST_ARENA: std::cell::RefCell<Bump> = std::cell::RefCell::new(Bump::new());
         }
-        
+
         TEST_ARENA.with(|arena| {
             let arena = arena.borrow();
             let ast = exp_rs::engine::parse_expression(expr, &*arena)?;
@@ -32,7 +30,6 @@ mod unit {
             Ok(unsafe { std::mem::transmute::<AstExpr<'_>, AstExpr<'static>>(ast) })
         })
     }
-    
 
     /// Helper function to create an eval context with all math functions registered
     fn create_math_context() -> Rc<EvalContext> {
@@ -327,13 +324,13 @@ mod unit {
 
         // Test in a more complex expression
         let result2 = interp("sin(.5) + cos(.5)", Some(create_math_context())).unwrap();
-        
+
         // Calculate expected value through context to avoid direct function calls when libm is unavailable
         let ctx = create_math_context();
         let expected_sin = interp("sin(.5)", Some(ctx.clone())).unwrap();
         let expected_cos = interp("cos(.5)", Some(ctx.clone())).unwrap();
         let expected = expected_sin + expected_cos;
-        
+
         #[cfg(feature = "f32")]
         assert!((result2 - expected).abs() < 1e-6);
         #[cfg(not(feature = "f32"))]
@@ -392,7 +389,7 @@ mod unit {
     fn test_eval_ast_array_and_attribute_errors() {
         use exp_rs::eval::eval_ast;
         let arena = Bump::new();
-        
+
         // Array not found
         let ast = parse_expression("arr[0]").unwrap();
         let err = eval_ast(&ast, None, &arena).unwrap_err();
@@ -416,7 +413,7 @@ mod unit {
     fn test_eval_ast_function_wrong_arity() {
         use exp_rs::eval::eval_ast;
         let arena = Bump::new();
-        
+
         // sin with 2 args (should be 1)
         let ast = parse_expression("sin(1, 2)").unwrap();
         let err = eval_ast(&ast, Some(create_math_context()), &arena).unwrap_err();
@@ -438,7 +435,7 @@ mod unit {
     fn test_eval_ast_unknown_function_and_variable() {
         use exp_rs::eval::eval_ast;
         let arena = Bump::new();
-        
+
         // Unknown function
         let ast = parse_expression("notafunc(1)").unwrap();
         let err = eval_ast(&ast, None, &arena).unwrap_err();
@@ -656,10 +653,9 @@ mod unit {
     fn test_array_access() {
         // Setup context with an array
         let mut ctx = EvalContext::default();
-        ctx.arrays.insert(
-            hstr("climb_wave_wait_time"),
-            vec![10.0, 20.0, 30.0],
-        ).expect("Failed to insert array");
+        ctx.arrays
+            .insert(hstr("climb_wave_wait_time"), vec![10.0, 20.0, 30.0])
+            .expect("Failed to insert array");
         // Use the new API to parse and evaluate the array access expression
         let val = interp(
             "climb_wave_wait_time[1]",
@@ -673,10 +669,9 @@ mod unit {
     fn test_array_access_ast_structure() {
         // Setup context with an array
         let mut ctx = EvalContext::default();
-        ctx.arrays.insert(
-            hstr("climb_wave_wait_time"),
-            vec![10.0, 20.0, 30.0],
-        ).expect("Failed to insert array");
+        ctx.arrays
+            .insert(hstr("climb_wave_wait_time"), vec![10.0, 20.0, 30.0])
+            .expect("Failed to insert array");
         // Parse the array access expression using the new API
         let ast = parse_expression("climb_wave_wait_time[1]").unwrap();
         match ast {

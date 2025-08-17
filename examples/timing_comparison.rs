@@ -150,4 +150,3 @@ fn main() {
         (eval_only_us / full_cycle_us) * 100.0
     );
 }
-

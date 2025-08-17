@@ -3,11 +3,11 @@
 
 extern crate alloc;
 
+use bumpalo::Bump;
 #[cfg(test)]
 use exp_rs::context::EvalContext;
 use exp_rs::engine::interp;
 use exp_rs::eval::eval_ast;
-use bumpalo::Bump;
 use exp_rs::{assert_approx_eq, constants};
 use std::sync::Mutex;
 use std::time::Instant;
@@ -26,32 +26,42 @@ use test_helpers::{hstr, set_attr, set_const, set_var};
 // The helper function implementation is now in test_helpers.rs
 
 // Helper function to parse expressions in tests using arena
-fn parse_expression(expr: &str) -> Result<exp_rs::types::AstExpr<'static>, exp_rs::error::ExprError> {
+fn parse_expression(
+    expr: &str,
+) -> Result<exp_rs::types::AstExpr<'static>, exp_rs::error::ExprError> {
     thread_local! {
         static TEST_ARENA: std::cell::RefCell<Bump> = std::cell::RefCell::new(Bump::new());
     }
-    
+
     TEST_ARENA.with(|arena| {
         let arena = arena.borrow();
         let ast = exp_rs::engine::parse_expression(expr, &*arena)?;
         // SAFETY: We're extending the lifetime for tests only. The arena is thread-local
         // and will live for the duration of the test.
-        Ok(unsafe { std::mem::transmute::<exp_rs::types::AstExpr<'_>, exp_rs::types::AstExpr<'static>>(ast) })
+        Ok(unsafe {
+            std::mem::transmute::<exp_rs::types::AstExpr<'_>, exp_rs::types::AstExpr<'static>>(ast)
+        })
     })
 }
 
 // Helper function for parsing with reserved variables
-fn parse_expression_with_reserved(expr: &str, reserved: Option<&[String]>) -> Result<exp_rs::types::AstExpr<'static>, exp_rs::error::ExprError> {
+fn parse_expression_with_reserved(
+    expr: &str,
+    reserved: Option<&[String]>,
+) -> Result<exp_rs::types::AstExpr<'static>, exp_rs::error::ExprError> {
     thread_local! {
         static TEST_ARENA: std::cell::RefCell<Bump> = std::cell::RefCell::new(Bump::new());
     }
-    
+
     TEST_ARENA.with(|arena| {
         let arena = arena.borrow();
-        let ast = exp_rs::engine::parse_expression_arena_with_context(expr, &*arena, reserved, None)?;
+        let ast =
+            exp_rs::engine::parse_expression_arena_with_context(expr, &*arena, reserved, None)?;
         // SAFETY: We're extending the lifetime for tests only. The arena is thread-local
         // and will live for the duration of the test.
-        Ok(unsafe { std::mem::transmute::<exp_rs::types::AstExpr<'_>, exp_rs::types::AstExpr<'static>>(ast) })
+        Ok(unsafe {
+            std::mem::transmute::<exp_rs::types::AstExpr<'_>, exp_rs::types::AstExpr<'static>>(ast)
+        })
     })
 }
 
@@ -1307,4 +1317,3 @@ fn test_recursion_limits() {
 
     println!("All recursion tests passed successfully!");
 }
-

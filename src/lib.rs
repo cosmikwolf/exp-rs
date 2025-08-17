@@ -157,15 +157,15 @@
 //!
 //! ```rust
 //! use exp_rs::interp;
-//! 
+//!
 //! // These are equivalent:
 //! let result1 = interp("2 + 3", None).unwrap();
-//! 
+//!
 //! use exp_rs::Expression;
 //! use bumpalo::Bump;
 //! let arena = Bump::new();
 //! let result2 = Expression::eval_simple("2 + 3", &arena).unwrap();
-//! 
+//!
 //! assert_eq!(result1, result2);
 //! ```
 //!

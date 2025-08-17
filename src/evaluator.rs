@@ -146,4 +146,3 @@ mod tests {
         assert_eq!(result, 84.0);
     }
 }
-

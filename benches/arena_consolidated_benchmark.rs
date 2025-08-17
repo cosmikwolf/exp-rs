@@ -355,4 +355,3 @@ fn bench_cpu_test(c: &mut Criterion) {
 
 criterion_group!(benches, bench_comparison, bench_cpu_test);
 criterion_main!(benches);
-

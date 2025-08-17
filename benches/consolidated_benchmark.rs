@@ -1,8 +1,7 @@
 use bumpalo::Bump;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use exp_rs::{
-    AstExpr, EvalContext, EvalEngine, Expression, eval_with_engine, interp,
-    parse_expression,
+    AstExpr, EvalContext, EvalEngine, Expression, eval_with_engine, interp, parse_expression,
 };
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::RefCell;
@@ -807,4 +806,3 @@ criterion_group!(
     bench_memory_analysis
 );
 criterion_main!(benches);
-

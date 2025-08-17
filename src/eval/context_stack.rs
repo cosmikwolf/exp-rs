@@ -3,12 +3,12 @@
 //! This module provides a non-recursive way to manage evaluation contexts
 //! during iterative AST evaluation.
 
-use crate::context::EvalContext;
-use crate::types::{HString};
-use crate::error::ExprError;
 use crate::Real;
-use alloc::vec::Vec;
+use crate::context::EvalContext;
+use crate::error::ExprError;
+use crate::types::HString;
 use alloc::rc::Rc;
+use alloc::vec::Vec;
 use heapless::FnvIndexMap;
 
 /// Maximum number of contexts we can track
@@ -47,30 +47,30 @@ impl ContextStack {
             parent_map: FnvIndexMap::new(),
         }
     }
-    
+
     /// Clear the stack while preserving capacity
     pub fn clear(&mut self) {
         self.contexts.clear();
         self.next_id = 0;
         self.parent_map.clear();
     }
-    
+
     /// Push a context onto the stack, returning its ID
     pub fn push_context(&mut self, ctx: Option<Rc<EvalContext>>) -> Result<usize, ExprError> {
         let id = self.next_id;
-        
+
         // Check capacity
         if id >= MAX_CONTEXTS {
             return Err(ExprError::CapacityExceeded("context stack"));
         }
-        
+
         self.next_id += 1;
-        
+
         // Ensure vector has space
         if self.contexts.len() <= id {
             self.contexts.resize_with(id + 1, || None);
         }
-        
+
         // Store context
         if let Some(ctx) = ctx {
             self.contexts[id] = Some(ContextWrapper {
@@ -84,109 +84,121 @@ impl ContextStack {
                 is_owned: true,
             });
         }
-        
+
         // No parent by default
-        self.parent_map.insert(id, None)
+        self.parent_map
+            .insert(id, None)
             .map_err(|_| ExprError::CapacityExceeded("parent map"))?;
-        
+
         Ok(id)
     }
-    
+
     /// Push a new context with a specified parent
     pub fn push_context_with_parent(
-        &mut self, 
-        ctx: EvalContext, 
-        parent_id: usize
+        &mut self,
+        ctx: EvalContext,
+        parent_id: usize,
     ) -> Result<usize, ExprError> {
         let id = self.next_id;
-        
+
         // Check capacity
         if id >= MAX_CONTEXTS {
             return Err(ExprError::CapacityExceeded("context stack"));
         }
-        
+
         self.next_id += 1;
-        
+
         // Ensure vector has space
         if self.contexts.len() <= id {
             self.contexts.resize_with(id + 1, || None);
         }
-        
+
         // Store context
         self.contexts[id] = Some(ContextWrapper {
             context: Rc::new(ctx),
             is_owned: true,
         });
-        
+
         // Set parent relationship
-        self.parent_map.insert(id, Some(parent_id))
+        self.parent_map
+            .insert(id, Some(parent_id))
             .map_err(|_| ExprError::CapacityExceeded("parent map"))?;
-        
+
         Ok(id)
     }
-    
+
     /// Get a context by ID
     pub fn get_context(&self, id: usize) -> Option<&Rc<EvalContext>> {
-        self.contexts.get(id)
+        self.contexts
+            .get(id)
             .and_then(|opt| opt.as_ref())
             .map(|wrapper| &wrapper.context)
     }
-    
+
     /// Look up a variable, checking parent contexts if needed
     pub fn lookup_variable(&self, ctx_id: usize, name: &HString) -> Option<Real> {
         let mut current_id = Some(ctx_id);
         let mut visited_contexts = Vec::new();
-        
+
         while let Some(id) = current_id {
             if let Some(ctx) = self.get_context(id) {
                 // Parameters are stored in the context, we need to handle this differently
                 // For now, skip parameter checking as it's not exposed in EvalContext
-                
+
                 // Then check regular variables
                 if let Some(&value) = ctx.variables.get(name) {
                     return Some(value);
                 }
-                
+
                 // Check constants
                 if let Some(&value) = ctx.constants.get(name) {
                     return Some(value);
                 }
-                
+
                 // Check the context's own parent chain
                 visited_contexts.push(id);
                 if let Some(ref parent_ctx) = ctx.parent {
                     // Follow the context's parent chain
-                    return self.lookup_in_context_chain(parent_ctx.as_ref(), name, &visited_contexts);
+                    return self.lookup_in_context_chain(
+                        parent_ctx.as_ref(),
+                        name,
+                        &visited_contexts,
+                    );
                 }
             }
-            
+
             // Move to parent context in the stack
             current_id = self.parent_map.get(&id).and_then(|&parent| parent);
         }
-        
+
         None
     }
-    
+
     /// Helper to look up a variable in a context chain
-    fn lookup_in_context_chain(&self, ctx: &EvalContext, name: &HString, visited: &[usize]) -> Option<Real> {
+    fn lookup_in_context_chain(
+        &self,
+        ctx: &EvalContext,
+        name: &HString,
+        visited: &[usize],
+    ) -> Option<Real> {
         // Check variables
         if let Some(&value) = ctx.variables.get(name) {
             return Some(value);
         }
-        
+
         // Check constants
         if let Some(&value) = ctx.constants.get(name) {
             return Some(value);
         }
-        
+
         // Follow parent chain
         if let Some(ref parent) = ctx.parent {
             return self.lookup_in_context_chain(parent.as_ref(), name, visited);
         }
-        
+
         None
     }
-    
+
     /// Get the parent ID of a context
     pub fn get_parent_id(&self, ctx_id: usize) -> Option<usize> {
         self.parent_map.get(&ctx_id).and_then(|&parent| parent)

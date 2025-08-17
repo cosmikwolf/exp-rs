@@ -73,4 +73,3 @@ fn bench_arena_performance(c: &mut Criterion) {
 
 criterion_group!(benches, bench_arena_performance);
 criterion_main!(benches);
-

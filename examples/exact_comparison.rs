@@ -120,4 +120,3 @@ fn main() {
         println!("  Batch rate: {:.0} Hz", batch_rate);
     }
 }
-
