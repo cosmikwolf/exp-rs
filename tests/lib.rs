@@ -4,7 +4,6 @@
 use exp_rs::assert_approx_eq;
 use exp_rs::interp;
 use std::time::{Duration, Instant};
-use test_helpers::create_context_rc;
 
 // Remove unused import
 // use exp_rs::Real;

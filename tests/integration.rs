@@ -19,8 +19,6 @@ use alloc::rc::Rc;
 
 // Use the shared test helper functions
 mod test_helpers;
-use test_helpers::create_context;
-use test_helpers::create_context_rc;
 use test_helpers::{hstr, set_attr, set_const, set_var};
 
 // The helper function implementation is now in test_helpers.rs
@@ -457,7 +455,7 @@ fn test_custom_functions() {
     let mut ctx = EvalContext::new();
 
     // Register a simple native function that adds all its arguments
-    ctx.register_native_function("sum", 3, |args| args.iter().sum());
+    let _ = ctx.register_native_function("sum", 3, |args| args.iter().sum());
 
     // Test the custom function
     assert_eq!(
@@ -710,7 +708,7 @@ fn test_error_handling() {
     {
         // Create a context with sin function for this test
         let mut sin_ctx = EvalContext::default();
-        sin_ctx.register_native_function("sin", 1, |args| args[0].sin());
+        let _ = sin_ctx.register_native_function("sin", 1, |args| args[0].sin());
         let sin_ctx = std::rc::Rc::new(sin_ctx);
 
         let result = interp("sin(1, 2)", Some(sin_ctx));
@@ -789,7 +787,7 @@ fn test_advanced_native_functions() {
 
         // Register a function that implements a simple low-pass filter
         // y[n] = alpha * x[n] + (1-alpha) * y[n-1]
-        ctx.register_native_function("low_pass_filter", 2, {
+        let _ = ctx.register_native_function("low_pass_filter", 2, {
             // No need to clone the Mutex, just move it into the closure
             move |args| {
                 let input = args[0];
@@ -835,7 +833,7 @@ fn test_advanced_native_functions() {
         let prev_error = Mutex::new(0.0);
 
         // Register a function that implements a PID controller
-        ctx.register_native_function("pid_controller", 5, {
+        let _ = ctx.register_native_function("pid_controller", 5, {
             // No need to clone the Mutexes, just move them into the closure
             move |args| {
                 let setpoint = args[0];

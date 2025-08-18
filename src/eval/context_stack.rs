@@ -29,6 +29,7 @@ struct ContextWrapper {
     /// The actual context
     context: Rc<EvalContext>,
     /// Whether this context owns its data (vs being a reference)
+    #[allow(dead_code)]
     is_owned: bool,
 }
 

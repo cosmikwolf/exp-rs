@@ -477,7 +477,7 @@ impl EvalContext {
             &param_names,
         );
 
-        let mut report = match parse_result {
+        let report = match parse_result {
             Ok(ast) => {
                 let mut report = ExpressionValidationReport::new_syntax_valid();
 
@@ -622,7 +622,7 @@ impl EvalContext {
                     validate_node(true_branch, ctx, param_names, used_params, report);
                     validate_node(false_branch, ctx, param_names, used_params, report);
                 }
-                AstExpr::Array { name, index } => {
+                AstExpr::Array { name: _, index } => {
                     // Array names can't be validated at registration time
                     // But we can validate the index expression
                     validate_node(index, ctx, param_names, used_params, report);
@@ -1178,13 +1178,13 @@ mod tests {
     fn test_get_variable_parent_chain() {
         // Create parent context with some variables
         let mut parent_ctx = EvalContext::new();
-        parent_ctx.set_parameter("parent_only", 1.0);
-        parent_ctx.set_parameter("shadowed", 2.0);
+        let _ = parent_ctx.set_parameter("parent_only", 1.0);
+        let _ = parent_ctx.set_parameter("shadowed", 2.0);
 
         // Create child context with its own variables
         let mut child_ctx = EvalContext::new();
-        child_ctx.set_parameter("child_only", 3.0);
-        child_ctx.set_parameter("shadowed", 4.0); // Shadows parent's value
+        let _ = child_ctx.set_parameter("child_only", 3.0);
+        let _ = child_ctx.set_parameter("shadowed", 4.0); // Shadows parent's value
         child_ctx.parent = Some(Rc::new(parent_ctx));
 
         // Test variable only in parent
@@ -1204,19 +1204,19 @@ mod tests {
     fn test_get_variable_deep_chain() {
         // Create grandparent context
         let mut grandparent_ctx = EvalContext::new();
-        grandparent_ctx.set_parameter("grandparent_var", 1.0);
-        grandparent_ctx.set_parameter("shadowed", 2.0);
+        let _ = grandparent_ctx.set_parameter("grandparent_var", 1.0);
+        let _ = grandparent_ctx.set_parameter("shadowed", 2.0);
 
         // Create parent context
         let mut parent_ctx = EvalContext::new();
-        parent_ctx.set_parameter("parent_var", 3.0);
-        parent_ctx.set_parameter("shadowed", 4.0);
+        let _ = parent_ctx.set_parameter("parent_var", 3.0);
+        let _ = parent_ctx.set_parameter("shadowed", 4.0);
         parent_ctx.parent = Some(Rc::new(grandparent_ctx));
 
         // Create child context
         let mut child_ctx = EvalContext::new();
-        child_ctx.set_parameter("child_var", 5.0);
-        child_ctx.set_parameter("shadowed", 6.0);
+        let _ = child_ctx.set_parameter("child_var", 5.0);
+        let _ = child_ctx.set_parameter("shadowed", 6.0);
         child_ctx.parent = Some(Rc::new(parent_ctx));
 
         // Test lookup at each level
@@ -1231,7 +1231,7 @@ mod tests {
     #[test]
     fn test_get_variable_null_parent() {
         let mut ctx = EvalContext::new();
-        ctx.set_parameter("x", 1.0);
+        let _ = ctx.set_parameter("x", 1.0);
         ctx.parent = None;
 
         assert_eq!(ctx.get_variable("x"), Some(1.0));
@@ -1244,8 +1244,8 @@ mod tests {
         let mut ctx1 = EvalContext::new();
         let mut ctx2 = EvalContext::new();
 
-        ctx1.set_parameter("var1", 1.0);
-        ctx2.set_parameter("var2", 2.0);
+        let _ = ctx1.set_parameter("var1", 1.0);
+        let _ = ctx2.set_parameter("var2", 2.0);
 
         // Create a cyclic reference (this would be unsafe in practice)
         // We'll test that variable lookup still works without infinite recursion
@@ -1262,11 +1262,11 @@ mod tests {
         let mut ctx = EvalContext::new();
 
         // Set up parent context with a variable
-        ctx.set_parameter("x", 100.0);
+        let _ = ctx.set_parameter("x", 100.0);
 
         // Create a function context that uses 'x' as parameter
         let mut func_ctx = EvalContext::new();
-        func_ctx.set_parameter("x", 5.0); // Parameter value
+        let _ = func_ctx.set_parameter("x", 5.0); // Parameter value
         func_ctx.parent = Some(Rc::new(ctx.clone()));
 
         // Test variable lookup in function scope
@@ -1289,15 +1289,15 @@ mod tests {
     #[test]
     fn test_get_variable_nested_scopes() {
         let mut root_ctx = EvalContext::new();
-        root_ctx.set_parameter("x", 1.0);
-        root_ctx.set_parameter("y", 1.0);
+        let _ = root_ctx.set_parameter("x", 1.0);
+        let _ = root_ctx.set_parameter("y", 1.0);
 
         let mut mid_ctx = EvalContext::new();
-        mid_ctx.set_parameter("x", 2.0);
+        let _ = mid_ctx.set_parameter("x", 2.0);
         mid_ctx.parent = Some(Rc::new(root_ctx));
 
         let mut leaf_ctx = EvalContext::new();
-        leaf_ctx.set_parameter("x", 3.0);
+        let _ = leaf_ctx.set_parameter("x", 3.0);
         leaf_ctx.parent = Some(Rc::new(mid_ctx));
 
         // Test variable lookup at each level
@@ -1339,11 +1339,11 @@ mod tests {
             .unwrap();
 
         // Set a global 'x'
-        ctx.set_parameter("x", 100.0);
+        let _ = ctx.set_parameter("x", 100.0);
 
         // Create evaluation context for function
         let mut func_ctx = EvalContext::new();
-        func_ctx.set_parameter("x", 5.0); // Parameter value
+        let _ = func_ctx.set_parameter("x", 5.0); // Parameter value
         func_ctx.parent = Some(Rc::new(ctx));
 
         println!("Function parameter context:");
@@ -1364,7 +1364,7 @@ mod tests {
     #[test]
     fn test_get_variable_temporary_scope() {
         let mut ctx = EvalContext::new();
-        ctx.set_parameter("x", 1.0);
+        let _ = ctx.set_parameter("x", 1.0);
 
         // Create temporary scope
         let mut temp_ctx = EvalContext::new();
@@ -1378,7 +1378,7 @@ mod tests {
         );
 
         // Add variable to temporary scope
-        temp_ctx.set_parameter("x", 2.0);
+        let _ = temp_ctx.set_parameter("x", 2.0);
 
         // Should now find local value
         assert_eq!(

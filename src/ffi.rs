@@ -191,7 +191,7 @@ mod allocator {
             if align > 8 {
                 // Allocate extra space for alignment
                 let total_size = size + align;
-                let ptr = malloc(total_size) as *mut u8;
+                let ptr = (unsafe { malloc(total_size) }) as *mut u8;
                 if ptr.is_null() {
                     return ptr;
                 }
@@ -202,15 +202,17 @@ mod allocator {
                 aligned_addr as *mut u8
             } else {
                 // Standard malloc should provide adequate alignment
-                malloc(size) as *mut u8
+                (unsafe { malloc(size) }) as *mut u8
             }
         }
 
-        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
             if !ptr.is_null() {
                 // For over-aligned allocations, we can't easily find the original pointer
                 // This is a limitation - for now just free the given pointer
-                free(ptr as *mut core::ffi::c_void);
+                unsafe {
+                    free(ptr as *mut core::ffi::c_void);
+                }
             }
         }
     }
@@ -230,15 +232,19 @@ mod allocator {
 // ============================================================================
 
 /// Global panic flag pointer - set by C code
+#[allow(dead_code)]
 static mut EXP_RS_PANIC_FLAG: *mut i32 = ptr::null_mut();
 
 /// Global log function pointer - set by C code
+#[allow(dead_code)]
 static mut EXP_RS_LOG_FUNCTION: *const c_void = ptr::null();
 
 /// Type for the logging function
+#[allow(dead_code)]
 type LogFunctionType = unsafe extern "C" fn(*const u8, usize);
 
 /// Default panic message
+#[allow(dead_code)]
 static PANIC_DEFAULT_MSG: &[u8] = b"Rust panic occurred\0";
 
 /// Register a panic handler
@@ -565,7 +571,7 @@ pub extern "C" fn expr_context_add_function(
     arity: usize,
     func: NativeFunc,
 ) -> i32 {
-    if ctx.is_null() || name.is_null() || func as *const c_void == ptr::null() {
+    if ctx.is_null() || name.is_null() {
         return -1;
     }
 
@@ -1287,7 +1293,7 @@ impl ExpressionWrapper {
     /// Build a temporary Expression for evaluation
     fn with_expression<F, R>(
         &mut self,
-        ctx: &alloc::rc::Rc<EvalContext>,
+        _ctx: &alloc::rc::Rc<EvalContext>,
         f: F,
     ) -> Result<R, crate::error::ExprError>
     where

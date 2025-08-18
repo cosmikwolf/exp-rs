@@ -2,11 +2,13 @@ extern crate alloc;
 use exp_rs::EvalContext;
 
 // Import libm only when the feature is enabled
+#[cfg(feature = "libm")]
+use libm::{cos, exp, log, sin, sqrt, tan};
 
 use std::println;
 
 // Helper macro to wrap std math functions for f64
-#[cfg(all(feature = "f64", not(feature = "libm")))]
+#[cfg(not(feature = "libm"))]
 macro_rules! c_fn {
     (sin) => {
         |args: &[f64]| args[0].sin()
@@ -29,7 +31,7 @@ macro_rules! c_fn {
 }
 
 // Helper macro to wrap libm functions for f64
-#[cfg(all(feature = "f64", feature = "libm"))]
+#[cfg(feature = "libm")]
 macro_rules! c_fn {
     ($name:ident) => {
         |args: &[f64]| $name(args[0])
@@ -68,9 +70,9 @@ macro_rules! c_fn {
 }
 
 fn main() {
-    let ctx = EvalContext::new();
+    let mut ctx = EvalContext::new();
 
-    #[cfg(feature = "f64")]
+    #[cfg(not(feature = "f32"))]
     {
         ctx.register_native_function("sin", 1, c_fn!(sin));
         ctx.register_native_function("cos", 1, c_fn!(cos));

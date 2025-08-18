@@ -5,8 +5,8 @@
 
 #[cfg(test)]
 use bumpalo::Bump;
+use exp_rs::EvalContext;
 use exp_rs::expression::ArenaBatchBuilder;
-use exp_rs::{EvalContext, Real};
 use proptest::prelude::*;
 use std::rc::Rc;
 

@@ -2,10 +2,7 @@ use bumpalo::Bump;
 use exp_rs::{
     EvalContext,
     engine::parse_expression,
-    eval::{
-        eval_ast,
-        iterative::{EvalEngine, eval_with_engine},
-    },
+    eval::iterative::{EvalEngine, eval_with_engine},
     expression::Expression,
 };
 use std::rc::Rc;
@@ -53,7 +50,7 @@ fn test_arena_zero_allocations() {
         let ctx_rc = Rc::new(ctx_clone);
 
         let result1 = eval_with_engine(&expr1, Some(ctx_rc.clone()), &mut engine).unwrap();
-        let result2 = eval_with_engine(&expr2, Some(ctx_rc), &mut engine).unwrap();
+        let _result2 = eval_with_engine(&expr2, Some(ctx_rc), &mut engine).unwrap();
 
         // Verify results are correct
         assert_eq!(result1, (i as f64) * 2.0 + 2.0);

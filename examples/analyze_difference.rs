@@ -76,7 +76,7 @@ fn main() {
     const ITERATIONS: usize = 10_000;
 
     let start = Instant::now();
-    for i in 0..ITERATIONS {
+    for _i in 0..ITERATIONS {
         // Clone context and set parameters
         let mut ctx_clone = (*ctx).clone();
         for (p, name) in param_names.iter().enumerate() {

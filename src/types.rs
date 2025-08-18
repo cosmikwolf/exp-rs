@@ -55,11 +55,9 @@ pub type ExpressionFunctionMap =
 #[cfg(test)]
 use crate::Real;
 #[cfg(not(test))]
-use crate::{Box, Real, String, Vec};
+use crate::{Real, String, Vec};
 #[cfg(not(test))]
 use alloc::rc::Rc;
-#[cfg(test)]
-use std::boxed::Box;
 #[cfg(test)]
 use std::rc::Rc;
 #[cfg(test)]
@@ -325,7 +323,7 @@ mod tests {
         let mut ctx = EvalContext::new();
 
         // Register sin function that takes exactly 1 argument
-        ctx.register_native_function("sin", 1, |args| args[0].sin());
+        let _ = ctx.register_native_function("sin", 1, |args| args[0].sin());
         let ctx = Rc::new(ctx);
 
         // Create AST for sin with 2 args (should be 1)

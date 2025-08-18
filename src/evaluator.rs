@@ -103,8 +103,8 @@ mod tests {
     fn test_evaluation_with_variables() {
         let evaluator = Evaluator::new();
         let mut ctx = EvalContext::new();
-        ctx.set_parameter("x", 5.0);
-        ctx.set_parameter("y", 3.0);
+        let _ = ctx.set_parameter("x", 5.0);
+        let _ = ctx.set_parameter("y", 3.0);
 
         let result = evaluator
             .eval_with_context("x * y + 2", Rc::new(ctx))

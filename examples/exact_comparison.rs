@@ -93,7 +93,7 @@ fn main() {
 
         let start = Instant::now();
 
-        for iter in 0..iterations {
+        for _iter in 0..iterations {
             for batch in 0..batch_size {
                 // Update parameters (matching C test pattern)
                 for p in 0..10 {

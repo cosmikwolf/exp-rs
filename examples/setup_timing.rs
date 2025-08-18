@@ -81,7 +81,7 @@ fn main() {
     println!("   Average time: {:.1} µs", ctx_us);
 
     // Create one context for subsequent tests
-    let ctx = create_test_context();
+    let _ctx = create_test_context();
 
     // Measure arena creation time
     println!("\n2. Arena Creation Time");

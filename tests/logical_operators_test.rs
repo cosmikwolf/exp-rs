@@ -130,8 +130,8 @@ fn test_complex_logical_expressions() {
 
     // Test with variables
     let mut ctx = create_context();
-    ctx.set_parameter("x", 5.0);
-    ctx.set_parameter("y", -3.0);
+    let _ = ctx.set_parameter("x", 5.0);
+    let _ = ctx.set_parameter("y", -3.0);
 
     let ctx_rc = Rc::new(ctx);
 

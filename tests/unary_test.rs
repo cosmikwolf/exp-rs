@@ -5,7 +5,7 @@ use std::rc::Rc;
 fn test_unary_expression_evaluation() {
     // Create a context with necessary operators
     let mut ctx = EvalContext::default();
-    ctx.register_native_function("sin", 1, |args| args[0].sin());
+    let _ = ctx.register_native_function("sin", 1, |args| args[0].sin());
     ctx.register_native_function("cos", 1, |args| args[0].cos());
     ctx.register_native_function("neg", 1, |args| -args[0]); // Unary minus alias
     ctx.register_native_function("-", 1, |args| -args[0]); // Unary minus

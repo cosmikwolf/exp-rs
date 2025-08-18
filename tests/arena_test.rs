@@ -30,8 +30,8 @@ fn test_arena_with_variables() {
 
     // Create context with variables
     let mut ctx = EvalContext::new();
-    ctx.set_parameter("x", 10.0);
-    ctx.set_parameter("y", 20.0);
+    let _ = ctx.set_parameter("x", 10.0);
+    let _ = ctx.set_parameter("y", 20.0);
     let ctx = Rc::new(ctx);
 
     // Parse expression
@@ -49,7 +49,7 @@ fn test_arena_zero_allocations() {
 
     // Parse expression once
     let ast = parse_expression("x * 2 + y", &arena).unwrap();
-    let allocated_after_parse = arena.allocated_bytes();
+    let _allocated_after_parse = arena.allocated_bytes();
 
     // Create reusable engine (allocates stacks once)
     let mut engine = EvalEngine::new(&arena);
@@ -59,8 +59,8 @@ fn test_arena_zero_allocations() {
     for i in 0..1000 {
         // Create context for each iteration
         let mut ctx = EvalContext::new();
-        ctx.set_parameter("x", i as Real);
-        ctx.set_parameter("y", 1.0);
+        let _ = ctx.set_parameter("x", i as Real);
+        let _ = ctx.set_parameter("y", 1.0);
         let ctx = Rc::new(ctx);
 
         let result = eval_with_engine(&ast, Some(ctx), &mut engine).unwrap();

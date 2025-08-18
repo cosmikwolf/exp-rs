@@ -787,8 +787,8 @@ mod tests {
         let mut ctx = EvalContext::new();
 
         // Add some variables to context
-        ctx.set_parameter("x", 10.0);
-        ctx.set_parameter("y", 20.0);
+        let _ = ctx.set_parameter("x", 10.0);
+        let _ = ctx.set_parameter("y", 20.0);
 
         let ctx_rc = Rc::new(ctx);
 
@@ -1085,9 +1085,9 @@ mod tests {
 
             // Method 3: eval_with_context (after setting up context)
             let mut ctx2 = EvalContext::new();
-            ctx2.set_parameter("a", a);
-            ctx2.set_parameter("b", b);
-            ctx2.set_parameter("c", c);
+            let _ = ctx2.set_parameter("a", a);
+            let _ = ctx2.set_parameter("b", b);
+            let _ = ctx2.set_parameter("c", c);
             let result3 = Expression::eval_with_context(expr_str, &Rc::new(ctx2), &arena).unwrap();
 
             // All methods should give the same result

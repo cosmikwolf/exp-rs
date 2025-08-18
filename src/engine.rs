@@ -655,10 +655,11 @@ impl<'input, 'arena> PrattParser<'input, 'arena> {
         Ok(lhs)
     }
 
+    #[allow(dead_code)]
     fn parse_juxtaposition(
         &mut self,
         lhs: AstExpr<'arena>,
-        allow_comma: bool,
+        _allow_comma: bool,
     ) -> Result<AstExpr<'arena>, ExprError> {
         let mut lhs = lhs;
         if let Some(tok) = self.peek() {
@@ -1010,8 +1011,6 @@ pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::erro
 }
 
 #[cfg(test)]
-use std::boxed::Box;
-#[cfg(test)]
 use std::format;
 #[cfg(test)]
 use std::vec::Vec;
@@ -1022,8 +1021,6 @@ mod tests {
     use crate::context::EvalContext;
     use crate::functions::{log, sin};
     use bumpalo::Bump;
-
-    use std::vec; // Import functions from our own module
 
     // Simple test helper to parse with a temporary arena
     fn parse_test(expr: &str) -> Result<AstExpr<'static>, ExprError> {
@@ -1093,7 +1090,7 @@ mod tests {
             ctx.register_native_function("+", 2, |args| args[0] + args[1]);
         }
 
-        ctx.set_parameter("x", 5.0);
+        let _ = ctx.set_parameter("x", 5.0);
         let result = interp("x > 0 ? 10 : 20", Some(Rc::new(ctx))).unwrap();
         assert_eq!(result, 10.0);
 
@@ -1108,12 +1105,12 @@ mod tests {
             ctx.register_native_function("+", 2, |args| args[0] + args[1]);
         }
 
-        ctx.set_parameter("x", -5.0);
+        let _ = ctx.set_parameter("x", -5.0);
         let result = interp("x > 0 ? 10 : 20", Some(Rc::new(ctx))).unwrap();
         assert_eq!(result, 20.0);
 
         // Create a context for the rest of the tests
-        let mut ctx = EvalContext::new();
+        let ctx = EvalContext::new();
 
         // Make sure the context has all the necessary operators registered
         #[cfg(not(feature = "libm"))]
@@ -1149,7 +1146,7 @@ mod tests {
             ctx.register_native_function("/", 2, |args| args[0] / args[1]);
         }
 
-        ctx.set_parameter("x", 0.0);
+        let _ = ctx.set_parameter("x", 0.0);
 
         // This should not cause a division by zero error because the condition is true,
         // so the false branch (x's value / 0) is never evaluated due to short-circuit
@@ -1175,7 +1172,7 @@ mod tests {
     #[test]
     fn test_ternary_operator_precedence() {
         // Create a context with the necessary operators for the test
-        let mut ctx = EvalContext::new();
+        let ctx = EvalContext::new();
 
         // Make sure the context has all the necessary operators registered
         #[cfg(not(feature = "libm"))]
@@ -1211,6 +1208,7 @@ mod tests {
     }
 
     // Helper function to print AST for debugging
+    #[allow(dead_code)]
     fn debug_ast(expr: &AstExpr<'_>, indent: usize) -> String {
         let spaces = " ".repeat(indent);
         match expr {
@@ -1592,7 +1590,7 @@ mod tests {
     fn test_parse_postfix_attribute_on_function_result_should_error() {
         // This test verifies that attribute access on function results is rejected
         // Since juxtaposition is disabled, "sin x" will fail, so test with parentheses
-        let ast = parse_test("sin(x).foo");
+        let _ast = parse_test("sin(x).foo");
 
         // Currently, this might parse as sin(x.foo) due to precedence
         // Let's test with parentheses to be explicit

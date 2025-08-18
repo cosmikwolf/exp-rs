@@ -11,7 +11,7 @@ use std::rc::Rc;
 // Helper function to create a context with comparison operators registered
 // This is needed when running with --no-default-features (no libm)
 fn create_test_context() -> EvalContext {
-    let mut ctx = EvalContext::new();
+    let ctx = EvalContext::new();
 
     // Register comparison operators when libm is not available
     #[cfg(not(feature = "libm"))]
@@ -26,7 +26,7 @@ fn create_test_context() -> EvalContext {
         ctx.register_native_function(">=", 2, |args| if args[0] >= args[1] { 1.0 } else { 0.0 });
 
         // Arithmetic operators
-        ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+        let _ = ctx.register_native_function("+", 2, |args| args[0] + args[1]);
         ctx.register_native_function("*", 2, |args| args[0] * args[1]);
         ctx.register_native_function("/", 2, |args| args[0] / args[1]);
         ctx.register_native_function("-", 2, |args| args[0] - args[1]);
@@ -207,8 +207,8 @@ fn test_chained_comparisons() {
 fn test_comparison_with_variables() {
     // Create a context with comparison operators registered and add variables
     let mut ctx = create_test_context();
-    ctx.set_parameter("x", 10.0);
-    ctx.set_parameter("y", 5.0);
+    let _ = ctx.set_parameter("x", 10.0);
+    let _ = ctx.set_parameter("y", 5.0);
 
     let ctx_rc = Rc::new(ctx);
 
@@ -232,12 +232,12 @@ fn test_comparison_with_variables() {
 #[test]
 fn test_comparison_with_functions() {
     // Create a context with comparison operators and math functions registered
-    let mut ctx = create_test_context();
+    let ctx = create_test_context();
 
     // Register math functions if libm is not enabled
     #[cfg(not(feature = "libm"))]
     {
-        ctx.register_native_function("sin", 1, |args| args[0].sin());
+        let _ = ctx.register_native_function("sin", 1, |args| args[0].sin());
         ctx.register_native_function("cos", 1, |args| args[0].cos());
         ctx.register_native_function("sqrt", 1, |args| args[0].sqrt());
         ctx.register_native_function("abs", 1, |args| args[0].abs());

@@ -34,7 +34,6 @@ mod tests {
     use crate::engine::interp;
     use crate::error::ExprError;
     use crate::parse_expression;
-    use std::collections::BTreeMap;
     use std::rc::Rc;
     use std::sync::atomic::Ordering;
 
@@ -80,7 +79,7 @@ mod tests {
     #[test]
     fn test_eval_native_function_simple() {
         let mut ctx = EvalContext::new();
-        ctx.register_native_function("triple", 1, |args| args[0] * 3.0);
+        let _ = ctx.register_native_function("triple", 1, |args| args[0] * 3.0);
         let val = interp("triple(4)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val, 12.0);
     }
@@ -134,7 +133,7 @@ mod tests {
         {
             // Manually register built-ins needed for tests if register_defaults doesn't exist
             // or isn't comprehensive enough for test setup.
-            ctx.register_native_function("sin", 1, |args| sin(args[0], 0.0));
+            let _ = ctx.register_native_function("sin", 1, |args| sin(args[0], 0.0));
             ctx.register_native_function("cos", 1, |args| cos(args[0], 0.0));
             ctx.register_native_function("pow", 2, |args| pow(args[0], args[1]));
             ctx.register_native_function("^", 2, |args| pow(args[0], args[1]));
@@ -165,7 +164,7 @@ mod tests {
     #[test]
     fn test_eval_variable_context_lookup() {
         let mut ctx = EvalContext::new();
-        ctx.set_parameter("x", 42.0);
+        let _ = ctx.set_parameter("x", 42.0);
         ctx.constants
             .insert("y".try_into_heapless().unwrap(), crate::constants::PI)
             .expect("Failed to insert constant");
@@ -294,7 +293,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(not(feature = "libm"), feature = "std"))] // Test behavior when builtins are disabled but std is available
+    #[cfg(not(feature = "libm"))] // Test behavior when builtins are disabled
     fn test_neg_pow_eval_no_builtins() {
         // Create a clean context with no auto-registered functions
         let mut ctx = EvalContext {
@@ -309,7 +308,7 @@ mod tests {
         };
 
         // Manually register just what we need for this test
-        ctx.register_native_function("neg", 1, |args| -args[0]);
+        let _ = ctx.register_native_function("neg", 1, |args| -args[0]);
         ctx.register_native_function("^", 2, |args| args[0].powf(args[1])); // Example using powf
 
         // Convert to Rc<EvalContext> for interp function
@@ -420,12 +419,12 @@ mod tests {
     fn test_function_application_juxtaposition_eval() {
         // Test evaluation: abs(neg(42)) = 42
         // This requires 'abs' and 'neg' to be available.
-        let mut ctx = create_test_context(); // Gets defaults if enabled
+        let ctx = create_test_context(); // Gets defaults if enabled
 
         // If builtins disabled, manually add abs and neg
         #[cfg(not(feature = "libm"))]
         {
-            ctx.register_native_function("abs", 1, |args| args[0].abs());
+            let _ = ctx.register_native_function("abs", 1, |args| args[0].abs());
             ctx.register_native_function("neg", 1, |args| -args[0]);
         }
 
@@ -495,7 +494,7 @@ mod tests {
         };
 
         // Register a pow function that requires exactly 2 arguments
-        ctx.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+        let _ = ctx.register_native_function("pow", 2, |args| args[0].powf(args[1]));
 
         // Convert to Rc<EvalContext> for interp function
         let ctx_rc = Rc::new(ctx);
@@ -534,12 +533,12 @@ mod tests {
     #[test]
     fn test_unknown_variable_and_function_eval() {
         // Test evaluation when a function name is used as a variable
-        let mut ctx = create_test_context(); // Gets defaults if enabled
+        let ctx = create_test_context(); // Gets defaults if enabled
 
         // If builtins disabled, manually add sin/abs so they are known *potential* functions
         #[cfg(not(feature = "libm"))]
         {
-            ctx.register_native_function("sin", 1, |args| args[0].sin());
+            let _ = ctx.register_native_function("sin", 1, |args| args[0].sin());
             ctx.register_native_function("abs", 1, |args| args[0].abs());
         }
 
@@ -580,7 +579,7 @@ mod tests {
         let mut ctx = create_test_context(); // Start with defaults (if enabled)
 
         // Override 'sin'
-        ctx.register_native_function("sin", 1, |_args| 100.0);
+        let _ = ctx.register_native_function("sin", 1, |_args| 100.0);
         // Override 'pow'
         ctx.register_native_function("pow", 2, |args| args[0] + args[1]);
         // Also override '^' if it's treated separately by parser/evaluator
@@ -646,7 +645,7 @@ mod tests {
         // Ensure 'min' is available first
         #[cfg(not(feature = "libm"))]
         {
-            ctx.register_native_function("min", 2, |args| args[0].min(args[1]));
+            let _ = ctx.register_native_function("min", 2, |args| args[0].min(args[1]));
             // Update Rc after modifying ctx
             ctx_rc = Rc::new(ctx.clone());
         }
@@ -685,7 +684,7 @@ mod tests {
         // Test a non-overridden function still works (sin)
         #[cfg(not(feature = "libm"))]
         {
-            ctx.register_native_function("sin", 1, |args| args[0].sin());
+            let _ = ctx.register_native_function("sin", 1, |args| args[0].sin());
             // Update Rc after modifying ctx
             ctx_rc = Rc::new(ctx.clone());
         }
@@ -796,7 +795,7 @@ mod tests {
     #[test]
     fn test_polynomial_subexpressions() {
         let mut ctx = EvalContext::new();
-        ctx.set_parameter("x", 2.0);
+        let _ = ctx.set_parameter("x", 2.0);
 
         // Create Rc once
         let ctx_rc = Rc::new(ctx);
@@ -833,7 +832,7 @@ mod tests {
         ctx.function_registry = Rc::new(FunctionRegistry::default());
 
         // Register the operators needed for the expression
-        ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+        let _ = ctx.register_native_function("+", 2, |args| args[0] + args[1]);
         ctx.register_native_function("*", 2, |args| args[0] * args[1]);
         ctx.register_native_function("^", 2, |args| args[0].powf(args[1]));
 
@@ -870,7 +869,7 @@ mod tests {
         println!("polynomial(2) = {}", result);
 
         // Evaluate the body directly with x=2
-        ctx.set_parameter("x", 2.0);
+        let _ = ctx.set_parameter("x", 2.0);
         let ctx_rc2 = Rc::new(ctx);
         let direct_result = interp("x^3 + 2*x^2 + 3*x + 4", Some(ctx_rc2)).unwrap();
         println!("Direct eval with x=2: {}", direct_result);
@@ -892,7 +891,7 @@ mod tests {
         assert_eq!(result_lit, 1234.0);
 
         // Test with a variable
-        ctx.set_parameter("z", 10.0);
+        let _ = ctx.set_parameter("z", 10.0);
         ctx_rc = Rc::new(ctx.clone());
 
         let result_var = interp("polynomial(z)", Some(ctx_rc.clone())).unwrap();
@@ -900,8 +899,8 @@ mod tests {
         assert_eq!(result_var, 1234.0);
 
         // Test with a subexpression
-        ctx.set_parameter("a", 5.0);
-        ctx.set_parameter("b", 10.0);
+        let _ = ctx.set_parameter("a", 5.0);
+        let _ = ctx.set_parameter("b", 10.0);
         ctx_rc = Rc::new(ctx.clone());
 
         let result_sub = interp("polynomial(a + b / 2)", Some(ctx_rc.clone())).unwrap();
@@ -915,7 +914,7 @@ mod tests {
     #[test]
     fn test_polynomial_shadowing_variable() {
         let mut ctx = EvalContext::new();
-        ctx.set_parameter("x", 100.0); // Shadowing variable
+        let _ = ctx.set_parameter("x", 100.0); // Shadowing variable
         ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
             .unwrap();
 
@@ -1062,12 +1061,12 @@ mod tests {
         let expr = "(1 + 2) * (3 + 4) * (5 + 6) * (7 + 8) * (9 + 10) * (11 + 12) * (13 + 14)";
 
         // Create a context with the necessary operators
-        let mut ctx = EvalContext::new();
+        let ctx = EvalContext::new();
 
         // Register the necessary operators if libm is not enabled
         #[cfg(not(feature = "libm"))]
         {
-            ctx.register_native_function("+", 2, |args| args[0] + args[1]);
+            let _ = ctx.register_native_function("+", 2, |args| args[0] + args[1]);
             ctx.register_native_function("*", 2, |args| args[0] * args[1]);
         }
 
@@ -1105,7 +1104,6 @@ mod tests {
     // Test for AST caching effect on polynomial evaluation
     #[test]
     fn test_polynomial_ast_cache_effect() {
-        use std::cell::RefCell;
         use std::rc::Rc;
 
         let mut ctx = EvalContext::new();

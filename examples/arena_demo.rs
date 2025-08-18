@@ -3,7 +3,6 @@
 //! This shows how the arena eliminates allocations during evaluation
 
 use bumpalo::Bump;
-use exp_rs::Real;
 
 // For now, we'll create a simple test that shows the concept
 // The full implementation requires updating many files
