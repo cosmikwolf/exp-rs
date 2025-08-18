@@ -23,17 +23,6 @@ use heapless::FnvIndexMap;
 /// Maximum depth of the operation stack (prevents runaway evaluation)
 const MAX_STACK_DEPTH: usize = 1000;
 
-/// Initial capacity for stacks (tuned for typical expressions)
-const INITIAL_OP_CAPACITY: usize = 32;
-const INITIAL_VALUE_CAPACITY: usize = 16;
-
-/// Arena-based stack capacities (increased to reduce reallocation likelihood)
-/// Note: These use fixed constants following existing codebase patterns.
-/// Users needing different sizes should modify these constants and recompile.
-const ARENA_OP_CAPACITY: usize = 128; // Increased from INITIAL_OP_CAPACITY
-const ARENA_VALUE_CAPACITY: usize = 64; // Increased from INITIAL_VALUE_CAPACITY
-const ARENA_ARG_BUFFER_CAPACITY: usize = 32; // New buffer for function args
-
 /// Main iterative evaluation function
 pub fn eval_iterative<'arena>(
     ast: &'arena AstExpr<'arena>,
@@ -82,13 +71,9 @@ impl<'arena> EvalEngine<'arena> {
         Self {
             arena: Some(arena),
 
-            // Use arena for all allocations with module-level constants
-            op_stack: bumpalo::collections::Vec::with_capacity_in(ARENA_OP_CAPACITY, arena),
-            value_stack: bumpalo::collections::Vec::with_capacity_in(ARENA_VALUE_CAPACITY, arena),
-            arg_buffer: bumpalo::collections::Vec::with_capacity_in(
-                ARENA_ARG_BUFFER_CAPACITY,
-                arena,
-            ),
+            op_stack: bumpalo::collections::Vec::new_in(arena),
+            value_stack: bumpalo::collections::Vec::new_in(arena),
+            arg_buffer: bumpalo::collections::Vec::new_in(arena),
 
             // Initialize high water marks
             op_stack_hwm: 0,
