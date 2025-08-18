@@ -7,7 +7,7 @@ fn create_test_context() -> Rc<EvalContext> {
     let mut ctx = EvalContext::new();
 
     // Register basic math functions
-    ctx.register_native_function("abs", 1, |args| args[0].abs())
+    let _ = ctx.register_native_function("abs", 1, |args| args[0].abs())
         .unwrap();
     ctx.register_native_function("sign", 1, |args| {
         if args[0] > 0.0 {
@@ -21,7 +21,7 @@ fn create_test_context() -> Rc<EvalContext> {
     .unwrap();
 
     // Trigonometric
-    ctx.register_native_function("sin", 1, |args| args[0].sin())
+    let _ = ctx.register_native_function("sin", 1, |args| args[0].sin())
         .unwrap();
     ctx.register_native_function("cos", 1, |args| args[0].cos())
         .unwrap();

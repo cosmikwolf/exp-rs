@@ -74,12 +74,12 @@ fn main() {
 
     #[cfg(not(feature = "f32"))]
     {
-        ctx.register_native_function("sin", 1, c_fn!(sin));
-        ctx.register_native_function("cos", 1, c_fn!(cos));
-        ctx.register_native_function("tan", 1, c_fn!(tan));
-        ctx.register_native_function("exp", 1, c_fn!(exp));
-        ctx.register_native_function("log", 1, c_fn!(log));
-        ctx.register_native_function("sqrt", 1, c_fn!(sqrt));
+        let _ = ctx.register_native_function("sin", 1, c_fn!(sin));
+        let _ = ctx.register_native_function("cos", 1, c_fn!(cos));
+        let _ = ctx.register_native_function("tan", 1, c_fn!(tan));
+        let _ = ctx.register_native_function("exp", 1, c_fn!(exp));
+        let _ = ctx.register_native_function("log", 1, c_fn!(log));
+        let _ = ctx.register_native_function("sqrt", 1, c_fn!(sqrt));
         ctx.register_expression_function("fancy", &["x"], "sin(x) + cos(x) + 42")
             .unwrap();
     }
@@ -88,22 +88,22 @@ fn main() {
     {
         #[cfg(feature = "libm")]
         {
-            ctx.register_native_function("sin", 1, c_fn!(sinf));
-            ctx.register_native_function("cos", 1, c_fn!(cosf));
-            ctx.register_native_function("tan", 1, c_fn!(tanf));
-            ctx.register_native_function("exp", 1, c_fn!(expf));
-            ctx.register_native_function("log", 1, c_fn!(logf));
-            ctx.register_native_function("sqrt", 1, c_fn!(sqrtf));
+            let _ = ctx.register_native_function("sin", 1, c_fn!(sinf));
+            let _ = ctx.register_native_function("cos", 1, c_fn!(cosf));
+            let _ = ctx.register_native_function("tan", 1, c_fn!(tanf));
+            let _ = ctx.register_native_function("exp", 1, c_fn!(expf));
+            let _ = ctx.register_native_function("log", 1, c_fn!(logf));
+            let _ = ctx.register_native_function("sqrt", 1, c_fn!(sqrtf));
         }
 
         #[cfg(not(feature = "libm"))]
         {
-            ctx.register_native_function("sin", 1, c_fn!(sin));
-            ctx.register_native_function("cos", 1, c_fn!(cos));
-            ctx.register_native_function("tan", 1, c_fn!(tan));
-            ctx.register_native_function("exp", 1, c_fn!(exp));
-            ctx.register_native_function("log", 1, c_fn!(log));
-            ctx.register_native_function("sqrt", 1, c_fn!(sqrt));
+            let _ = ctx.register_native_function("sin", 1, c_fn!(sin));
+            let _ = ctx.register_native_function("cos", 1, c_fn!(cos));
+            let _ = ctx.register_native_function("tan", 1, c_fn!(tan));
+            let _ = ctx.register_native_function("exp", 1, c_fn!(exp));
+            let _ = ctx.register_native_function("log", 1, c_fn!(log));
+            let _ = ctx.register_native_function("sqrt", 1, c_fn!(sqrt));
         }
 
         ctx.register_expression_function("fancy", &["x"], "sin(x) + cos(x) + 42")

@@ -69,43 +69,43 @@ fn main() {
             // Register math functions - libm version
             #[cfg(feature = "f32")]
             {
-                ctx_base.register_native_function("sqrt", 1, |args| libm::sqrtf(args[0]));
-                ctx_base.register_native_function("sin", 1, |args| libm::sinf(args[0]));
-                ctx_base.register_native_function("cos", 1, |args| libm::cosf(args[0]));
-                ctx_base.register_native_function("tan", 1, |args| libm::tanf(args[0]));
-                ctx_base.register_native_function("log", 1, |args| libm::logf(args[0]));
-                ctx_base.register_native_function("log10", 1, |args| libm::log10f(args[0]));
-                ctx_base.register_native_function("ln", 1, |args| libm::logf(args[0]));
-                ctx_base.register_native_function("abs", 1, |args| args[0].abs());
-                ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
-                ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_base.register_native_function("pow", 2, |args| libm::powf(args[0], args[1]));
-                ctx_base.register_native_function("^", 2, |args| libm::powf(args[0], args[1]));
-                ctx_base.register_native_function("exp", 1, |args| libm::expf(args[0]));
-                ctx_base.register_native_function("floor", 1, |args| libm::floorf(args[0]));
-                ctx_base.register_native_function("ceil", 1, |args| libm::ceilf(args[0]));
-                ctx_base.register_native_function("neg", 1, |args| -args[0]);
-                ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+                let _ = ctx_base.register_native_function("sqrt", 1, |args| libm::sqrtf(args[0]));
+                let _ = ctx_base.register_native_function("sin", 1, |args| libm::sinf(args[0]));
+                let _ = ctx_base.register_native_function("cos", 1, |args| libm::cosf(args[0]));
+                let _ = ctx_base.register_native_function("tan", 1, |args| libm::tanf(args[0]));
+                let _ = ctx_base.register_native_function("log", 1, |args| libm::logf(args[0]));
+                let _ = ctx_base.register_native_function("log10", 1, |args| libm::log10f(args[0]));
+                let _ = ctx_base.register_native_function("ln", 1, |args| libm::logf(args[0]));
+                let _ = ctx_base.register_native_function("abs", 1, |args| args[0].abs());
+                let _ = ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                let _ = ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                let _ = ctx_base.register_native_function("pow", 2, |args| libm::powf(args[0], args[1]));
+                let _ = ctx_base.register_native_function("^", 2, |args| libm::powf(args[0], args[1]));
+                let _ = ctx_base.register_native_function("exp", 1, |args| libm::expf(args[0]));
+                let _ = ctx_base.register_native_function("floor", 1, |args| libm::floorf(args[0]));
+                let _ = ctx_base.register_native_function("ceil", 1, |args| libm::ceilf(args[0]));
+                let _ = ctx_base.register_native_function("neg", 1, |args| -args[0]);
+                let _ = ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
             #[cfg(not(feature = "f32"))]
             {
-                ctx_base.register_native_function("sqrt", 1, |args| libm::sqrt(args[0]));
-                ctx_base.register_native_function("sin", 1, |args| libm::sin(args[0]));
-                ctx_base.register_native_function("cos", 1, |args| libm::cos(args[0]));
-                ctx_base.register_native_function("tan", 1, |args| libm::tan(args[0]));
-                ctx_base.register_native_function("log", 1, |args| libm::log(args[0]));
-                ctx_base.register_native_function("log10", 1, |args| libm::log10(args[0]));
-                ctx_base.register_native_function("ln", 1, |args| libm::log(args[0]));
-                ctx_base.register_native_function("abs", 1, |args| args[0].abs());
-                ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
-                ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_base.register_native_function("pow", 2, |args| libm::pow(args[0], args[1]));
-                ctx_base.register_native_function("^", 2, |args| libm::pow(args[0], args[1]));
-                ctx_base.register_native_function("exp", 1, |args| libm::exp(args[0]));
-                ctx_base.register_native_function("floor", 1, |args| libm::floor(args[0]));
-                ctx_base.register_native_function("ceil", 1, |args| libm::ceil(args[0]));
-                ctx_base.register_native_function("neg", 1, |args| -args[0]);
-                ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+                let _ = ctx_base.register_native_function("sqrt", 1, |args| libm::sqrt(args[0]));
+                let _ = ctx_base.register_native_function("sin", 1, |args| libm::sin(args[0]));
+                let _ = ctx_base.register_native_function("cos", 1, |args| libm::cos(args[0]));
+                let _ = ctx_base.register_native_function("tan", 1, |args| libm::tan(args[0]));
+                let _ = ctx_base.register_native_function("log", 1, |args| libm::log(args[0]));
+                let _ = ctx_base.register_native_function("log10", 1, |args| libm::log10(args[0]));
+                let _ = ctx_base.register_native_function("ln", 1, |args| libm::log(args[0]));
+                let _ = ctx_base.register_native_function("abs", 1, |args| args[0].abs());
+                let _ = ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                let _ = ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                let _ = ctx_base.register_native_function("pow", 2, |args| libm::pow(args[0], args[1]));
+                let _ = ctx_base.register_native_function("^", 2, |args| libm::pow(args[0], args[1]));
+                let _ = ctx_base.register_native_function("exp", 1, |args| libm::exp(args[0]));
+                let _ = ctx_base.register_native_function("floor", 1, |args| libm::floor(args[0]));
+                let _ = ctx_base.register_native_function("ceil", 1, |args| libm::ceil(args[0]));
+                let _ = ctx_base.register_native_function("neg", 1, |args| -args[0]);
+                let _ = ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
         }
 
@@ -114,43 +114,43 @@ fn main() {
             // Register math functions - standard lib version
             #[cfg(feature = "f32")]
             {
-                ctx_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
-                ctx_base.register_native_function("sin", 1, |args| args[0].sin());
-                ctx_base.register_native_function("cos", 1, |args| args[0].cos());
-                ctx_base.register_native_function("tan", 1, |args| args[0].tan());
-                ctx_base.register_native_function("log", 1, |args| args[0].ln());
-                ctx_base.register_native_function("log10", 1, |args| args[0].log10());
-                ctx_base.register_native_function("ln", 1, |args| args[0].ln());
-                ctx_base.register_native_function("abs", 1, |args| args[0].abs());
-                ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
-                ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
-                ctx_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
-                ctx_base.register_native_function("exp", 1, |args| args[0].exp());
-                ctx_base.register_native_function("floor", 1, |args| args[0].floor());
-                ctx_base.register_native_function("ceil", 1, |args| args[0].ceil());
-                ctx_base.register_native_function("neg", 1, |args| -args[0]);
-                ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+                let _ = ctx_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
+                let _ = ctx_base.register_native_function("sin", 1, |args| args[0].sin());
+                let _ = ctx_base.register_native_function("cos", 1, |args| args[0].cos());
+                let _ = ctx_base.register_native_function("tan", 1, |args| args[0].tan());
+                let _ = ctx_base.register_native_function("log", 1, |args| args[0].ln());
+                let _ = ctx_base.register_native_function("log10", 1, |args| args[0].log10());
+                let _ = ctx_base.register_native_function("ln", 1, |args| args[0].ln());
+                let _ = ctx_base.register_native_function("abs", 1, |args| args[0].abs());
+                let _ = ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                let _ = ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                let _ = ctx_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+                let _ = ctx_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
+                let _ = ctx_base.register_native_function("exp", 1, |args| args[0].exp());
+                let _ = ctx_base.register_native_function("floor", 1, |args| args[0].floor());
+                let _ = ctx_base.register_native_function("ceil", 1, |args| args[0].ceil());
+                let _ = ctx_base.register_native_function("neg", 1, |args| -args[0]);
+                let _ = ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
             #[cfg(not(feature = "f32"))]
             {
-                ctx_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
-                ctx_base.register_native_function("sin", 1, |args| args[0].sin());
-                ctx_base.register_native_function("cos", 1, |args| args[0].cos());
-                ctx_base.register_native_function("tan", 1, |args| args[0].tan());
-                ctx_base.register_native_function("log", 1, |args| args[0].ln());
-                ctx_base.register_native_function("log10", 1, |args| args[0].log10());
-                ctx_base.register_native_function("ln", 1, |args| args[0].ln());
-                ctx_base.register_native_function("abs", 1, |args| args[0].abs());
-                ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
-                ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
-                ctx_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
-                ctx_base.register_native_function("exp", 1, |args| args[0].exp());
-                ctx_base.register_native_function("floor", 1, |args| args[0].floor());
-                ctx_base.register_native_function("ceil", 1, |args| args[0].ceil());
-                ctx_base.register_native_function("neg", 1, |args| -args[0]);
-                ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+                let _ = ctx_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
+                let _ = ctx_base.register_native_function("sin", 1, |args| args[0].sin());
+                let _ = ctx_base.register_native_function("cos", 1, |args| args[0].cos());
+                let _ = ctx_base.register_native_function("tan", 1, |args| args[0].tan());
+                let _ = ctx_base.register_native_function("log", 1, |args| args[0].ln());
+                let _ = ctx_base.register_native_function("log10", 1, |args| args[0].log10());
+                let _ = ctx_base.register_native_function("ln", 1, |args| args[0].ln());
+                let _ = ctx_base.register_native_function("abs", 1, |args| args[0].abs());
+                let _ = ctx_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                let _ = ctx_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                let _ = ctx_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+                let _ = ctx_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
+                let _ = ctx_base.register_native_function("exp", 1, |args| args[0].exp());
+                let _ = ctx_base.register_native_function("floor", 1, |args| args[0].floor());
+                let _ = ctx_base.register_native_function("ceil", 1, |args| args[0].ceil());
+                let _ = ctx_base.register_native_function("neg", 1, |args| -args[0]);
+                let _ = ctx_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
         }
 
@@ -159,7 +159,7 @@ fn main() {
         for j in 0..N {
             // Create a new context for each iteration with the parameter set
             let mut ctx = ctx_base.clone();
-            ctx.set_parameter("a", j as Real);
+            let _ = ctx.set_parameter("a", j as Real);
             let ctx_rc = Rc::new(ctx);
             evalctx_sum += exp_rs::eval::ast::eval_ast(&ast, Some(ctx_rc), &arena).unwrap();
         }
@@ -175,47 +175,47 @@ fn main() {
             // Register math functions - libm version
             #[cfg(feature = "f32")]
             {
-                ctx_interp_base.register_native_function("sqrt", 1, |args| libm::sqrtf(args[0]));
-                ctx_interp_base.register_native_function("sin", 1, |args| libm::sinf(args[0]));
-                ctx_interp_base.register_native_function("cos", 1, |args| libm::cosf(args[0]));
-                ctx_interp_base.register_native_function("tan", 1, |args| libm::tanf(args[0]));
-                ctx_interp_base.register_native_function("log", 1, |args| libm::logf(args[0]));
-                ctx_interp_base.register_native_function("log10", 1, |args| libm::log10f(args[0]));
-                ctx_interp_base.register_native_function("ln", 1, |args| libm::logf(args[0]));
-                ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
-                ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
-                ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_interp_base
+                let _ = ctx_interp_base.register_native_function("sqrt", 1, |args| libm::sqrtf(args[0]));
+                let _ = ctx_interp_base.register_native_function("sin", 1, |args| libm::sinf(args[0]));
+                let _ = ctx_interp_base.register_native_function("cos", 1, |args| libm::cosf(args[0]));
+                let _ = ctx_interp_base.register_native_function("tan", 1, |args| libm::tanf(args[0]));
+                let _ = ctx_interp_base.register_native_function("log", 1, |args| libm::logf(args[0]));
+                let _ = ctx_interp_base.register_native_function("log10", 1, |args| libm::log10f(args[0]));
+                let _ = ctx_interp_base.register_native_function("ln", 1, |args| libm::logf(args[0]));
+                let _ = ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
+                let _ = ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                let _ = ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                let _ = ctx_interp_base
                     .register_native_function("pow", 2, |args| libm::powf(args[0], args[1]));
-                ctx_interp_base
+                let _ = ctx_interp_base
                     .register_native_function("^", 2, |args| libm::powf(args[0], args[1]));
-                ctx_interp_base.register_native_function("exp", 1, |args| libm::expf(args[0]));
-                ctx_interp_base.register_native_function("floor", 1, |args| libm::floorf(args[0]));
-                ctx_interp_base.register_native_function("ceil", 1, |args| libm::ceilf(args[0]));
-                ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
-                ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+                let _ = ctx_interp_base.register_native_function("exp", 1, |args| libm::expf(args[0]));
+                let _ = ctx_interp_base.register_native_function("floor", 1, |args| libm::floorf(args[0]));
+                let _ = ctx_interp_base.register_native_function("ceil", 1, |args| libm::ceilf(args[0]));
+                let _ = ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
+                let _ = ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
             #[cfg(not(feature = "f32"))]
             {
-                ctx_interp_base.register_native_function("sqrt", 1, |args| libm::sqrt(args[0]));
-                ctx_interp_base.register_native_function("sin", 1, |args| libm::sin(args[0]));
-                ctx_interp_base.register_native_function("cos", 1, |args| libm::cos(args[0]));
-                ctx_interp_base.register_native_function("tan", 1, |args| libm::tan(args[0]));
-                ctx_interp_base.register_native_function("log", 1, |args| libm::log(args[0]));
-                ctx_interp_base.register_native_function("log10", 1, |args| libm::log10(args[0]));
-                ctx_interp_base.register_native_function("ln", 1, |args| libm::log(args[0]));
-                ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
-                ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
-                ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_interp_base
+                let _ = ctx_interp_base.register_native_function("sqrt", 1, |args| libm::sqrt(args[0]));
+                let _ = ctx_interp_base.register_native_function("sin", 1, |args| libm::sin(args[0]));
+                let _ = ctx_interp_base.register_native_function("cos", 1, |args| libm::cos(args[0]));
+                let _ = ctx_interp_base.register_native_function("tan", 1, |args| libm::tan(args[0]));
+                let _ = ctx_interp_base.register_native_function("log", 1, |args| libm::log(args[0]));
+                let _ = ctx_interp_base.register_native_function("log10", 1, |args| libm::log10(args[0]));
+                let _ = ctx_interp_base.register_native_function("ln", 1, |args| libm::log(args[0]));
+                let _ = ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
+                let _ = ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                let _ = ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                let _ = ctx_interp_base
                     .register_native_function("pow", 2, |args| libm::pow(args[0], args[1]));
-                ctx_interp_base
+                let _ = ctx_interp_base
                     .register_native_function("^", 2, |args| libm::pow(args[0], args[1]));
-                ctx_interp_base.register_native_function("exp", 1, |args| libm::exp(args[0]));
-                ctx_interp_base.register_native_function("floor", 1, |args| libm::floor(args[0]));
-                ctx_interp_base.register_native_function("ceil", 1, |args| libm::ceil(args[0]));
-                ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
-                ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+                let _ = ctx_interp_base.register_native_function("exp", 1, |args| libm::exp(args[0]));
+                let _ = ctx_interp_base.register_native_function("floor", 1, |args| libm::floor(args[0]));
+                let _ = ctx_interp_base.register_native_function("ceil", 1, |args| libm::ceil(args[0]));
+                let _ = ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
+                let _ = ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
         }
 
@@ -224,43 +224,43 @@ fn main() {
             // Register math functions - standard lib version
             #[cfg(feature = "f32")]
             {
-                ctx_interp_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
-                ctx_interp_base.register_native_function("sin", 1, |args| args[0].sin());
-                ctx_interp_base.register_native_function("cos", 1, |args| args[0].cos());
-                ctx_interp_base.register_native_function("tan", 1, |args| args[0].tan());
-                ctx_interp_base.register_native_function("log", 1, |args| args[0].ln());
-                ctx_interp_base.register_native_function("log10", 1, |args| args[0].log10());
-                ctx_interp_base.register_native_function("ln", 1, |args| args[0].ln());
-                ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
-                ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
-                ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_interp_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
-                ctx_interp_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
-                ctx_interp_base.register_native_function("exp", 1, |args| args[0].exp());
-                ctx_interp_base.register_native_function("floor", 1, |args| args[0].floor());
-                ctx_interp_base.register_native_function("ceil", 1, |args| args[0].ceil());
-                ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
-                ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+                let _ = ctx_interp_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
+                let _ = ctx_interp_base.register_native_function("sin", 1, |args| args[0].sin());
+                let _ = ctx_interp_base.register_native_function("cos", 1, |args| args[0].cos());
+                let _ = ctx_interp_base.register_native_function("tan", 1, |args| args[0].tan());
+                let _ = ctx_interp_base.register_native_function("log", 1, |args| args[0].ln());
+                let _ = ctx_interp_base.register_native_function("log10", 1, |args| args[0].log10());
+                let _ = ctx_interp_base.register_native_function("ln", 1, |args| args[0].ln());
+                let _ = ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
+                let _ = ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                let _ = ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                let _ = ctx_interp_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+                let _ = ctx_interp_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
+                let _ = ctx_interp_base.register_native_function("exp", 1, |args| args[0].exp());
+                let _ = ctx_interp_base.register_native_function("floor", 1, |args| args[0].floor());
+                let _ = ctx_interp_base.register_native_function("ceil", 1, |args| args[0].ceil());
+                let _ = ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
+                let _ = ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
             #[cfg(not(feature = "f32"))]
             {
-                ctx_interp_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
-                ctx_interp_base.register_native_function("sin", 1, |args| args[0].sin());
-                ctx_interp_base.register_native_function("cos", 1, |args| args[0].cos());
-                ctx_interp_base.register_native_function("tan", 1, |args| args[0].tan());
-                ctx_interp_base.register_native_function("log", 1, |args| args[0].ln());
-                ctx_interp_base.register_native_function("log10", 1, |args| args[0].log10());
-                ctx_interp_base.register_native_function("ln", 1, |args| args[0].ln());
-                ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
-                ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
-                ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
-                ctx_interp_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
-                ctx_interp_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
-                ctx_interp_base.register_native_function("exp", 1, |args| args[0].exp());
-                ctx_interp_base.register_native_function("floor", 1, |args| args[0].floor());
-                ctx_interp_base.register_native_function("ceil", 1, |args| args[0].ceil());
-                ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
-                ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
+                let _ = ctx_interp_base.register_native_function("sqrt", 1, |args| args[0].sqrt());
+                let _ = ctx_interp_base.register_native_function("sin", 1, |args| args[0].sin());
+                let _ = ctx_interp_base.register_native_function("cos", 1, |args| args[0].cos());
+                let _ = ctx_interp_base.register_native_function("tan", 1, |args| args[0].tan());
+                let _ = ctx_interp_base.register_native_function("log", 1, |args| args[0].ln());
+                let _ = ctx_interp_base.register_native_function("log10", 1, |args| args[0].log10());
+                let _ = ctx_interp_base.register_native_function("ln", 1, |args| args[0].ln());
+                let _ = ctx_interp_base.register_native_function("abs", 1, |args| args[0].abs());
+                let _ = ctx_interp_base.register_native_function("max", 2, |args| args[0].max(args[1]));
+                let _ = ctx_interp_base.register_native_function("min", 2, |args| args[0].min(args[1]));
+                let _ = ctx_interp_base.register_native_function("pow", 2, |args| args[0].powf(args[1]));
+                let _ = ctx_interp_base.register_native_function("^", 2, |args| args[0].powf(args[1]));
+                let _ = ctx_interp_base.register_native_function("exp", 1, |args| args[0].exp());
+                let _ = ctx_interp_base.register_native_function("floor", 1, |args| args[0].floor());
+                let _ = ctx_interp_base.register_native_function("ceil", 1, |args| args[0].ceil());
+                let _ = ctx_interp_base.register_native_function("neg", 1, |args| -args[0]);
+                let _ = ctx_interp_base.register_native_function("fmod", 2, |args| args[0] % args[1]);
             }
         }
 
@@ -272,7 +272,7 @@ fn main() {
         for j in 0..N {
             // Create a new context for each iteration with the parameter set
             let mut ctx_interp = ctx_interp_base.clone();
-            ctx_interp.set_parameter("a", j as Real);
+            let _ = ctx_interp.set_parameter("a", j as Real);
             let ctx_interp_rc = Rc::new(ctx_interp);
             interp_sum += exp_rs::engine::interp(expr, Some(ctx_interp_rc)).unwrap();
         }
