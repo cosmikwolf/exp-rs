@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-
+#define EXP_RS_CUSTOM_ALLOC
 
 /**
  * FFI error codes (negative to distinguish from ExprError codes)
@@ -370,6 +370,24 @@ __attribute__((aligned(8))) struct ExprBatch *expr_batch_new(struct ExprArena *a
  * The pointer must have been created by expr_batch_new()
  */
 __attribute__((aligned(8))) void expr_batch_free(struct ExprBatch *batch);
+
+/**
+ * Clear all expressions, parameters, and results from a batch
+ *
+ * This allows the batch to be reused without recreating it. The arena memory
+ * used by previous expressions remains allocated but unused until the arena
+ * is reset. This is safer than freeing and recreating the batch.
+ *
+ * # Parameters
+ * - `batch`: The batch to clear
+ *
+ * # Returns
+ * 0 on success, negative error code on failure
+ *
+ * # Safety
+ * The pointer must have been created by expr_batch_new()
+ */
+__attribute__((aligned(8))) int32_t expr_batch_clear(struct ExprBatch *batch);
 
 /**
  * Add an expression to the batch

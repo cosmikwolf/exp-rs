@@ -83,6 +83,18 @@ test_programs = {
   'test_memory_analysis': {
     'sources': ['test_memory_analysis.c'],
     'deps': [exp_rs_dep, m_dep, common_allocator_dep]
+  },
+
+  # Batch memory tracking tests
+  'test_batch_memory_tracking': {
+    'sources': ['test_batch_memory_tracking.c'],
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
+  },
+
+  # Batch clear functionality tests
+  'test_batch_clear': {
+    'sources': ['test_batch_clear.c'],
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   }
 }
 
@@ -117,7 +129,8 @@ run_target('test-performance',
 memory_tests = [
   'test_embedded_pool',
   'test_memory_management',
-  'test_memory_analysis'
+  'test_memory_analysis',
+  'test_batch_memory_tracking'
 ]
 
 run_target('test-memory',
@@ -128,7 +141,8 @@ functional_tests = [
   'test_batch_api',
   'test_session_api',
   'test_memory_management',
-  'test_embedded_pool'
+  'test_embedded_pool',
+  'test_batch_clear'
 ]
 
 run_target('test-functional',

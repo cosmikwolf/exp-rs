@@ -671,7 +671,7 @@ pub fn sqrt(a: Real, _: Real) -> Real {
     if a == 0.0 {
         return 0.0;
     }
-    let mut x = a;
+    let x = a;
     let mut y = 1.0;
 
     // Just a couple of iterations

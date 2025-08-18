@@ -150,7 +150,8 @@ mod allocator {
             if align > 8 {
                 // Allocate extra space for alignment
                 let total_size = size + align;
-                let ptr = exp_rs_malloc(total_size) as *mut u8;
+                // SAFETY: exp_rs_malloc is a custom allocator function provided by the C side
+                let ptr = (unsafe { exp_rs_malloc(total_size) }) as *mut u8;
                 if ptr.is_null() {
                     return ptr;
                 }
@@ -161,16 +162,18 @@ mod allocator {
                 aligned_addr as *mut u8
             } else {
                 // exp_rs_malloc already guarantees 8-byte alignment
-                exp_rs_malloc(size) as *mut u8
+                // SAFETY: exp_rs_malloc is a custom allocator function provided by the C side
+                (unsafe { exp_rs_malloc(size) }) as *mut u8
             }
         }
 
-        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
             if !ptr.is_null() {
                 // For over-aligned allocations, we can't easily find the original pointer
                 // This is a limitation - for now just free the given pointer
                 // In production code, you'd want to store the original pointer somewhere
-                exp_rs_free(ptr as *mut core::ffi::c_void);
+                // SAFETY: exp_rs_free is a custom deallocator function provided by the C side
+                unsafe { exp_rs_free(ptr as *mut core::ffi::c_void) };
             }
         }
     }
@@ -910,6 +913,34 @@ pub extern "C" fn expr_batch_free(batch: *mut ExprBatch) {
     unsafe {
         let _ = Box::from_raw(batch as *mut ArenaBatchBuilder);
     }
+}
+
+/// Clear all expressions, parameters, and results from a batch
+///
+/// This allows the batch to be reused without recreating it. The arena memory
+/// used by previous expressions remains allocated but unused until the arena
+/// is reset. This is safer than freeing and recreating the batch.
+///
+/// # Parameters
+/// - `batch`: The batch to clear
+///
+/// # Returns
+/// 0 on success, negative error code on failure
+///
+/// # Safety
+/// The pointer must have been created by expr_batch_new()
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_batch_clear(batch: *mut ExprBatch) -> i32 {
+    if batch.is_null() {
+        return FFI_ERROR_NULL_POINTER;
+    }
+
+    unsafe {
+        let batch = &mut *(batch as *mut ArenaBatchBuilder);
+        batch.clear();
+    }
+
+    0
 }
 
 /// Add an expression to the batch

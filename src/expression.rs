@@ -630,6 +630,38 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     pub fn arena_allocated_bytes(&self) -> usize {
         self.arena.allocated_bytes()
     }
+
+    /// Clear all expressions, parameters, results, and local functions from this batch
+    ///
+    /// This allows the batch to be reused without recreating it. The arena memory
+    /// used by previous expressions remains allocated but unused until the arena
+    /// is reset. The evaluation engine is retained for reuse.
+    ///
+    /// # Example
+    /// ```
+    /// use bumpalo::Bump;
+    /// use exp_rs::expression::ArenaBatchBuilder;
+    ///
+    /// let arena = Bump::new();
+    /// let mut batch = ArenaBatchBuilder::new(&arena);
+    /// batch.add_expression("x + 1").unwrap();
+    /// batch.add_parameter("x", 5.0).unwrap();
+    /// 
+    /// // Clear and reuse
+    /// batch.clear();
+    /// assert_eq!(batch.expression_count(), 0);
+    /// assert_eq!(batch.param_count(), 0);
+    /// ```
+    pub fn clear(&mut self) {
+        self.expressions.clear();
+        self.params.clear();
+        self.results.clear();
+        
+        // Clear local functions if they exist
+        if let Some(funcs) = self.local_functions {
+            funcs.borrow_mut().clear();
+        }
+    }
 }
 
 #[cfg(test)]
