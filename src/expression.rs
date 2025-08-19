@@ -6,14 +6,13 @@
 use crate::engine::parse_expression;
 use crate::error::ExprError;
 use crate::eval::iterative::{EvalEngine, eval_with_engine};
-use crate::types::{HString, TryIntoHeaplessString};
+use crate::types::{TryIntoHeaplessString, BatchParamMap};
 use crate::{AstExpr, EvalContext, Real};
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::cell::RefCell;
-use heapless::FnvIndexMap;
 
 /// A parameter with its name and current value
 #[derive(Clone, Debug)]
@@ -119,7 +118,7 @@ impl<'arena> Expression<'arena> {
     /// providing better performance and avoiding parameter accumulation.
     pub fn eval(&mut self, base_ctx: &Rc<EvalContext>) -> Result<(), ExprError> {
         // Build parameter override map
-        let mut param_map = FnvIndexMap::<HString, Real, 16>::new();
+        let mut param_map = BatchParamMap::new();
         for param in &self.params {
             let hname = param.name.as_str().try_into_heapless()?;
             param_map
@@ -513,7 +512,7 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     /// Evaluate all expressions with current parameter values
     pub fn eval(&mut self, base_ctx: &Rc<EvalContext>) -> Result<(), ExprError> {
         // Build parameter override map
-        let mut param_map = FnvIndexMap::<HString, Real, 16>::new();
+        let mut param_map = BatchParamMap::new();
         for param in &self.params {
             let hname = param.name.as_str().try_into_heapless()?;
             param_map

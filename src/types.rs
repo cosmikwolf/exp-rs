@@ -14,6 +14,7 @@ use heapless::{FnvIndexMap, String as HeaplessString};
 
 // Configuration constants - can be adjusted based on target constraints
 pub const EXP_RS_MAX_VARIABLES: usize = 16;
+pub const EXP_RS_MAX_BATCH_PARAMS: usize = 40;
 pub const EXP_RS_MAX_CONSTANTS: usize = 8;
 pub const EXP_RS_MAX_ARRAYS: usize = 4;
 pub const EXP_RS_MAX_ATTRIBUTES: usize = 4;
@@ -34,6 +35,7 @@ pub type FunctionName = HeaplessString<EXP_RS_MAX_FUNCTION_NAME_LENGTH>;
 // Container type aliases - using heapless FnvIndexMap
 pub type VariableMap = FnvIndexMap<HString, crate::Real, EXP_RS_MAX_VARIABLES>;
 pub type ConstantMap = FnvIndexMap<HString, crate::Real, EXP_RS_MAX_CONSTANTS>;
+pub type BatchParamMap = FnvIndexMap<HString, crate::Real, EXP_RS_MAX_BATCH_PARAMS>;
 pub type ArrayMap = FnvIndexMap<HString, alloc::vec::Vec<crate::Real>, EXP_RS_MAX_ARRAYS>;
 pub type AttributeMap = FnvIndexMap<
     HString,
@@ -201,13 +203,16 @@ pub trait TryIntoHeaplessString {
 
 impl TryIntoHeaplessString for &str {
     fn try_into_heapless(self) -> Result<HString, crate::error::ExprError> {
-        HString::try_from(self).map_err(|_| crate::error::ExprError::StringTooLong(self.to_string(), EXP_RS_MAX_KEY_LENGTH))
+        HString::try_from(self).map_err(|_| {
+            crate::error::ExprError::StringTooLong(self.to_string(), EXP_RS_MAX_KEY_LENGTH)
+        })
     }
 }
 
 impl TryIntoHeaplessString for alloc::string::String {
     fn try_into_heapless(self) -> Result<HString, crate::error::ExprError> {
-        HString::try_from(self.as_str()).map_err(|_| crate::error::ExprError::StringTooLong(self, EXP_RS_MAX_KEY_LENGTH))
+        HString::try_from(self.as_str())
+            .map_err(|_| crate::error::ExprError::StringTooLong(self, EXP_RS_MAX_KEY_LENGTH))
     }
 }
 
@@ -218,13 +223,20 @@ pub trait TryIntoFunctionName {
 
 impl TryIntoFunctionName for &str {
     fn try_into_function_name(self) -> Result<FunctionName, crate::error::ExprError> {
-        FunctionName::try_from(self).map_err(|_| crate::error::ExprError::StringTooLong(self.to_string(), EXP_RS_MAX_FUNCTION_NAME_LENGTH))
+        FunctionName::try_from(self).map_err(|_| {
+            crate::error::ExprError::StringTooLong(
+                self.to_string(),
+                EXP_RS_MAX_FUNCTION_NAME_LENGTH,
+            )
+        })
     }
 }
 
 impl TryIntoFunctionName for alloc::string::String {
     fn try_into_function_name(self) -> Result<FunctionName, crate::error::ExprError> {
-        FunctionName::try_from(self.as_str()).map_err(|_| crate::error::ExprError::StringTooLong(self, EXP_RS_MAX_FUNCTION_NAME_LENGTH))
+        FunctionName::try_from(self.as_str()).map_err(|_| {
+            crate::error::ExprError::StringTooLong(self, EXP_RS_MAX_FUNCTION_NAME_LENGTH)
+        })
     }
 }
 
