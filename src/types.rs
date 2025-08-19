@@ -14,7 +14,7 @@ use heapless::{FnvIndexMap, String as HeaplessString};
 
 // Configuration constants - can be adjusted based on target constraints
 pub const EXP_RS_MAX_VARIABLES: usize = 16;
-pub const EXP_RS_MAX_BATCH_PARAMS: usize = 40;
+pub const EXP_RS_MAX_BATCH_PARAMS: usize = 64;
 pub const EXP_RS_MAX_CONSTANTS: usize = 8;
 pub const EXP_RS_MAX_ARRAYS: usize = 4;
 pub const EXP_RS_MAX_ATTRIBUTES: usize = 4;

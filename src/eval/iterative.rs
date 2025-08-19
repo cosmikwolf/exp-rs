@@ -18,7 +18,6 @@ use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use heapless::FnvIndexMap;
 
 /// Maximum depth of the operation stack (prevents runaway evaluation)
 const MAX_STACK_DEPTH: usize = 1000;
@@ -56,7 +55,7 @@ pub struct EvalEngine<'arena> {
     /// Function cache
     func_cache: BTreeMap<HString, Option<FunctionCacheEntry>>,
     /// Parameter overrides for batch evaluation (avoids context modification)
-    param_overrides: Option<FnvIndexMap<HString, Real, 16>>,
+    param_overrides: Option<crate::types::BatchParamMap>,
     /// Optional reference to local expression functions
     local_functions: Option<&'arena core::cell::RefCell<crate::types::ExpressionFunctionMap>>,
     /// Cache for parsed expression functions
@@ -573,7 +572,7 @@ impl<'arena> EvalEngine<'arena> {
 
     /// Set parameter overrides for batch evaluation.
     /// These take precedence over context variables during lookup.
-    pub fn set_param_overrides(&mut self, params: FnvIndexMap<HString, Real, 16>) {
+    pub fn set_param_overrides(&mut self, params: crate::types::BatchParamMap) {
         self.param_overrides = Some(params);
     }
 
@@ -584,7 +583,7 @@ impl<'arena> EvalEngine<'arena> {
 
     /// Execute a function with parameter overrides, ensuring they are cleared afterwards.
     /// This provides RAII-style cleanup for safe batch evaluation.
-    pub fn with_param_overrides<F, R>(&mut self, params: FnvIndexMap<HString, Real, 16>, f: F) -> R
+    pub fn with_param_overrides<F, R>(&mut self, params: crate::types::BatchParamMap, f: F) -> R
     where
         F: FnOnce(&mut Self) -> R,
     {
