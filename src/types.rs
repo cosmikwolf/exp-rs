@@ -201,13 +201,13 @@ pub trait TryIntoHeaplessString {
 
 impl TryIntoHeaplessString for &str {
     fn try_into_heapless(self) -> Result<HString, crate::error::ExprError> {
-        HString::try_from(self).map_err(|_| crate::error::ExprError::StringTooLong)
+        HString::try_from(self).map_err(|_| crate::error::ExprError::StringTooLong(self.to_string(), EXP_RS_MAX_KEY_LENGTH))
     }
 }
 
 impl TryIntoHeaplessString for alloc::string::String {
     fn try_into_heapless(self) -> Result<HString, crate::error::ExprError> {
-        HString::try_from(self.as_str()).map_err(|_| crate::error::ExprError::StringTooLong)
+        HString::try_from(self.as_str()).map_err(|_| crate::error::ExprError::StringTooLong(self, EXP_RS_MAX_KEY_LENGTH))
     }
 }
 
@@ -218,13 +218,13 @@ pub trait TryIntoFunctionName {
 
 impl TryIntoFunctionName for &str {
     fn try_into_function_name(self) -> Result<FunctionName, crate::error::ExprError> {
-        FunctionName::try_from(self).map_err(|_| crate::error::ExprError::StringTooLong)
+        FunctionName::try_from(self).map_err(|_| crate::error::ExprError::StringTooLong(self.to_string(), EXP_RS_MAX_FUNCTION_NAME_LENGTH))
     }
 }
 
 impl TryIntoFunctionName for alloc::string::String {
     fn try_into_function_name(self) -> Result<FunctionName, crate::error::ExprError> {
-        FunctionName::try_from(self.as_str()).map_err(|_| crate::error::ExprError::StringTooLong)
+        FunctionName::try_from(self.as_str()).map_err(|_| crate::error::ExprError::StringTooLong(self, EXP_RS_MAX_FUNCTION_NAME_LENGTH))
     }
 }
 
