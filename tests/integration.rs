@@ -43,6 +43,7 @@ fn parse_expression(
 }
 
 // Helper function for parsing with reserved variables
+#[allow(dead_code)]
 fn parse_expression_with_reserved(
     expr: &str,
     reserved: Option<&[String]>,
@@ -468,7 +469,7 @@ fn test_custom_functions() {
     );
 
     // Register a function that calculates the distance between two points
-    ctx.register_native_function("distance", 4, |args| {
+    let _ = ctx.register_native_function("distance", 4, |args| {
         let x1 = args[0];
         let y1 = args[1];
         let x2 = args[2];
@@ -499,7 +500,7 @@ fn test_custom_functions() {
     );
 
     // Register a function that calculates the area of a circle
-    ctx.register_native_function("circle_area", 1, |args| {
+    let _ = ctx.register_native_function("circle_area", 1, |args| {
         let radius = args[0];
         exp_rs::constants::PI * radius * radius
     });
@@ -546,7 +547,7 @@ fn test_complex_expressions() {
     set_attr(&mut ctx, "wave", "offset", 5.0);
 
     // Register native functions
-    ctx.register_native_function("interpolate", 3, |args| {
+    let _ = ctx.register_native_function("interpolate", 3, |args| {
         let a = args[0];
         let b = args[1];
         let t = args[2];
@@ -749,7 +750,7 @@ fn test_error_handling() {
     );
 
     // Test custom function errors
-    ctx.register_native_function("safe_divide", 2, |args| {
+    let _ = ctx.register_native_function("safe_divide", 2, |args| {
         if args[1] == 0.0 {
             #[cfg(feature = "f32")]
             return f32::NAN;
@@ -1023,7 +1024,7 @@ fn test_recursion_limits() {
     // we'll implement recursive functions using native function with explicit base cases
 
     // First, register a custom recursive function directly with built-in logic
-    ctx.register_native_function("recurse_sum", 1, |args| {
+    let _ = ctx.register_native_function("recurse_sum", 1, |args| {
         let x = args[0].round() as i32; // Ensure integer input
         if x <= 1 {
             x as Real
@@ -1082,7 +1083,7 @@ fn test_recursion_limits() {
     // Use a different approach that directly calculates the sum
     // without creating a recursion cycle between the interpreter and native code
     // But we'll simulate the recursion limit for testing purposes
-    ctx.register_native_function("true_recursive_sum", 1, |args| {
+    let _ = ctx.register_native_function("true_recursive_sum", 1, |args| {
         let n = args[0].round() as i32;
 
         // Simulate recursion limit for large values to test the error handling
@@ -1191,7 +1192,7 @@ fn test_recursion_limits() {
     }
 
     // Now register a Fibonacci function to test tree-recursive behavior
-    ctx.register_native_function("fibonacci", 1, |args| {
+    let _ = ctx.register_native_function("fibonacci", 1, |args| {
         let n = args[0].round() as i32;
         match n {
             0 => 0.0,
@@ -1249,7 +1250,7 @@ fn test_recursion_limits() {
     );
 
     // Create a function that tests mutual recursion
-    ctx.register_native_function("is_even", 1, |args| {
+    let _ = ctx.register_native_function("is_even", 1, |args| {
         let n = args[0].round() as i32;
         if n < 0 {
             return ((-n) % 2 == 0) as i32 as Real;
@@ -1264,7 +1265,7 @@ fn test_recursion_limits() {
         }
     });
 
-    ctx.register_native_function("is_odd", 1, |args| {
+    let _ = ctx.register_native_function("is_odd", 1, |args| {
         let n = args[0].round() as i32;
         if n < 0 {
             return ((-n) % 2 == 1) as i32 as Real;

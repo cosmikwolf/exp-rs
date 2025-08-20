@@ -56,7 +56,6 @@ void test_invalid_expressions() {
             printf("✓ %s rejected:\n", invalid_exprs[i].desc);
             printf("  - Error code: %d\n", result.status);
             printf("  - Error message: %s\n", result.error);
-            expr_free_error(result.error);
         } else {
             printf("✗ %s was accepted (index: %d)\n", 
                    invalid_exprs[i].desc, result.index);
@@ -83,19 +82,16 @@ void test_null_handling() {
     assert(result.status != 0);
     printf("✓ NULL batch rejected for add_expression\n");
     printf("  - Error: %s\n", result.error);
-    expr_free_error(result.error);
     
     result = expr_batch_add_variable(NULL, "x", 1.0);
     assert(result.status != 0);
     printf("✓ NULL batch rejected for add_variable\n");
     printf("  - Error: %s\n", result.error);
-    expr_free_error(result.error);
     
     result = expr_batch_evaluate_ex(NULL, NULL);
     assert(result.status != 0);
     printf("✓ NULL batch rejected for evaluate_ex\n");
     printf("  - Error: %s\n", result.error);
-    expr_free_error(result.error);
     
     // Test NULL expression
     ExprArena* arena = expr_arena_new(1024);
@@ -104,14 +100,12 @@ void test_null_handling() {
     assert(result.status != 0);
     printf("✓ NULL expression rejected\n");
     printf("  - Error: %s\n", result.error);
-    expr_free_error(result.error);
     
     // Test NULL parameter name
     result = expr_batch_add_variable(batch, NULL, 1.0);
     assert(result.status != 0);
     printf("✓ NULL parameter name rejected\n");
     printf("  - Error: %s\n", result.error);
-    expr_free_error(result.error);
     
     expr_batch_free(batch);
     expr_arena_free(arena);
@@ -134,7 +128,6 @@ void test_parameter_errors() {
     if (res.status != 0) {
         printf("✓ Duplicate parameter rejected (error: %d)\n", res.status);
         printf("  - Error message: %s\n", res.error);
-        expr_free_error(res.error);
     } else {
         printf("✓ Duplicate parameter overwrites value\n");
     }
@@ -148,7 +141,6 @@ void test_parameter_errors() {
         if (eval_res.status != 0) {
             printf("✓ Undefined variable caught at evaluation (error: %d)\n", eval_res.status);
             printf("  - Error message: %s\n", eval_res.error);
-            expr_free_error(eval_res.error);
         } else {
             Real value = expr_batch_get_result(batch, 0);
             printf("✓ Undefined variable defaults to 0 (result: %.1f)\n", value);
@@ -157,7 +149,6 @@ void test_parameter_errors() {
     } else {
         printf("✓ Undefined variable caught at parse (error: %d)\n", res.status);
         printf("  - Error message: %s\n", res.error);
-        expr_free_error(res.error);
     }
     
     // Test invalid parameter index
@@ -171,7 +162,6 @@ void test_parameter_errors() {
     res = expr_batch_add_variable(batch, long_name, 1.0);
     if (res.status != 0) {
         printf("✓ Very long parameter name rejected (error: %d)\n", res.status);
-        expr_free_error(res.error);
     } else {
         printf("✓ Very long parameter name accepted\n");
     }
@@ -202,7 +192,6 @@ void test_function_errors() {
     ExprResult result = expr_batch_add_expression(batch, "unknown(1)");
     if (result.status != 0) {
         printf("✓ Unknown function caught at parse (error: %d)\n", result.status);
-        expr_free_error(result.error);
     } else {
         int32_t eval_result = expr_batch_evaluate(batch, ctx);
         if (eval_result != 0) {
@@ -218,7 +207,6 @@ void test_function_errors() {
     result = expr_batch_add_expression(batch, "test(1, 2)"); // test expects 1 arg
     if (result.status != 0) {
         printf("✓ Wrong arg count caught at parse (error: %d)\n", result.status);
-        expr_free_error(result.error);
     } else {
         int32_t eval_result = expr_batch_evaluate(batch, ctx);
         if (eval_result != 0) {
@@ -345,7 +333,6 @@ void test_memory_limits() {
         if (result.status == 0) {
             count++;
         } else {
-            expr_free_error(result.error);
         }
     }
     
@@ -374,7 +361,6 @@ void test_memory_limits() {
     ExprResult nested_result = expr_batch_add_expression(batch, nested);
     if (nested_result.status != 0) {
         printf("✓ Deeply nested expression rejected (error: %d)\n", nested_result.status);
-        expr_free_error(nested_result.error);
     } else {
         printf("✓ Deeply nested expression accepted\n");
     }
@@ -433,7 +419,6 @@ void test_boundary_conditions() {
         snprintf(name, sizeof(name), "p%d", i);
         ExprResult var_result = expr_batch_add_variable(batch, name, (Real)i);
         if (var_result.status != 0) {
-            expr_free_error(var_result.error);
             break;
         }
         max_params++;

@@ -3,17 +3,20 @@ use exp_rs::error::ExprError;
 use exp_rs::types::{FunctionName, HString, TryIntoFunctionName, TryIntoHeaplessString};
 
 /// Helper function to convert a string slice to heapless string for tests
+#[allow(dead_code)]
 pub fn hstr(s: &str) -> HString {
     s.try_into_heapless().expect("String too long for test")
 }
 
 /// Helper function to convert a string slice to function name for tests
+#[allow(dead_code)]
 pub fn fname(s: &str) -> FunctionName {
     s.try_into_function_name()
         .expect("Function name too long for test")
 }
 
 /// Helper function to convert &str to HString but return Result for error handling
+#[allow(dead_code)]
 pub fn try_hstr(s: &str) -> Result<HString, ExprError> {
     s.try_into_heapless()
 }
@@ -21,6 +24,7 @@ pub fn try_hstr(s: &str) -> Result<HString, ExprError> {
 /// Helper function to register all necessary functions for tests
 /// This ensures we have consistent function implementations across all tests
 /// Functions are only registered when libm is not available
+#[allow(dead_code)]
 pub fn create_test_context() -> EvalContext {
     let mut ctx = EvalContext::default();
 
@@ -100,6 +104,7 @@ pub fn create_test_context() -> EvalContext {
 }
 
 /// Helper function to set a variable in the context for tests
+#[allow(dead_code)]
 pub fn set_var(ctx: &mut EvalContext, name: &str, value: exp_rs::Real) {
     ctx.variables
         .insert(hstr(name), value)
@@ -107,6 +112,7 @@ pub fn set_var(ctx: &mut EvalContext, name: &str, value: exp_rs::Real) {
 }
 
 /// Helper function to set a constant in the context for tests  
+#[allow(dead_code)]
 pub fn set_const(ctx: &mut EvalContext, name: &str, value: exp_rs::Real) {
     ctx.constants
         .insert(hstr(name), value)
@@ -114,12 +120,14 @@ pub fn set_const(ctx: &mut EvalContext, name: &str, value: exp_rs::Real) {
 }
 
 /// Helper function to set a parameter in the context for tests
+#[allow(dead_code)]
 pub fn set_param(ctx: &mut EvalContext, name: &str, value: exp_rs::Real) {
     ctx.set_parameter(name, value)
         .expect("Failed to set parameter in test");
 }
 
 /// Helper function to set an attribute in the context for tests
+#[allow(dead_code)]
 pub fn set_attr(ctx: &mut EvalContext, object: &str, attr: &str, value: exp_rs::Real) {
     ctx.set_attribute(object, attr, value)
         .expect("Failed to set attribute in test");
@@ -132,6 +140,7 @@ pub fn create_test_context_rc() -> std::rc::Rc<EvalContext> {
 }
 
 /// Helper function to initialize a default context based on features
+#[allow(dead_code)]
 pub fn create_context<'a>() -> EvalContext {
     #[cfg(not(feature = "libm"))]
     return create_test_context();
@@ -141,6 +150,7 @@ pub fn create_context<'a>() -> EvalContext {
 }
 
 /// Helper function to initialize a default context as Rc based on features
+#[allow(dead_code)]
 pub fn create_context_rc<'a>() -> std::rc::Rc<EvalContext> {
     std::rc::Rc::new(create_context())
 }

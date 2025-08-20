@@ -38,18 +38,16 @@ fn test_short_circuit_evaluation() {
 
     // Clone Rc for use in closures
     let count1 = Rc::clone(&eval_count);
-    ctx.register_native_function("inc_true", 0, move |_| {
+    let _ = ctx.register_native_function("inc_true", 0, move |_| {
         *count1.borrow_mut() += 1;
         1.0
-    })
-    .unwrap();
+    });
 
     let count2 = Rc::clone(&eval_count);
-    ctx.register_native_function("inc_false", 0, move |_| {
+    let _ = ctx.register_native_function("inc_false", 0, move |_| {
         *count2.borrow_mut() += 1;
         0.0
-    })
-    .unwrap();
+    });
 
     let ctx_rc = Rc::new(ctx);
 
@@ -163,13 +161,13 @@ fn test_simplified_logical_operators() {
     let count_calls = Rc::new(RefCell::new(0));
 
     let call_counter1 = Rc::clone(&count_calls);
-    ctx.register_native_function("tracked_true", 0, move |_| {
+    let _ = ctx.register_native_function("tracked_true", 0, move |_| {
         *call_counter1.borrow_mut() += 1;
         1.0 // Always returns true (1.0)
     });
 
     let call_counter2 = Rc::clone(&count_calls);
-    ctx.register_native_function("tracked_false", 0, move |_| {
+    let _ = ctx.register_native_function("tracked_false", 0, move |_| {
         *call_counter2.borrow_mut() += 1;
         0.0 // Always returns false (0.0)
     });
@@ -277,12 +275,12 @@ fn test_logical_operators_with_functions() {
     let mut ctx = EvalContext::new();
 
     // Register some test functions
-    ctx.register_native_function(
+    let _ = ctx.register_native_function(
         "is_positive",
         1,
         |args| if args[0] > 0.0 { 1.0 } else { 0.0 },
     );
-    ctx.register_native_function(
+    let _ = ctx.register_native_function(
         "is_negative",
         1,
         |args| if args[0] < 0.0 { 1.0 } else { 0.0 },

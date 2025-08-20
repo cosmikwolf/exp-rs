@@ -121,7 +121,6 @@ int embedded_pool_init(void) {
         );
         if (result.status != 0) {
             printf("Failed to add expression %d: %s (error: %s)\n", i, g_pool.expressions[i], result.error);
-            expr_free_error(result.error);
             return -1;
         }
     }
@@ -135,7 +134,6 @@ int embedded_pool_init(void) {
         );
         if (result.status != 0) {
             printf("Failed to add parameter %s (error: %s)\n", g_pool.param_names[i], result.error);
-            expr_free_error(result.error);
             return -1;
         }
     }

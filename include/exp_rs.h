@@ -46,6 +46,8 @@
 
 #define EXP_RS_MAX_FUNCTION_NAME_LENGTH 32
 
+#define EXP_RS_ERROR_BUFFER_SIZE 256
+
 /**
  * Opaque type for evaluation context
  */
@@ -100,9 +102,9 @@ typedef struct ExprResult {
    */
   int32_t index;
   /**
-   * Error message (NULL on success, must be freed with expr_free_error)
+   * Error message buffer (empty string on success, no freeing needed)
    */
-  char *error;
+  char error[EXP_RS_ERROR_BUFFER_SIZE];
 } ExprResult;
 
 /**
@@ -137,14 +139,6 @@ extern "C" {
 __attribute__((aligned(8)))
 void exp_rs_register_panic_handler(int32_t *flag_ptr,
                                    const void *log_func);
-
-/**
- * Free an error message string
- *
- * # Safety
- * The pointer must have been returned by an expr_* function
- */
-__attribute__((aligned(8))) void expr_free_error(char *ptr);
 
 /**
  * Create a new evaluation context

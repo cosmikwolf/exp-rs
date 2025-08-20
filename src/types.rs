@@ -28,6 +28,9 @@ pub const EXP_RS_MAX_ATTR_KEYS: usize = 4;
 pub const EXP_RS_MAX_KEY_LENGTH: usize = 32;
 pub const EXP_RS_MAX_FUNCTION_NAME_LENGTH: usize = 32; // Changed from 24 to 32 for proper alignment
 
+// Error message buffer size for ExprResult
+pub const EXP_RS_ERROR_BUFFER_SIZE: usize = 256;
+
 // Primary type aliases
 pub type HString = HeaplessString<EXP_RS_MAX_KEY_LENGTH>;
 pub type FunctionName = HeaplessString<EXP_RS_MAX_FUNCTION_NAME_LENGTH>;

@@ -349,7 +349,7 @@ mod tests {
         );
 
         // Register the max function as a native function since it's not available as an expression function
-        ctx.register_native_function(
+        let _ = ctx.register_native_function(
             "max",
             2,
             |args| {

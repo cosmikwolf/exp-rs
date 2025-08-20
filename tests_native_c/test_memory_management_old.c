@@ -456,7 +456,6 @@ void test_benchmark_expressions() {
         ExprResult res = expr_batch_add_expression(builder, expressions[i]);
         if (res.status != 0) {
             printf("Failed to add expression %d: %s (error: %s)\n", i, expressions[i], res.error);
-            expr_free_error(res.error);
             return;
         }
     }
@@ -683,7 +682,6 @@ void test_error_handling() {
     assert(first_res.status == 0);
     ExprResult dup_res = expr_batch_add_variable(builder, "x", 2.0);
     assert(dup_res.status != 0);  // Should return error
-    expr_free_error(dup_res.error);
     printf("✓ Duplicate parameter handled correctly\n");
     
     // Cleanup

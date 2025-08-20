@@ -134,13 +134,13 @@ mod tests {
             // Manually register built-ins needed for tests if register_defaults doesn't exist
             // or isn't comprehensive enough for test setup.
             let _ = ctx.register_native_function("sin", 1, |args| sin(args[0], 0.0));
-            ctx.register_native_function("cos", 1, |args| cos(args[0], 0.0));
-            ctx.register_native_function("pow", 2, |args| pow(args[0], args[1]));
-            ctx.register_native_function("^", 2, |args| pow(args[0], args[1]));
-            ctx.register_native_function("min", 2, |args| min(args[0], args[1]));
-            ctx.register_native_function("max", 2, |args| max(args[0], args[1]));
-            ctx.register_native_function("neg", 1, |args| neg(args[0], 0.0));
-            ctx.register_native_function("abs", 1, |args| abs(args[0], 0.0));
+            let _ = ctx.register_native_function("cos", 1, |args| cos(args[0], 0.0));
+            let _ = ctx.register_native_function("pow", 2, |args| pow(args[0], args[1]));
+            let _ = ctx.register_native_function("^", 2, |args| pow(args[0], args[1]));
+            let _ = ctx.register_native_function("min", 2, |args| min(args[0], args[1]));
+            let _ = ctx.register_native_function("max", 2, |args| max(args[0], args[1]));
+            let _ = ctx.register_native_function("neg", 1, |args| neg(args[0], 0.0));
+            let _ = ctx.register_native_function("abs", 1, |args| abs(args[0], 0.0));
             // Add others as needed by tests...
         }
         ctx
@@ -581,9 +581,9 @@ mod tests {
         // Override 'sin'
         let _ = ctx.register_native_function("sin", 1, |_args| 100.0);
         // Override 'pow'
-        ctx.register_native_function("pow", 2, |args| args[0] + args[1]);
+        let _ = ctx.register_native_function("pow", 2, |args| args[0] + args[1]);
         // Also override '^' if it's treated separately by parser/evaluator
-        ctx.register_native_function("^", 2, |args| args[0] + args[1]);
+        let _ = ctx.register_native_function("^", 2, |args| args[0] + args[1]);
 
         // Create Rc once and reuse with clone
         let ctx_rc = Rc::new(ctx.clone());
@@ -833,8 +833,8 @@ mod tests {
 
         // Register the operators needed for the expression
         let _ = ctx.register_native_function("+", 2, |args| args[0] + args[1]);
-        ctx.register_native_function("*", 2, |args| args[0] * args[1]);
-        ctx.register_native_function("^", 2, |args| args[0].powf(args[1]));
+        let _ = ctx.register_native_function("*", 2, |args| args[0] * args[1]);
+        let _ = ctx.register_native_function("^", 2, |args| args[0].powf(args[1]));
 
         use bumpalo::Bump;
         let arena = Bump::new();

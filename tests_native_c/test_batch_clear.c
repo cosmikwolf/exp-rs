@@ -47,28 +47,24 @@ int main() {
     ExprResult expr1 = expr_batch_add_expression(batch, "x + y");
     if (expr1.status != 0) {
         printf("ERROR: Failed to add expression 1: %s\n", expr1.error);
-        expr_free_error(expr1.error);
         goto cleanup;
     }
     
     ExprResult expr2 = expr_batch_add_expression(batch, "x * y");
     if (expr2.status != 0) {
         printf("ERROR: Failed to add expression 2: %s\n", expr2.error);
-        expr_free_error(expr2.error);
         goto cleanup;
     }
 
     ExprResult var_x = expr_batch_add_variable(batch, "x", 5.0);
     if (var_x.status != 0) {
         printf("ERROR: Failed to add variable x: %s\n", var_x.error);
-        expr_free_error(var_x.error);
         goto cleanup;
     }
 
     ExprResult var_y = expr_batch_add_variable(batch, "y", 3.0);
     if (var_y.status != 0) {
         printf("ERROR: Failed to add variable y: %s\n", var_y.error);
-        expr_free_error(var_y.error);
         goto cleanup;
     }
 
@@ -146,21 +142,18 @@ int main() {
     ExprResult new_expr = expr_batch_add_expression(batch, "a - b");
     if (new_expr.status != 0) {
         printf("ERROR: Failed to add new expression: %s\n", new_expr.error);
-        expr_free_error(new_expr.error);
         goto cleanup;
     }
 
     ExprResult new_var_a = expr_batch_add_variable(batch, "a", 10.0);
     if (new_var_a.status != 0) {
         printf("ERROR: Failed to add new variable a: %s\n", new_var_a.error);
-        expr_free_error(new_var_a.error);
         goto cleanup;
     }
 
     ExprResult new_var_b = expr_batch_add_variable(batch, "b", 4.0);
     if (new_var_b.status != 0) {
         printf("ERROR: Failed to add new variable b: %s\n", new_var_b.error);
-        expr_free_error(new_var_b.error);
         goto cleanup;
     }
 

@@ -93,7 +93,6 @@
 use crate::expression::{ArenaBatchBuilder, Expression};
 use crate::{EvalContext, Real};
 use alloc::boxed::Box;
-use alloc::ffi::CString;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use bumpalo::Bump;
@@ -283,18 +282,30 @@ pub struct ExprResult {
     value: Real,
     /// Result index (for functions that return an index)
     index: i32,
-    /// Error message (NULL on success, must be freed with expr_free_error)
-    error: *mut c_char,
+    /// Error message buffer (empty string on success, no freeing needed)
+    error: [c_char; crate::types::EXP_RS_ERROR_BUFFER_SIZE],
 }
 
 impl ExprResult {
+    /// Helper function to copy a string to the error buffer
+    fn copy_to_error_buffer(msg: &str) -> [c_char; crate::types::EXP_RS_ERROR_BUFFER_SIZE] {
+        let mut buffer = [0; crate::types::EXP_RS_ERROR_BUFFER_SIZE];
+        let bytes = msg.as_bytes();
+        let copy_len = core::cmp::min(bytes.len(), crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1);
+        
+        for i in 0..copy_len {
+            buffer[i] = bytes[i] as c_char;
+        }
+        buffer[copy_len] = 0; // Null terminator
+        buffer
+    }
     /// Create a success result with a value
     fn success_value(value: Real) -> Self {
         ExprResult {
             status: 0,
             value,
             index: 0,
-            error: ptr::null_mut(),
+            error: [0; crate::types::EXP_RS_ERROR_BUFFER_SIZE],
         }
     }
 
@@ -304,7 +315,7 @@ impl ExprResult {
             status: 0,
             value: 0.0,
             index: index as i32,
-            error: ptr::null_mut(),
+            error: [0; crate::types::EXP_RS_ERROR_BUFFER_SIZE],
         }
     }
 
@@ -313,31 +324,21 @@ impl ExprResult {
         let error_code = err.error_code();
         let error_msg = err.to_string(); // Use Display trait
 
-        let c_string = match CString::new(error_msg) {
-            Ok(s) => s,
-            Err(_) => CString::new("Error creating error message").unwrap(),
-        };
-
         ExprResult {
             status: error_code,
             value: Real::NAN,
             index: -1,
-            error: c_string.into_raw(),
+            error: Self::copy_to_error_buffer(&error_msg),
         }
     }
 
     /// Create an error result for FFI-specific errors
     fn from_ffi_error(code: i32, msg: &str) -> Self {
-        let c_string = match CString::new(msg) {
-            Ok(s) => s,
-            Err(_) => CString::new("Error creating error message").unwrap(),
-        };
-
         ExprResult {
             status: code,
             value: Real::NAN,
             index: -1,
-            error: c_string.into_raw(),
+            error: Self::copy_to_error_buffer(msg),
         }
     }
 }
@@ -348,18 +349,6 @@ pub const FFI_ERROR_INVALID_UTF8: i32 = -2;
 pub const FFI_ERROR_NO_ARENA_AVAILABLE: i32 = -3;
 pub const FFI_ERROR_CANNOT_GET_MUTABLE_ACCESS: i32 = -4;
 
-/// Free an error message string
-///
-/// # Safety
-/// The pointer must have been returned by an expr_* function
-#[unsafe(no_mangle)]
-pub extern "C" fn expr_free_error(ptr: *mut c_char) {
-    if !ptr.is_null() {
-        unsafe {
-            let _ = CString::from_raw(ptr);
-        }
-    }
-}
 
 // ============================================================================
 // Opaque Types with Better Names

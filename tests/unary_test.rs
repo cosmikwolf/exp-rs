@@ -6,13 +6,13 @@ fn test_unary_expression_evaluation() {
     // Create a context with necessary operators
     let mut ctx = EvalContext::default();
     let _ = ctx.register_native_function("sin", 1, |args| args[0].sin());
-    ctx.register_native_function("cos", 1, |args| args[0].cos());
-    ctx.register_native_function("neg", 1, |args| -args[0]); // Unary minus alias
-    ctx.register_native_function("-", 1, |args| -args[0]); // Unary minus
-    ctx.register_native_function("+", 1, |args| args[0]); // Unary plus
-    ctx.register_native_function("+", 2, |args| args[0] + args[1]); // Binary plus
-    ctx.register_native_function("-", 2, |args| args[0] - args[1]); // Binary minus
-    ctx.register_native_function("^", 2, |args| args[0].powf(args[1])); // Power
+    let _ = ctx.register_native_function("cos", 1, |args| args[0].cos());
+    let _ = ctx.register_native_function("neg", 1, |args| -args[0]); // Unary minus alias
+    let _ = ctx.register_native_function("-", 1, |args| -args[0]); // Unary minus
+    let _ = ctx.register_native_function("+", 1, |args| args[0]); // Unary plus
+    let _ = ctx.register_native_function("+", 2, |args| args[0] + args[1]); // Binary plus
+    let _ = ctx.register_native_function("-", 2, |args| args[0] - args[1]); // Binary minus
+    let _ = ctx.register_native_function("^", 2, |args| args[0].powf(args[1])); // Power
 
     let ctx_rc = Rc::new(ctx);
 

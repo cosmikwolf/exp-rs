@@ -37,7 +37,6 @@ static void handle_expr_result(ExprResult result, const char *operation,
                                ExprContext *ctx) {
   if (result.status != 0) {
     printf("ERROR: %s failed: %s\n", operation, result.error);
-    expr_free_error(result.error);
     cleanup_and_exit(batch, arena, ctx, "ExprResult failure");
   }
 }
