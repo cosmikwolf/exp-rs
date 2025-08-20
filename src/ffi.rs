@@ -1756,6 +1756,61 @@ mod tests {
             // If arena was properly reset, this should succeed
         }
     }
+
+    #[test]
+    fn test_error_buffer_null_termination() {
+        use core::ffi::c_char;
+        
+        // Test normal message (well within buffer size)
+        let short_msg = "Test error message";
+        let buffer = ExprResult::copy_to_error_buffer(short_msg);
+        
+        // Find the null terminator
+        let mut found_null = false;
+        for (i, &byte) in buffer.iter().enumerate() {
+            if byte == 0 {
+                found_null = true;
+                // Verify the message is correct up to null terminator
+                let recovered_msg = unsafe {
+                    core::str::from_utf8_unchecked(
+                        core::slice::from_raw_parts(buffer.as_ptr() as *const u8, i)
+                    )
+                };
+                assert_eq!(recovered_msg, short_msg);
+                break;
+            }
+        }
+        assert!(found_null, "Error buffer should be null terminated");
+
+        // Test maximum length message (exactly buffer size - 1)
+        let max_msg = "a".repeat(crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1);
+        let buffer = ExprResult::copy_to_error_buffer(&max_msg);
+        
+        // Last byte should be null terminator
+        assert_eq!(buffer[crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1], 0);
+        
+        // Second-to-last byte should contain message data
+        assert_eq!(buffer[crate::types::EXP_RS_ERROR_BUFFER_SIZE - 2], b'a' as c_char);
+
+        // Test over-length message (gets truncated)
+        let long_msg = "a".repeat(crate::types::EXP_RS_ERROR_BUFFER_SIZE + 10);
+        let buffer = ExprResult::copy_to_error_buffer(&long_msg);
+        
+        // Last byte should still be null terminator
+        assert_eq!(buffer[crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1], 0);
+        
+        // Message should be truncated but still valid
+        let recovered_msg = unsafe {
+            core::str::from_utf8_unchecked(
+                core::slice::from_raw_parts(
+                    buffer.as_ptr() as *const u8, 
+                    crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1
+                )
+            )
+        };
+        assert_eq!(recovered_msg.len(), crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1);
+        assert!(recovered_msg.chars().all(|c| c == 'a'));
+    }
 }
 
 // ============================================================================
