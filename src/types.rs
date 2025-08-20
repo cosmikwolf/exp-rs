@@ -11,6 +11,7 @@ extern crate alloc;
 // ============================================================================
 
 use heapless::{FnvIndexMap, String as HeaplessString};
+use alloc::string::ToString;
 
 // Configuration constants - can be adjusted based on target constraints
 pub const EXP_RS_MAX_VARIABLES: usize = 16;
