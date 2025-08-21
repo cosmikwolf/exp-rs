@@ -67,6 +67,12 @@ pub enum EvalOp<'arena> {
         attr_name: HString,
         ctx_id: usize,
     },
+
+    /// Restore after expression function completes
+    RestoreFunctionParams {
+        /// Parameters for the current function scope
+        params: Option<&'arena [(crate::types::HString, crate::Real)]>,
+    },
 }
 
 /// Unary operators
@@ -284,6 +290,9 @@ impl<'arena> core::fmt::Debug for EvalOp<'arena> {
                     "AccessAttribute {{ object_name: {:?}, attr_name: {:?}, ctx_id: {} }}",
                     object_name, attr_name, ctx_id
                 )
+            }
+            EvalOp::RestoreFunctionParams { params } => {
+                write!(f, "RestoreFunctionParams {{ params: {} }}", params.is_some())
             }
         }
     }

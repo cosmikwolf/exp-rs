@@ -52,6 +52,9 @@ fn test_batch_zero_allocations_with_functions() {
     // Test 3: Nested expression function
     builder.add_expression("pythag(x, y) * 2").unwrap();
 
+    // Test 4: Deeply nested expression functions (expression function calling expression function)
+    builder.add_expression("double(pythag(x, y))").unwrap();
+
     // Add variables
     builder.add_parameter("x", 1.0).unwrap();
     builder.add_parameter("y", 2.0).unwrap();
@@ -90,9 +93,11 @@ fn test_batch_zero_allocations_with_functions() {
         let result1 = builder.get_result(0).unwrap();
         let result2 = builder.get_result(1).unwrap();
         let result3 = builder.get_result(2).unwrap();
+        let result4 = builder.get_result(3).unwrap();
         assert!(result1.is_finite());
         assert!(result2.is_finite());
         assert!(result3.is_finite());
+        assert!(result4.is_finite());
     }
 
     println!(

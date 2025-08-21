@@ -272,6 +272,11 @@ impl<'arena> EvalEngine<'arena> {
             } => {
                 self.process_function_call(name, arg_count, ctx_id)?;
             }
+
+            EvalOp::RestoreFunctionParams { params: _ } => {
+                // No-op: params are scoped to operations on stack
+                // When this operation is popped, the parameters are automatically cleaned up
+            }
         }
 
         Ok(())
@@ -305,14 +310,20 @@ impl<'arena> EvalEngine<'arena> {
                             right_expr: right,
                             ctx_id,
                         });
-                        self.op_stack.push(EvalOp::Eval { expr: left, ctx_id });
+                        self.op_stack.push(EvalOp::Eval { 
+                            expr: left, 
+                            ctx_id,
+                        });
                     }
                     LogicalOperator::Or => {
                         self.op_stack.push(EvalOp::ShortCircuitOr {
                             right_expr: right,
                             ctx_id,
                         });
-                        self.op_stack.push(EvalOp::Eval { expr: left, ctx_id });
+                        self.op_stack.push(EvalOp::Eval { 
+                            expr: left, 
+                            ctx_id,
+                        });
                     }
                 }
             }
@@ -375,7 +386,10 @@ impl<'arena> EvalEngine<'arena> {
                         // Push argument evaluations in reverse order
                         // (they'll be evaluated left-to-right, results accumulate on value stack)
                         for arg in args.iter().rev() {
-                            self.op_stack.push(EvalOp::Eval { expr: arg, ctx_id });
+                            self.op_stack.push(EvalOp::Eval { 
+                                expr: arg, 
+                                ctx_id,
+                            });
                         }
                     }
                 }
@@ -409,7 +423,19 @@ impl<'arena> EvalEngine<'arena> {
 
     /// Process variable lookup
     fn process_variable_lookup(&mut self, name: HString, ctx_id: usize) -> Result<(), ExprError> {
-        // Check parameter overrides first (highest priority for batch evaluation)
+        // Check operation stack for function parameters first (walk backwards for shadowing)
+        for op in self.op_stack.iter().rev() {
+            if let EvalOp::RestoreFunctionParams { params: Some(params) } = op {
+                for (param_name, value) in params.iter() {
+                    if param_name == &name {
+                        self.value_stack.push(*value);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        
+        // Check parameter overrides second (batch evaluation parameters)
         if let Some(ref overrides) = self.param_overrides {
             if let Some(&value) = overrides.get(&name) {
                 self.value_stack.push(value);
@@ -612,29 +638,21 @@ impl<'arena> EvalEngine<'arena> {
             });
         }
 
-        // Get context
-        let ctx = self
-            .ctx_stack
-            .get_context(ctx_id)
-            .ok_or_else(|| ExprError::Other("Invalid context ID".to_string()))?;
-
-        // Create new context for function evaluation
-        let mut func_ctx = EvalContext::new();
-
-        // Set parameters from value stack
-        for (i, param) in func.params.iter().enumerate() {
-            let value = self.value_stack[args_start + i];
-            func_ctx.set_parameter(param, value)?;
-        }
-
-        // Pop arguments from stack now that they're captured in context
+        // Collect parameters into arena
+        let params_slice = if let Some(arena) = self.arena {
+            let mut params = bumpalo::collections::Vec::with_capacity_in(func.params.len(), arena);
+            for (i, param) in func.params.iter().enumerate() {
+                let value = self.value_stack[args_start + i];
+                let param_key = param.as_str().try_into_heapless()?;
+                params.push((param_key, value));
+            }
+            Some(params.into_bump_slice())
+        } else {
+            None
+        };
+        
+        // Pop arguments from value stack
         self.value_stack.truncate(args_start);
-
-        // Copy function registry
-        func_ctx.function_registry = ctx.function_registry.clone();
-
-        // Set parent context to inherit variables and constants
-        func_ctx.parent = Some(ctx.clone());
 
         // Parse expression function on-demand if we have an arena
         if let Some(arena) = self.arena {
@@ -661,11 +679,13 @@ impl<'arena> EvalEngine<'arena> {
                 &*arena_ast
             };
 
-            // Push the function's AST for evaluation with the new context
-            let func_ctx_id = self.ctx_stack.push_context(Some(Rc::new(func_ctx)))?;
+            // Push operations: restore params first, then eval with SAME context
+            self.op_stack.push(EvalOp::RestoreFunctionParams {
+                params: params_slice,
+            });
             self.op_stack.push(EvalOp::Eval {
                 expr: ast,
-                ctx_id: func_ctx_id,
+                ctx_id,  // Use SAME context, no new context!
             });
             Ok(())
         } else {

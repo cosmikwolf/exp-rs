@@ -277,12 +277,12 @@ fn test_infinite_recursion_protection() {
     ctx.register_expression_function("infinite", &["n"], "infinite(n)")
         .unwrap();
 
-    // This should hit capacity limit
+    // This should hit recursion limit
     match interp("infinite(1)", Some(Rc::new(ctx))) {
-        Err(ExprError::CapacityExceeded(resource)) => {
-            assert_eq!(resource, "context stack");
+        Err(ExprError::RecursionLimit(msg)) => {
+            assert!(msg.contains("Maximum evaluation depth"), "Expected recursion limit message, got: {}", msg);
         }
         Ok(_) => panic!("Infinite recursion should fail"),
-        Err(e) => panic!("Expected CapacityExceeded, got: {:?}", e),
+        Err(e) => panic!("Expected RecursionLimit, got: {:?}", e),
     }
 }

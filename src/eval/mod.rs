@@ -949,38 +949,6 @@ mod tests {
     }
 
     #[test]
-    fn test_infinite_recursion_detection() {
-        // Reset recursion depth to ensure clean test state
-        crate::eval::recursion::reset_recursion_depth();
-
-        // Test that infinite recursion is properly detected and halted
-        let mut ctx = EvalContext::new();
-
-        // Register a function that calls itself without a base case
-        ctx.register_expression_function("infinite_recursion", &["x"], "infinite_recursion(x + 1)")
-            .unwrap();
-
-        // Try to evaluate - should fail with capacity exceeded
-        let result = interp("infinite_recursion(0)", Some(Rc::new(ctx)));
-
-        // Verify we get the expected error
-        assert!(result.is_err(), "Should have failed with capacity exceeded");
-        match result.unwrap_err() {
-            ExprError::CapacityExceeded(resource) => {
-                assert_eq!(
-                    resource, "context stack",
-                    "Expected context stack overflow, got: {}",
-                    resource
-                );
-            }
-            other => panic!("Expected CapacityExceeded error, got: {:?}", other),
-        }
-
-        // The iterative evaluator automatically cleans up on error,
-        // so there's no global state to check
-    }
-
-    #[test]
     fn test_nested_function_calls() {
         // Test that nested function calls are properly tracked
         let mut ctx = EvalContext::new();

@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-
+#define EXP_RS_CUSTOM_ALLOC
 
 /**
  * FFI error codes (negative to distinguish from ExprError codes)
