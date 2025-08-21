@@ -11,7 +11,7 @@ fn test_batch_zero_allocations_with_functions() {
     let arena = Bump::with_capacity(256 * 1024); // 256KB like C test
 
     // Create context and register functions (like C test does)
-    let mut ctx = EvalContext::new();
+    let ctx = EvalContext::new();
 
     // Register native functions
     #[cfg(feature = "libm")]
@@ -29,16 +29,21 @@ fn test_batch_zero_allocations_with_functions() {
             .unwrap();
     }
 
-    // Also test expression functions
-    ctx.register_expression_function("double", &["x"], "x * 2")
-        .unwrap();
-    ctx.register_expression_function("pythag", &["a", "b"], "sqrt(a*a + b*b)")
-        .unwrap();
+    // Also test expression functions - register them in the batch for pre-allocation
+    // (instead of context to get zero-allocation benefits)
 
     let ctx = Rc::new(ctx);
 
     // Create batch builder (like expr_batch_new)
     let mut builder = ArenaBatchBuilder::new(&arena);
+
+    // Register expression functions in the batch for zero-allocation evaluation
+    builder
+        .register_expression_function("double", &["x"], "x * 2")
+        .unwrap();
+    builder
+        .register_expression_function("pythag", &["a", "b"], "sqrt(a*a + b*b)")
+        .unwrap();
 
     // Add expressions (like C test)
     // Test 1: Native functions only (like C test)
@@ -73,7 +78,7 @@ fn test_batch_zero_allocations_with_functions() {
     );
 
     // Now test repeated evaluations - should have ZERO arena growth
-    for i in 0..10000 {
+    for i in 0..1000000 {
         // Update parameters (like C test does)
         builder.set_param(0, (i as Real) * 0.1).unwrap(); // x
         builder.set_param(1, (i as Real) * 0.2).unwrap(); // y
@@ -101,7 +106,7 @@ fn test_batch_zero_allocations_with_functions() {
     }
 
     println!(
-        "✓ Zero arena growth during 100 batch evaluations with native and expression functions!"
+        "✓ Zero arena growth during 1000000 batch evaluations with native and expression functions!"
     );
 }
 

@@ -373,6 +373,23 @@ impl<'arena> Expression<'arena> {
             self.local_functions = Some(map);
         }
 
+        // Pre-allocate parameter buffer in arena for zero-allocation evaluation
+        let param_buffer = if params.is_empty() {
+            None
+        } else {
+            // Pre-allocate parameter slice in arena
+            let slice: &mut [(crate::types::HString, crate::Real)] = 
+                self.arena.alloc_slice_fill_default(params.len());
+            
+            // Pre-fill parameter names (they never change)
+            for (i, param_name) in params.iter().enumerate() {
+                slice[i].0 = param_name.try_into_heapless()?;
+                slice[i].1 = 0.0; // Default value
+            }
+            
+            Some(slice as *mut _)
+        };
+
         // Create the function
         let func_name = name.try_into_function_name()?;
         let expr_func = ExpressionFunction {
@@ -380,6 +397,7 @@ impl<'arena> Expression<'arena> {
             params: params.iter().map(|s| s.to_string()).collect(),
             expression: body.to_string(),
             description: None,
+            param_buffer,
         };
 
         // Add to map through RefCell
@@ -587,6 +605,23 @@ impl<'arena> ArenaBatchBuilder<'arena> {
             self.local_functions = Some(map);
         }
 
+        // Pre-allocate parameter buffer in arena for zero-allocation evaluation
+        let param_buffer = if params.is_empty() {
+            None
+        } else {
+            // Pre-allocate parameter slice in arena
+            let slice: &mut [(crate::types::HString, crate::Real)] = 
+                self.arena.alloc_slice_fill_default(params.len());
+            
+            // Pre-fill parameter names (they never change)
+            for (i, param_name) in params.iter().enumerate() {
+                slice[i].0 = param_name.try_into_heapless()?;
+                slice[i].1 = 0.0; // Default value
+            }
+            
+            Some(slice as *mut _)
+        };
+
         // Create the function
         let func_name = name.try_into_function_name()?;
         let expr_func = ExpressionFunction {
@@ -594,6 +629,7 @@ impl<'arena> ArenaBatchBuilder<'arena> {
             params: params.iter().map(|s| s.to_string()).collect(),
             expression: body.to_string(),
             description: None,
+            param_buffer,
         };
 
         // Add to map through RefCell

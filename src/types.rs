@@ -596,7 +596,6 @@ use alloc::borrow::Cow;
 /// let result = interp("circle_area(2)", Some(Rc::new(ctx))).unwrap();
 /// assert!(result > 12.56 && result < 12.57); // π * 4 ≈ 12.566
 /// ```
-#[derive(Clone)]
 pub struct ExpressionFunction {
     /// The name of the function as it will be used in expressions.
     pub name: FunctionName,
@@ -609,6 +608,24 @@ pub struct ExpressionFunction {
 
     /// Optional description of what the function does.
     pub description: Option<String>,
+
+    /// Pre-allocated parameter buffer for zero-allocation evaluation.
+    /// When available, this points to an arena-allocated slice that can be reused
+    /// for every function call instead of allocating new parameter storage.
+    /// The slice size matches params.len() and gets filled with actual values during evaluation.
+    pub param_buffer: Option<*mut [(crate::types::HString, crate::Real)]>,
+}
+
+impl Clone for ExpressionFunction {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            params: self.params.clone(),
+            expression: self.expression.clone(),
+            description: self.description.clone(),
+            param_buffer: self.param_buffer, // Share the same buffer pointer
+        }
+    }
 }
 
 /// Internal representation of a variable in the evaluation system.

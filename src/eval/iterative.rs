@@ -638,15 +638,30 @@ impl<'arena> EvalEngine<'arena> {
             });
         }
 
-        // Collect parameters into arena
-        let params_slice = if let Some(arena) = self.arena {
-            let mut params = bumpalo::collections::Vec::with_capacity_in(func.params.len(), arena);
+        // Use pre-allocated buffer when available, otherwise allocate on-demand
+        let params_slice = if let Some(buffer_ptr) = func.param_buffer {
+            // Use pre-allocated buffer - just update values, names are already set
+            let buffer = unsafe { &mut *buffer_ptr };
+            
+            // Update parameter values (names are already pre-filled)
+            for i in 0..func.params.len() {
+                buffer[i].1 = self.value_stack[args_start + i];
+            }
+            
+            Some(&*buffer)
+        } else if let Some(arena) = self.arena && !func.params.is_empty() {
+            // Fallback for context functions - allocate on-demand
+            let params_slice: &mut [(crate::types::HString, crate::Real)] = 
+                arena.alloc_slice_fill_default(func.params.len());
+            
+            // Fill in both names and values
             for (i, param) in func.params.iter().enumerate() {
                 let value = self.value_stack[args_start + i];
                 let param_key = param.as_str().try_into_heapless()?;
-                params.push((param_key, value));
+                params_slice[i] = (param_key, value);
             }
-            Some(params.into_bump_slice())
+            
+            Some(&*params_slice)
         } else {
             None
         };

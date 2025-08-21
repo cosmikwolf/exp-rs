@@ -425,6 +425,7 @@ impl EvalContext {
             params: param_names,
             expression: expression.to_string(),
             description: None,
+            param_buffer: None, // Context functions don't have pre-allocated buffers
         };
 
         match Rc::make_mut(&mut self.function_registry)
@@ -506,6 +507,7 @@ impl EvalContext {
                 params: param_names,
                 expression: expression.to_string(),
                 description: None,
+                param_buffer: None, // Context functions don't have pre-allocated buffers
             };
 
             match Rc::make_mut(&mut self.function_registry)
