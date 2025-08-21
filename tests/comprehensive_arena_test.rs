@@ -73,7 +73,7 @@ fn test_batch_zero_allocations_with_functions() {
     );
 
     // Now test repeated evaluations - should have ZERO arena growth
-    for i in 0..100 {
+    for i in 0..10000 {
         // Update parameters (like C test does)
         builder.set_param(0, (i as Real) * 0.1).unwrap(); // x
         builder.set_param(1, (i as Real) * 0.2).unwrap(); // y
