@@ -41,7 +41,6 @@ pub struct EvalEngine<'arena> {
     op_stack: bumpalo::collections::Vec<'arena, EvalOp<'arena>>,
     /// Value stack for intermediate results (arena-allocated when arena is available)
     value_stack: bumpalo::collections::Vec<'arena, Real>,
-
     /// Shared buffer for function arguments to avoid per-call allocations
     arg_buffer: bumpalo::collections::Vec<'arena, Real>,
 
@@ -310,20 +309,14 @@ impl<'arena> EvalEngine<'arena> {
                             right_expr: right,
                             ctx_id,
                         });
-                        self.op_stack.push(EvalOp::Eval { 
-                            expr: left, 
-                            ctx_id,
-                        });
+                        self.op_stack.push(EvalOp::Eval { expr: left, ctx_id });
                     }
                     LogicalOperator::Or => {
                         self.op_stack.push(EvalOp::ShortCircuitOr {
                             right_expr: right,
                             ctx_id,
                         });
-                        self.op_stack.push(EvalOp::Eval { 
-                            expr: left, 
-                            ctx_id,
-                        });
+                        self.op_stack.push(EvalOp::Eval { expr: left, ctx_id });
                     }
                 }
             }
@@ -386,10 +379,7 @@ impl<'arena> EvalEngine<'arena> {
                         // Push argument evaluations in reverse order
                         // (they'll be evaluated left-to-right, results accumulate on value stack)
                         for arg in args.iter().rev() {
-                            self.op_stack.push(EvalOp::Eval { 
-                                expr: arg, 
-                                ctx_id,
-                            });
+                            self.op_stack.push(EvalOp::Eval { expr: arg, ctx_id });
                         }
                     }
                 }
@@ -425,7 +415,10 @@ impl<'arena> EvalEngine<'arena> {
     fn process_variable_lookup(&mut self, name: HString, ctx_id: usize) -> Result<(), ExprError> {
         // Check operation stack for function parameters first (walk backwards for shadowing)
         for op in self.op_stack.iter().rev() {
-            if let EvalOp::RestoreFunctionParams { params: Some(params) } = op {
+            if let EvalOp::RestoreFunctionParams {
+                params: Some(params),
+            } = op
+            {
                 for (param_name, value) in params.iter() {
                     if param_name == &name {
                         self.value_stack.push(*value);
@@ -434,7 +427,7 @@ impl<'arena> EvalEngine<'arena> {
                 }
             }
         }
-        
+
         // Check parameter overrides second (batch evaluation parameters)
         if let Some(ref overrides) = self.param_overrides {
             if let Some(&value) = overrides.get(&name) {
@@ -642,30 +635,32 @@ impl<'arena> EvalEngine<'arena> {
         let params_slice = if let Some(buffer_ptr) = func.param_buffer {
             // Use pre-allocated buffer - just update values, names are already set
             let buffer = unsafe { &mut *buffer_ptr };
-            
+
             // Update parameter values (names are already pre-filled)
             for i in 0..func.params.len() {
                 buffer[i].1 = self.value_stack[args_start + i];
             }
-            
+
             Some(&*buffer)
-        } else if let Some(arena) = self.arena && !func.params.is_empty() {
+        } else if let Some(arena) = self.arena
+            && !func.params.is_empty()
+        {
             // Fallback for context functions - allocate on-demand
-            let params_slice: &mut [(crate::types::HString, crate::Real)] = 
+            let params_slice: &mut [(crate::types::HString, crate::Real)] =
                 arena.alloc_slice_fill_default(func.params.len());
-            
+
             // Fill in both names and values
             for (i, param) in func.params.iter().enumerate() {
                 let value = self.value_stack[args_start + i];
                 let param_key = param.as_str().try_into_heapless()?;
                 params_slice[i] = (param_key, value);
             }
-            
+
             Some(&*params_slice)
         } else {
             None
         };
-        
+
         // Pop arguments from value stack
         self.value_stack.truncate(args_start);
 
@@ -700,7 +695,7 @@ impl<'arena> EvalEngine<'arena> {
             });
             self.op_stack.push(EvalOp::Eval {
                 expr: ast,
-                ctx_id,  // Use SAME context, no new context!
+                ctx_id, // Use SAME context, no new context!
             });
             Ok(())
         } else {

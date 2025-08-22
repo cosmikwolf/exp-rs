@@ -40,9 +40,9 @@
 //! }
 //! ```
 //!
-//! # Expression API - The Primary Interface
+//! # ArenaBatchBuilder API - The Primary Interface
 //!
-//! The `Expression` struct provides the most efficient way to evaluate expressions,
+//! The `ArenaBatchBuilder` struct provides the most efficient way to evaluate expressions,
 //! especially when you need to evaluate the same expression multiple times with
 //! different parameter values. It uses arena allocation for zero-allocation
 //! evaluation after parsing.
@@ -50,36 +50,38 @@
 //! ## Simple Expression Evaluation
 //!
 //! ```rust
-//! use exp_rs::Expression;
+//! use exp_rs::ArenaBatchBuilder;
 //! use bumpalo::Bump;
 //!
 //! // Create an arena for memory allocation
 //! let arena = Bump::new();
 //!
 //! // Evaluate a simple expression without variables
-//! let result = Expression::eval_simple("2 + 3 * 4", &arena).unwrap();
+//! let result = ArenaBatchBuilder::eval_simple("2 + 3 * 4", &arena).unwrap();
 //! assert_eq!(result, 14.0);
 //! ```
 //!
 //! ## Expressions with Parameters
 //!
 //! ```rust
-//! use exp_rs::{Expression, EvalContext};
+//! use exp_rs::{ArenaBatchBuilder, EvalContext};
 //! use bumpalo::Bump;
 //! use std::rc::Rc;
 //!
 //! let arena = Bump::new();
 //!
-//! // Method 1: Using parse and add_parameter
-//! let mut expr = Expression::parse("x^2 + y", &arena).unwrap();
-//! expr.add_parameter("x", 3.0).unwrap();
-//! expr.add_parameter("y", 4.0).unwrap();
-//! let result = expr.eval_single(&Rc::new(EvalContext::new())).unwrap();
+//! // Method 1: Using batch builder
+//! let mut builder = ArenaBatchBuilder::new(&arena);
+//! builder.add_parameter("x", 3.0).unwrap();
+//! builder.add_parameter("y", 4.0).unwrap();
+//! builder.add_expression("x^2 + y").unwrap();
+//! builder.eval(&Rc::new(EvalContext::new())).unwrap();
+//! let result = builder.get_result(0).unwrap();
 //! assert_eq!(result, 13.0); // 3^2 + 4 = 13
 //!
 //! // Method 2: Using eval_with_params for one-shot evaluation
 //! let params = [("x", 3.0), ("y", 4.0)];
-//! let result = Expression::eval_with_params(
+//! let result = ArenaBatchBuilder::eval_with_params(
 //!     "x^2 + y",
 //!     &params,
 //!     &Rc::new(EvalContext::new()),
@@ -90,10 +92,10 @@
 //!
 //! ## Efficient Repeated Evaluation
 //!
-//! The Expression API excels when evaluating the same expression multiple times:
+//! The ArenaBatchBuilder API excels when evaluating the same expression multiple times:
 //!
 //! ```rust
-//! use exp_rs::{Expression, EvalContext};
+//! use exp_rs::{ArenaBatchBuilder, EvalContext};
 //! use bumpalo::Bump;
 //! use std::rc::Rc;
 //!
@@ -101,16 +103,18 @@
 //! let ctx = Rc::new(EvalContext::new());
 //!
 //! // Parse once, evaluate many times
-//! let mut expr = Expression::parse("a * x^2 + b * x + c", &arena).unwrap();
-//! expr.add_parameter("a", 1.0).unwrap();
-//! expr.add_parameter("b", -3.0).unwrap();
-//! expr.add_parameter("c", 2.0).unwrap();
-//! expr.add_parameter("x", 0.0).unwrap();
+//! let mut builder = ArenaBatchBuilder::new(&arena);
+//! builder.add_parameter("a", 1.0).unwrap();
+//! builder.add_parameter("b", -3.0).unwrap();
+//! builder.add_parameter("c", 2.0).unwrap();
+//! builder.add_parameter("x", 0.0).unwrap();
+//! builder.add_expression("a * x^2 + b * x + c").unwrap();
 //!
 //! // Evaluate for different x values
 //! for x in [0.0, 1.0, 2.0, 3.0] {
-//!     expr.set("x", x).unwrap();
-//!     let y = expr.eval_single(&ctx).unwrap();
+//!     builder.set("x", x).unwrap();
+//!     builder.eval(&ctx).unwrap();
+//!     let y = builder.get_result(0).unwrap();
 //!     println!("f({}) = {}", x, y);
 //! }
 //! ```
@@ -120,14 +124,14 @@
 //! Evaluate multiple expressions with shared parameters:
 //!
 //! ```rust
-//! use exp_rs::{Expression, EvalContext};
+//! use exp_rs::{ArenaBatchBuilder, EvalContext};
 //! use bumpalo::Bump;
 //! use std::rc::Rc;
 //!
 //! let arena = Bump::new();
 //! let ctx = Rc::new(EvalContext::new());
 //!
-//! let mut batch = Expression::new(&arena);
+//! let mut batch = ArenaBatchBuilder::new(&arena);
 //!
 //! // Add shared parameters
 //! batch.add_parameter("radius", 5.0).unwrap();
@@ -153,7 +157,7 @@
 //! ## Relationship to interp()
 //!
 //! The `interp()` function remains available for backward compatibility and simple
-//! one-shot evaluations. Internally, it uses the Expression API:
+//! one-shot evaluations. Internally, it uses the ArenaBatchBuilder API:
 //!
 //! ```rust
 //! use exp_rs::interp;
@@ -161,16 +165,16 @@
 //! // These are equivalent:
 //! let result1 = interp("2 + 3", None).unwrap();
 //!
-//! use exp_rs::Expression;
+//! use exp_rs::ArenaBatchBuilder;
 //! use bumpalo::Bump;
 //! let arena = Bump::new();
-//! let result2 = Expression::eval_simple("2 + 3", &arena).unwrap();
+//! let result2 = ArenaBatchBuilder::eval_simple("2 + 3", &arena).unwrap();
 //!
 //! assert_eq!(result1, result2);
 //! ```
 //!
 //! For new code, especially when evaluating expressions multiple times or when
-//! performance is critical, prefer using the Expression API directly.
+//! performance is critical, prefer using the ArenaBatchBuilder API directly.
 //!
 //! # Supported Grammar
 //!
@@ -536,7 +540,7 @@ pub mod types;
 
 pub use context::*;
 pub use engine::*;
-pub use expression::{Expression, Param};
+pub use expression::{ArenaBatchBuilder, Param};
 pub use functions::*;
 pub use types::*;
 

@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use exp_rs::{EvalContext, Expression};
+use exp_rs::{EvalContext, ArenaBatchBuilder};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -45,7 +45,7 @@ fn main() {
 
     let ctx = Rc::new(ctx);
     let arena = Bump::new();
-    let mut builder = Expression::new(&arena);
+    let mut builder = ArenaBatchBuilder::new(&arena);
 
     // Add the same 7 expressions
     let expressions = vec![

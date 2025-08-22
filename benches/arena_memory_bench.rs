@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use exp_rs::{EvalContext, Expression};
+use exp_rs::{EvalContext, ArenaBatchBuilder};
 use std::rc::Rc;
 
 fn main() {
@@ -23,7 +23,7 @@ fn main() {
     println!("Arena capacity: 128 KB");
 
     // Setup batch builder
-    let mut builder = Expression::new(&arena);
+    let mut builder = ArenaBatchBuilder::new(&arena);
 
     // Add parameters
     for name in &param_names {

@@ -431,32 +431,6 @@ void test_boundary_conditions() {
     printf("\n");
 }
 
-// Test Session API error handling
-void test_session_api_errors() {
-    printf("=== Test Session API Errors ===\n");
-    
-    // Note: Session API is currently broken, so we'll just test basic NULL handling
-    
-    // Test NULL session operations
-    int32_t result = expr_session_parse(NULL, "x + 1");
-    assert(result != 0);
-    printf("✓ NULL session parse rejected\n");
-    
-    result = expr_session_add_variable(NULL, "x", 1.0);
-    assert(result != 0);
-    printf("✓ NULL session add_variable rejected\n");
-    
-    Real value;
-    result = expr_session_evaluate(NULL, NULL, &value);
-    assert(result != 0);
-    printf("✓ NULL session evaluate rejected\n");
-    
-    // Free NULL session (should not crash)
-    expr_session_free(NULL);
-    printf("✓ NULL session free handled\n");
-    
-    printf("\n");
-}
 
 int main() {
     printf("\n==== Expression Error Handling Tests ====\n\n");
@@ -468,7 +442,6 @@ int main() {
     test_arithmetic_errors();
     test_memory_limits();
     test_boundary_conditions();
-    test_session_api_errors();
     
     printf("==== All Error Handling Tests Completed ====\n\n");
     return 0;

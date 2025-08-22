@@ -25,11 +25,6 @@ test_programs = {
     'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   },
 
-  # Session API tests
-  'test_session_api': {
-    'sources': ['test_session_api.c'],
-    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
-  },
 
   # Memory management tests
   'test_memory_management': {
@@ -139,7 +134,6 @@ run_target('test-memory',
 
 functional_tests = [
   'test_batch_api',
-  'test_session_api',
   'test_memory_management',
   'test_embedded_pool',
   'test_batch_clear'

@@ -112,12 +112,12 @@ fn test_batch_zero_allocations_with_functions() {
 
 #[test]
 fn test_expression_api_zero_allocations() {
-    use exp_rs::Expression;
+    use exp_rs::expression::ArenaBatchBuilder;
 
     // Test the higher-level Expression API too
     let arena = Bump::with_capacity(128 * 1024);
 
-    let mut expr = Expression::new(&arena);
+    let mut expr = ArenaBatchBuilder::new(&arena);
 
     // Add parameters
     expr.add_parameter("x", 0.0).unwrap();

@@ -26,22 +26,23 @@ void panic_logger(const unsigned char* msg, size_t len) {
 // Test function that should trigger a panic
 void test_panic_trigger() {
     ExprContext* ctx = expr_context_new();
-    ExprSession* session = expr_session_new();
+    ExprArena* arena = expr_arena_new(8192);
+    ExprBatch* batch = expr_batch_new(arena);
     
     // Create an expression that should cause issues
     // For now, let's try something that might overflow or cause internal errors
     
     // Try 1: Create a recursive expression function that should hit recursion limits
     expr_context_add_expression_function(ctx, "recurse", "x", "recurse(x+1)");
-    expr_session_parse(session, "recurse(1)");
+    expr_batch_add_expression(batch, "recurse(1)");
     
-    Real result;
-    int status = expr_session_evaluate(session, ctx, &result);
+    int status = expr_batch_evaluate(batch, ctx);
     
     // If we get here, no panic occurred
     printf("   - Expression evaluation returned: %d\n", status);
     
-    expr_session_free(session);
+    expr_batch_free(batch);
+    expr_arena_free(arena);
     expr_context_free(ctx);
 }
 
@@ -59,16 +60,18 @@ int main() {
     panic_flag = 0;
     
     ExprContext* ctx = expr_context_new();
-    ExprSession* session = expr_session_new();
-    expr_session_parse(session, "2 + 3");
-    Real result;
-    int status = expr_session_evaluate(session, ctx, &result);
+    ExprArena* arena = expr_arena_new(8192);
+    ExprBatch* batch = expr_batch_new(arena);
+    expr_batch_add_expression(batch, "2 + 3");
+    int status = expr_batch_evaluate(batch, ctx);
+    Real result = expr_batch_get_result(batch, 0);
     
     printf("   - Expression evaluated: %s\n", status == 0 ? "success" : "failed");
     printf("   - Result: %.1f\n", result);
     printf("   - Panic flag: %d (expected 0)\n", panic_flag);
     
-    expr_session_free(session);
+    expr_batch_free(batch);
+    expr_arena_free(arena);
     expr_context_free(ctx);
     
     // Test 3: Try to trigger panic in a subprocess

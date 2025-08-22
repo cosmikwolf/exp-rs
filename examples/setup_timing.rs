@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use exp_rs::{EvalContext, Expression};
+use exp_rs::{EvalContext, ArenaBatchBuilder};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -98,7 +98,7 @@ fn main() {
     let arena = Bump::new();
     let start = Instant::now();
     for _ in 0..iterations {
-        let _builder = Expression::new(&arena);
+        let _builder = ArenaBatchBuilder::new(&arena);
     }
     let builder_duration = start.elapsed();
     let builder_us = builder_duration.as_secs_f64() * 1e6 / iterations as f64;
@@ -110,7 +110,7 @@ fn main() {
     for _ in 0..100 {
         // Fewer iterations due to arena reset
         let arena = Bump::new();
-        let mut builder = Expression::new(&arena);
+        let mut builder = ArenaBatchBuilder::new(&arena);
 
         let start = Instant::now();
         for name in &param_names {
@@ -129,7 +129,7 @@ fn main() {
     for _ in 0..100 {
         // Fewer iterations due to arena reset
         let arena = Bump::new();
-        let mut builder = Expression::new(&arena);
+        let mut builder = ArenaBatchBuilder::new(&arena);
 
         // Add parameters first
         for name in &param_names {
@@ -158,7 +158,7 @@ fn main() {
         // Complete setup
         let ctx = create_test_context();
         let arena = Bump::new();
-        let mut builder = Expression::new(&arena);
+        let mut builder = ArenaBatchBuilder::new(&arena);
 
         // Add parameters
         for name in &param_names {

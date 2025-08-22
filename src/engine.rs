@@ -991,7 +991,6 @@ pub fn parse_expression_arena_with_context<'arena>(
 /// }
 /// ```
 pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::error::Result<Real> {
-    use crate::expression::Expression;
     use alloc::rc::Rc;
 
     // Create a new context if none provided
@@ -1005,9 +1004,9 @@ pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::erro
         }
     };
 
-    // Use Expression for consistent implementation
+    // Use ArenaBatchBuilder for consistent implementation
     let arena = Bump::new();
-    Expression::eval_with_context(expression, &eval_ctx, &arena)
+    crate::expression::ArenaBatchBuilder::eval_with_context(expression, &eval_ctx, &arena)
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use exp_rs::{EvalContext, Expression, interp};
+use exp_rs::{EvalContext, ArenaBatchBuilder, interp};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -100,7 +100,7 @@ fn main() {
     // Test 2: BatchBuilder with pre-parsed expressions
     println!("Test 2: BatchBuilder (pre-parsed expressions)");
     let arena = Bump::new();
-    let mut builder = Expression::new(&arena);
+    let mut builder = ArenaBatchBuilder::new(&arena);
 
     // Add parameters and expressions
     let mut param_indices = Vec::new();
