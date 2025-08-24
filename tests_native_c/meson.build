@@ -90,6 +90,18 @@ test_programs = {
   'test_batch_clear': {
     'sources': ['test_batch_clear.c'],
     'deps': [exp_rs_dep, m_dep, common_allocator_dep]
+  },
+
+  # Batch clear iteration tests
+  'test_batch_clear_iterations': {
+    'sources': ['test_batch_clear_iterations.c'],
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
+  },
+
+  # Double-free protection tests
+  'test_double_free': {
+    'sources': ['test_double_free.c'],
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   }
 }
 
@@ -125,7 +137,8 @@ memory_tests = [
   'test_embedded_pool',
   'test_memory_management',
   'test_memory_analysis',
-  'test_batch_memory_tracking'
+  'test_batch_memory_tracking',
+  'test_batch_clear_iterations'
 ]
 
 run_target('test-memory',

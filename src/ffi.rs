@@ -76,30 +76,40 @@ use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::ffi::{CStr, c_char, c_void};
 use core::ptr;
-use core::mem;
 
 // Re-export for external visibility
 pub use crate::expression::ArenaBatchBuilder as ArenaBatchBuilderExport;
 
+// Magic numbers to detect valid vs freed batches
+// Using more random values to reduce collision probability
+const BATCH_MAGIC: usize = 0x7A9F4E82C3B5D169;  // Random 64-bit value for valid batch
+const BATCH_FREED: usize = 0x9C2E8B7D4A6F3051;  // Random 64-bit value for freed batch
+
 // Internal wrapper that owns both the arena and the batch
 struct BatchWithArena {
+    magic: usize,  // Magic number for validation
     arena: *mut Bump,  // Raw pointer to the arena we leaked
     batch: *mut ArenaBatchBuilder<'static>,  // Raw pointer to the batch
 }
 
 impl Drop for BatchWithArena {
     fn drop(&mut self) {
+        // Mark as freed to detect double-free
+        self.magic = BATCH_FREED;
+        
         // Drop the batch first (it has references into the arena)
         if !self.batch.is_null() {
             unsafe {
                 let _ = Box::from_raw(self.batch);
             }
+            self.batch = ptr::null_mut();
         }
         // Then drop the arena
         if !self.arena.is_null() {
             unsafe {
                 let _ = Box::from_raw(self.arena);
             }
+            self.arena = ptr::null_mut();
         }
     }
 }
@@ -348,6 +358,7 @@ pub const FFI_ERROR_NULL_POINTER: i32 = -1;
 pub const FFI_ERROR_INVALID_UTF8: i32 = -2;
 pub const FFI_ERROR_NO_ARENA_AVAILABLE: i32 = -3;
 pub const FFI_ERROR_CANNOT_GET_MUTABLE_ACCESS: i32 = -4;
+pub const FFI_ERROR_INVALID_POINTER: i32 = -5;
 
 
 // ============================================================================
@@ -897,6 +908,7 @@ pub extern "C" fn expr_batch_new(size_hint: usize) -> *mut ExprBatch {
     
     // Create the wrapper that tracks both pointers for cleanup
     let wrapper = Box::new(BatchWithArena { 
+        magic: BATCH_MAGIC,
         arena: arena_ptr, 
         batch: batch_ptr 
     });
@@ -915,9 +927,34 @@ pub extern "C" fn expr_batch_free(batch: *mut ExprBatch) {
     if batch.is_null() {
         return;
     }
+    
     unsafe {
-        // Cast back to BatchWithArena and let Drop handle cleanup
-        let _ = Box::from_raw(batch as *mut BatchWithArena);
+        // Check the magic number to detect double-free
+        let wrapper = batch as *mut BatchWithArena;
+        let magic = (*wrapper).magic;
+        
+        if magic == BATCH_FREED {
+            // Already freed - this is a double-free attempt
+            // In debug builds, we could panic here. In release, just return safely.
+            #[cfg(debug_assertions)]
+            panic!("Double-free detected on ExprBatch at {:p}", batch);
+            
+            #[cfg(not(debug_assertions))]
+            return;  // Silently ignore in release mode
+        }
+        
+        if magic != BATCH_MAGIC {
+            // Invalid magic - this pointer wasn't created by expr_batch_new
+            // or memory corruption occurred
+            #[cfg(debug_assertions)]
+            panic!("Invalid ExprBatch pointer at {:p} (magic: 0x{:x})", batch, magic);
+            
+            #[cfg(not(debug_assertions))]
+            return;  // Silently ignore in release mode
+        }
+        
+        // Valid batch - proceed with cleanup
+        let _ = Box::from_raw(wrapper);
     }
 }
 
@@ -943,6 +980,16 @@ pub extern "C" fn expr_batch_clear(batch: *mut ExprBatch) -> i32 {
 
     unsafe {
         let wrapper = &mut *(batch as *mut BatchWithArena);
+        
+        // Validate magic number
+        if wrapper.magic != BATCH_MAGIC {
+            #[cfg(debug_assertions)]
+            panic!("Invalid or freed ExprBatch pointer at {:p} (magic: 0x{:x})", batch, wrapper.magic);
+            
+            #[cfg(not(debug_assertions))]
+            return FFI_ERROR_INVALID_POINTER;  // Return error in release mode
+        }
+        
         (*wrapper.batch).clear();
     }
 
