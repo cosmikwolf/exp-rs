@@ -100,14 +100,20 @@ impl Drop for BatchWithArena {
         // Drop the batch first (it has references into the arena)
         if !self.batch.is_null() {
             unsafe {
-                let _ = Box::from_raw(self.batch);
+                // Explicitly drop the batch
+                drop(Box::from_raw(self.batch));
             }
             self.batch = ptr::null_mut();
         }
-        // Then drop the arena
+        // Then drop the arena - this should free Bumpalo's memory
         if !self.arena.is_null() {
             unsafe {
-                let _ = Box::from_raw(self.arena);
+                // Get the arena back as a Box
+                let mut arena_box = Box::from_raw(self.arena);
+                // Reset it first to ensure all chunks are released
+                arena_box.reset();
+                // Now drop it - this should trigger Bump's Drop impl
+                drop(arena_box);
             }
             self.arena = ptr::null_mut();
         }

@@ -102,6 +102,18 @@ test_programs = {
   'test_double_free': {
     'sources': ['test_double_free.c'],
     'deps': [exp_rs_dep, m_dep, common_allocator_dep]
+  },
+
+  # Clear and free interaction tests
+  'test_clear_then_free': {
+    'sources': ['test_clear_then_free.c'],
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
+  },
+
+  # Memory deallocation verification tests
+  'test_actual_memory_free': {
+    'sources': ['test_actual_memory_free.c'],
+    'deps': [exp_rs_dep, m_dep, common_allocator_dep]
   }
 }
 
