@@ -946,9 +946,10 @@ pub extern "C" fn expr_batch_is_valid(batch: *const ExprBatch) -> ExprResult {
             )
         } else {
             // Invalid/corrupted pointer
+            // Use a static message since format! isn't available in no_std
             ExprResult::from_ffi_error(
                 FFI_ERROR_INVALID_POINTER,
-                &format!("Invalid or corrupted batch pointer (magic: 0x{:x})", magic),
+                "Invalid or corrupted batch pointer",
             )
         }
     }
