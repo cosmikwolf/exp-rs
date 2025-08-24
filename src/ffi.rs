@@ -81,22 +81,22 @@ use core::ptr;
 pub use crate::expression::ArenaBatchBuilder as ArenaBatchBuilderExport;
 
 // Magic numbers to detect valid vs freed batches
-// Using more random values to reduce collision probability
-const BATCH_MAGIC: usize = 0x7A9F4E82C3B5D169;  // Random 64-bit value for valid batch
-const BATCH_FREED: usize = 0x9C2E8B7D4A6F3051;  // Random 64-bit value for freed batch
+// Using 32-bit values for compatibility with 32-bit systems
+const BATCH_MAGIC: usize = 0x7A9F4E82; // Random 32-bit value for valid batch
+const BATCH_FREED: usize = 0x9C2E8B7D; // Random 32-bit value for freed batch
 
 // Internal wrapper that owns both the arena and the batch
 struct BatchWithArena {
-    magic: usize,  // Magic number for validation
-    arena: *mut Bump,  // Raw pointer to the arena we leaked
-    batch: *mut ArenaBatchBuilder<'static>,  // Raw pointer to the batch
+    magic: usize,                           // Magic number for validation
+    arena: *mut Bump,                       // Raw pointer to the arena we leaked
+    batch: *mut ArenaBatchBuilder<'static>, // Raw pointer to the batch
 }
 
 impl Drop for BatchWithArena {
     fn drop(&mut self) {
         // Mark as freed to detect double-free
         self.magic = BATCH_FREED;
-        
+
         // Drop the batch first (it has references into the arena)
         if !self.batch.is_null() {
             unsafe {
@@ -302,7 +302,7 @@ impl ExprResult {
         let mut buffer = [0; crate::types::EXP_RS_ERROR_BUFFER_SIZE];
         let bytes = msg.as_bytes();
         let copy_len = core::cmp::min(bytes.len(), crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1);
-        
+
         for i in 0..copy_len {
             buffer[i] = bytes[i] as c_char;
         }
@@ -360,7 +360,6 @@ pub const FFI_ERROR_NO_ARENA_AVAILABLE: i32 = -3;
 pub const FFI_ERROR_CANNOT_GET_MUTABLE_ACCESS: i32 = -4;
 pub const FFI_ERROR_INVALID_POINTER: i32 = -5;
 
-
 // ============================================================================
 // Opaque Types with Better Names
 // ============================================================================
@@ -382,7 +381,6 @@ pub struct ExprBatch {
 pub struct ExprArena {
     _private: [u8; 0],
 }
-
 
 // ============================================================================
 // Native Function Support
@@ -896,24 +894,64 @@ pub extern "C" fn expr_batch_remove_expression_function(
 pub extern "C" fn expr_batch_new(size_hint: usize) -> *mut ExprBatch {
     // Use default size if 0 is passed
     let arena_size = if size_hint == 0 { 8192 } else { size_hint };
-    
+
     // Create the arena and leak it to get a 'static reference
     let arena = Box::new(Bump::with_capacity(arena_size));
     let arena_ptr = Box::into_raw(arena);
     let arena_ref: &'static Bump = unsafe { &*arena_ptr };
-    
+
     // Create the batch with the leaked arena reference
     let batch = Box::new(ArenaBatchBuilder::new(arena_ref));
     let batch_ptr = Box::into_raw(batch);
-    
+
     // Create the wrapper that tracks both pointers for cleanup
-    let wrapper = Box::new(BatchWithArena { 
+    let wrapper = Box::new(BatchWithArena {
         magic: BATCH_MAGIC,
-        arena: arena_ptr, 
-        batch: batch_ptr 
+        arena: arena_ptr,
+        batch: batch_ptr,
     });
-    
+
     Box::into_raw(wrapper) as *mut ExprBatch
+}
+
+/// Check if a batch pointer is valid (not freed or corrupted)
+///
+/// # Parameters
+/// - `batch`: The batch pointer to check
+///
+/// # Returns
+/// - ExprResult with status 0 and value 1.0 if the batch is valid
+/// - ExprResult with error status and message describing the issue if invalid
+///
+/// # Safety
+/// The pointer should have been created by expr_batch_new()
+#[unsafe(no_mangle)]
+pub extern "C" fn expr_batch_is_valid(batch: *const ExprBatch) -> ExprResult {
+    if batch.is_null() {
+        return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Batch pointer is NULL");
+    }
+
+    unsafe {
+        let wrapper = batch as *const BatchWithArena;
+        let magic = (*wrapper).magic;
+
+        if magic == BATCH_MAGIC {
+            // Valid batch - return success with value 1.0
+            ExprResult::success_value(1.0)
+        } else if magic == BATCH_FREED {
+            // Batch has been freed
+            ExprResult::from_ffi_error(
+                FFI_ERROR_INVALID_POINTER,
+                "Batch has already been freed (double-free detected)",
+            )
+        } else {
+            // Invalid/corrupted pointer
+            ExprResult::from_ffi_error(
+                FFI_ERROR_INVALID_POINTER,
+                &format!("Invalid or corrupted batch pointer (magic: 0x{:x})", magic),
+            )
+        }
+    }
 }
 
 /// Free an expression batch and its arena
@@ -927,32 +965,35 @@ pub extern "C" fn expr_batch_free(batch: *mut ExprBatch) {
     if batch.is_null() {
         return;
     }
-    
+
     unsafe {
         // Check the magic number to detect double-free
         let wrapper = batch as *mut BatchWithArena;
         let magic = (*wrapper).magic;
-        
+
         if magic == BATCH_FREED {
             // Already freed - this is a double-free attempt
             // In debug builds, we could panic here. In release, just return safely.
             #[cfg(debug_assertions)]
             panic!("Double-free detected on ExprBatch at {:p}", batch);
-            
+
             #[cfg(not(debug_assertions))]
-            return;  // Silently ignore in release mode
+            return; // Silently ignore in release mode
         }
-        
+
         if magic != BATCH_MAGIC {
             // Invalid magic - this pointer wasn't created by expr_batch_new
             // or memory corruption occurred
             #[cfg(debug_assertions)]
-            panic!("Invalid ExprBatch pointer at {:p} (magic: 0x{:x})", batch, magic);
-            
+            panic!(
+                "Invalid ExprBatch pointer at {:p} (magic: 0x{:x})",
+                batch, magic
+            );
+
             #[cfg(not(debug_assertions))]
-            return;  // Silently ignore in release mode
+            return; // Silently ignore in release mode
         }
-        
+
         // Valid batch - proceed with cleanup
         let _ = Box::from_raw(wrapper);
     }
@@ -980,16 +1021,19 @@ pub extern "C" fn expr_batch_clear(batch: *mut ExprBatch) -> i32 {
 
     unsafe {
         let wrapper = &mut *(batch as *mut BatchWithArena);
-        
+
         // Validate magic number
         if wrapper.magic != BATCH_MAGIC {
             #[cfg(debug_assertions)]
-            panic!("Invalid or freed ExprBatch pointer at {:p} (magic: 0x{:x})", batch, wrapper.magic);
-            
+            panic!(
+                "Invalid or freed ExprBatch pointer at {:p} (magic: 0x{:x})",
+                batch, wrapper.magic
+            );
+
             #[cfg(not(debug_assertions))]
-            return FFI_ERROR_INVALID_POINTER;  // Return error in release mode
+            return FFI_ERROR_INVALID_POINTER; // Return error in release mode
         }
-        
+
         (*wrapper.batch).clear();
     }
 
@@ -1207,8 +1251,6 @@ pub extern "C" fn expr_batch_evaluate_ex(
     }
 }
 
-
-
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -1242,67 +1284,6 @@ pub extern "C" fn expr_estimate_arena_size(
     // Add 50% buffer
     let total = expr_overhead + string_storage + param_storage;
     total + (total / 2)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-
-    #[test]
-    fn test_error_buffer_null_termination() {
-        use core::ffi::c_char;
-        
-        // Test normal message (well within buffer size)
-        let short_msg = "Test error message";
-        let buffer = ExprResult::copy_to_error_buffer(short_msg);
-        
-        // Find the null terminator
-        let mut found_null = false;
-        for (i, &byte) in buffer.iter().enumerate() {
-            if byte == 0 {
-                found_null = true;
-                // Verify the message is correct up to null terminator
-                let recovered_msg = unsafe {
-                    core::str::from_utf8_unchecked(
-                        core::slice::from_raw_parts(buffer.as_ptr() as *const u8, i)
-                    )
-                };
-                assert_eq!(recovered_msg, short_msg);
-                break;
-            }
-        }
-        assert!(found_null, "Error buffer should be null terminated");
-
-        // Test maximum length message (exactly buffer size - 1)
-        let max_msg = "a".repeat(crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1);
-        let buffer = ExprResult::copy_to_error_buffer(&max_msg);
-        
-        // Last byte should be null terminator
-        assert_eq!(buffer[crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1], 0);
-        
-        // Second-to-last byte should contain message data
-        assert_eq!(buffer[crate::types::EXP_RS_ERROR_BUFFER_SIZE - 2], b'a' as c_char);
-
-        // Test over-length message (gets truncated)
-        let long_msg = "a".repeat(crate::types::EXP_RS_ERROR_BUFFER_SIZE + 10);
-        let buffer = ExprResult::copy_to_error_buffer(&long_msg);
-        
-        // Last byte should still be null terminator
-        assert_eq!(buffer[crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1], 0);
-        
-        // Message should be truncated but still valid
-        let recovered_msg = unsafe {
-            core::str::from_utf8_unchecked(
-                core::slice::from_raw_parts(
-                    buffer.as_ptr() as *const u8, 
-                    crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1
-                )
-            )
-        };
-        assert_eq!(recovered_msg.len(), crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1);
-        assert!(recovered_msg.chars().all(|c| c == 'a'));
-    }
 }
 
 // ============================================================================
@@ -1372,5 +1353,70 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     loop {
         // Busy loop for debugging - debugger can break here
         core::hint::spin_loop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_buffer_null_termination() {
+        use core::ffi::c_char;
+
+        // Test normal message (well within buffer size)
+        let short_msg = "Test error message";
+        let buffer = ExprResult::copy_to_error_buffer(short_msg);
+
+        // Find the null terminator
+        let mut found_null = false;
+        for (i, &byte) in buffer.iter().enumerate() {
+            if byte == 0 {
+                found_null = true;
+                // Verify the message is correct up to null terminator
+                let recovered_msg = unsafe {
+                    core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+                        buffer.as_ptr() as *const u8,
+                        i,
+                    ))
+                };
+                assert_eq!(recovered_msg, short_msg);
+                break;
+            }
+        }
+        assert!(found_null, "Error buffer should be null terminated");
+
+        // Test maximum length message (exactly buffer size - 1)
+        let max_msg = "a".repeat(crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1);
+        let buffer = ExprResult::copy_to_error_buffer(&max_msg);
+
+        // Last byte should be null terminator
+        assert_eq!(buffer[crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1], 0);
+
+        // Second-to-last byte should contain message data
+        assert_eq!(
+            buffer[crate::types::EXP_RS_ERROR_BUFFER_SIZE - 2],
+            b'a' as c_char
+        );
+
+        // Test over-length message (gets truncated)
+        let long_msg = "a".repeat(crate::types::EXP_RS_ERROR_BUFFER_SIZE + 10);
+        let buffer = ExprResult::copy_to_error_buffer(&long_msg);
+
+        // Last byte should still be null terminator
+        assert_eq!(buffer[crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1], 0);
+
+        // Message should be truncated but still valid
+        let recovered_msg = unsafe {
+            core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+                buffer.as_ptr() as *const u8,
+                crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1,
+            ))
+        };
+        assert_eq!(
+            recovered_msg.len(),
+            crate::types::EXP_RS_ERROR_BUFFER_SIZE - 1
+        );
+        assert!(recovered_msg.chars().all(|c| c == 'a'));
     }
 }

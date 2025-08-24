@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#define EXP_RS_CUSTOM_ALLOC
+
 
 /**
  * FFI error codes (negative to distinguish from ExprError codes)
@@ -315,6 +315,21 @@ int32_t expr_batch_remove_expression_function(struct ExprBatch *batch,
  * - The returned pointer must be freed with expr_batch_free()
  */
 __attribute__((aligned(8))) struct ExprBatch *expr_batch_new(uintptr_t size_hint);
+
+/**
+ * Check if a batch pointer is valid (not freed or corrupted)
+ *
+ * # Parameters
+ * - `batch`: The batch pointer to check
+ *
+ * # Returns
+ * - ExprResult with status 0 and value 1.0 if the batch is valid
+ * - ExprResult with error status and message describing the issue if invalid
+ *
+ * # Safety
+ * The pointer should have been created by expr_batch_new()
+ */
+__attribute__((aligned(8))) struct ExprResult expr_batch_is_valid(const struct ExprBatch *batch);
 
 /**
  * Free an expression batch and its arena

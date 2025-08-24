@@ -5,6 +5,10 @@
 #include <setjmp.h>
 #include "exp_rs.h"
 
+// FFI error codes from exp_rs.h
+#define FFI_ERROR_NULL_POINTER -1
+#define FFI_ERROR_INVALID_POINTER -5
+
 // Signal handling for catching segfaults
 static jmp_buf jump_buffer;
 static int signal_caught = 0;
@@ -24,14 +28,35 @@ void test_double_free_protection() {
     assert(batch != NULL);
     printf("✓ Batch created at %p\n", (void*)batch);
     
+    // Check that new batch is valid
+    ExprResult validity = expr_batch_is_valid(batch);
+    printf("Batch validity before use: status=%d, value=%.1f\n", validity.status, validity.value);
+    if (validity.status != 0) {
+        printf("Error: %s\n", validity.error);
+    }
+    assert(validity.status == 0 && validity.value == 1.0);
+    
     // Add some data to make it a valid batch
     expr_batch_add_expression(batch, "x + 1");
     expr_batch_add_variable(batch, "x", 5.0);
+    
+    // Check validity after adding data
+    validity = expr_batch_is_valid(batch);
+    printf("Batch validity after adding data: status=%d, value=%.1f\n", validity.status, validity.value);
+    assert(validity.status == 0 && validity.value == 1.0);
     
     // First free - should work
     printf("Freeing batch for the first time...\n");
     expr_batch_free(batch);
     printf("✓ First free succeeded\n");
+    
+    // Check validity after free
+    validity = expr_batch_is_valid(batch);
+    printf("Batch validity after free: status=%d\n", validity.status);
+    if (validity.status != 0) {
+        printf("Expected error message: %s\n", validity.error);
+    }
+    assert(validity.status == FFI_ERROR_INVALID_POINTER);
     
     // Second free - should be safely ignored (not crash)
     printf("Attempting to free the same batch again...\n");
@@ -107,6 +132,15 @@ void test_use_after_free_protection() {
 void test_null_pointer_handling() {
     printf("\n=== Test NULL Pointer Handling ===\n");
     
+    // Check validity of NULL pointer
+    printf("Testing is_valid on NULL pointer...\n");
+    ExprResult validity = expr_batch_is_valid(NULL);
+    printf("NULL pointer validity: status=%d\n", validity.status);
+    if (validity.status != 0) {
+        printf("Expected error message: %s\n", validity.error);
+    }
+    assert(validity.status == FFI_ERROR_NULL_POINTER);
+    
     // Double-free on NULL should be safe
     printf("Testing double-free on NULL pointer...\n");
     expr_batch_free(NULL);
@@ -130,9 +164,21 @@ void test_invalid_pointer_detection() {
     
     // Create a fake pointer that wasn't allocated by expr_batch_new
     char fake_data[1024];
+    // Fill with non-magic data
+    for (int i = 0; i < 1024; i++) {
+        fake_data[i] = (char)(i % 256);
+    }
     ExprBatch* fake_batch = (ExprBatch*)fake_data;
     
     printf("Testing operations on invalid pointer %p...\n", (void*)fake_batch);
+    
+    // Check validity of invalid pointer
+    ExprResult validity = expr_batch_is_valid(fake_batch);
+    printf("Invalid pointer validity: status=%d\n", validity.status);
+    if (validity.status != 0) {
+        printf("Expected error message: %s\n", validity.error);
+    }
+    assert(validity.status == FFI_ERROR_INVALID_POINTER);
     
     signal_caught = 0;
     signal(SIGSEGV, segfault_handler);
