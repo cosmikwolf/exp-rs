@@ -20,27 +20,27 @@ int main() {
     printf("   - Added shared functions: normalize, clamp\n");
     
     // Create arena for all patterns
-    ExprArena* arena = expr_arena_new(16384);
+    // Arena is now managed internally by batch
     
     // Simulate different pattern channels with their own functions
     printf("\n2. Creating pattern channels with unique functions:\n");
     
     // Pattern 1: Audio processing channel
-    ExprBatch* audio_pattern = expr_batch_new(arena);
+    ExprBatch* audio_pattern = expr_batch_new(16384);
     expr_batch_add_expression_function(audio_pattern, "amplify", "signal,gain", "signal*gain");
     expr_batch_add_expression_function(audio_pattern, "fade", "signal,factor", "signal*factor");
     expr_batch_add_expression_function(audio_pattern, "mix", "a,b,ratio", "a*(1-ratio)+b*ratio");
     printf("   - Audio pattern: amplify, fade, mix\n");
     
     // Pattern 2: Video processing channel  
-    ExprBatch* video_pattern = expr_batch_new(arena);
+    ExprBatch* video_pattern = expr_batch_new(16384);
     expr_batch_add_expression_function(video_pattern, "brightness", "pixel,factor", "min(pixel*factor,1)");
     expr_batch_add_expression_function(video_pattern, "contrast", "pixel,factor", "((pixel-0.5)*factor)+0.5");
     expr_batch_add_expression_function(video_pattern, "gamma", "pixel,g", "pixel^(1/g)");
     printf("   - Video pattern: brightness, contrast, gamma\n");
     
     // Pattern 3: Sensor data processing
-    ExprBatch* sensor_pattern = expr_batch_new(arena);
+    ExprBatch* sensor_pattern = expr_batch_new(16384);
     expr_batch_add_expression_function(sensor_pattern, "smooth", "prev,curr,alpha", "prev*(1-alpha)+curr*alpha");
     expr_batch_add_expression_function(sensor_pattern, "threshold", "value,thresh", "value>thresh?1:0");
     expr_batch_add_expression_function(sensor_pattern, "scale", "value,factor,offset", "value*factor+offset");
@@ -150,7 +150,7 @@ int main() {
     printf("\n7. Testing dynamic pattern loading:\n");
     
     // Create a new pattern dynamically
-    ExprBatch* dynamic_pattern = expr_batch_new(arena);
+    ExprBatch* dynamic_pattern = expr_batch_new(16384);
     expr_batch_add_expression_function(dynamic_pattern, "process", "x", "x*x+1");
     expr_batch_add_expression(dynamic_pattern, "process(3)");
     expr_batch_evaluate(dynamic_pattern, ctx);
@@ -166,7 +166,6 @@ int main() {
     expr_batch_free(audio_pattern);
     expr_batch_free(video_pattern);
     expr_batch_free(sensor_pattern);
-    expr_arena_free(arena);
     expr_context_free(ctx);
     
     printf("\n=== Pattern Isolation Test Completed ===\n");

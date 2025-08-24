@@ -21,8 +21,8 @@ int is_eval_error(int32_t code) {
 void test_invalid_expressions() {
     printf("=== Test Invalid Expressions (with ExprResult) ===\n");
     
-    ExprArena* arena = expr_arena_new(8192);
-    ExprBatch* batch = expr_batch_new(arena);
+    // Arena managed internally: 8192);
+    ExprBatch* batch = expr_batch_new(8192);
     
     // Test cases for invalid expressions
     struct {
@@ -64,7 +64,6 @@ void test_invalid_expressions() {
     }
     
     expr_batch_free(batch);
-    expr_arena_free(arena);
     printf("\n");
 }
 
@@ -72,10 +71,11 @@ void test_invalid_expressions() {
 void test_null_handling() {
     printf("=== Test NULL Pointer Handling ===\n");
     
-    // Test NULL arena
-    ExprBatch* batch = expr_batch_new(NULL);
-    assert(batch == NULL);
-    printf("✓ NULL arena rejected\n");
+    // Test batch creation with size 0 (should use default size)
+    ExprBatch* batch = expr_batch_new(0);
+    assert(batch != NULL);  // 0 means use default size, not an error
+    expr_batch_free(batch);
+    printf("✓ Batch with size 0 uses default size\n");
     
     // Test NULL batch operations with ExprResult
     ExprResult result = expr_batch_add_expression(NULL, "x + 1");
@@ -94,8 +94,8 @@ void test_null_handling() {
     printf("  - Error: %s\n", result.error);
     
     // Test NULL expression
-    ExprArena* arena = expr_arena_new(1024);
-    batch = expr_batch_new(arena);
+    // Arena managed internally: 1024);
+    batch = expr_batch_new(1024);
     result = expr_batch_add_expression(batch, NULL);
     assert(result.status != 0);
     printf("✓ NULL expression rejected\n");
@@ -108,7 +108,6 @@ void test_null_handling() {
     printf("  - Error: %s\n", result.error);
     
     expr_batch_free(batch);
-    expr_arena_free(arena);
     printf("\n");
 }
 
@@ -116,8 +115,8 @@ void test_null_handling() {
 void test_parameter_errors() {
     printf("=== Test Parameter Errors ===\n");
     
-    ExprArena* arena = expr_arena_new(4096);
-    ExprBatch* batch = expr_batch_new(arena);
+    // Arena managed internally: 4096);
+    ExprBatch* batch = expr_batch_new(8192);
     
     // Add some valid parameters
     expr_batch_add_variable(batch, "x", 1.0);
@@ -167,7 +166,6 @@ void test_parameter_errors() {
     }
     
     expr_batch_free(batch);
-    expr_arena_free(arena);
     printf("\n");
 }
 
@@ -181,8 +179,8 @@ Real test_func(const Real* args, uintptr_t nargs) {
 void test_function_errors() {
     printf("=== Test Function Errors ===\n");
     
-    ExprArena* arena = expr_arena_new(4096);
-    ExprBatch* batch = expr_batch_new(arena);
+    // Arena managed internally: 4096);
+    ExprBatch* batch = expr_batch_new(8192);
     ExprContext* ctx = expr_context_new();
     
     // Add test function
@@ -202,8 +200,8 @@ void test_function_errors() {
     }
     
     // Test wrong number of arguments
-    expr_arena_reset(arena);
-    batch = expr_batch_new(arena);
+    expr_batch_free(batch);
+    batch = expr_batch_new(1024);
     result = expr_batch_add_expression(batch, "test(1, 2)"); // test expects 1 arg
     if (result.status != 0) {
         printf("✓ Wrong arg count caught at parse (error: %d)\n", result.status);
@@ -236,7 +234,6 @@ void test_function_errors() {
     
     expr_batch_free(batch);
     expr_context_free(ctx);
-    expr_arena_free(arena);
     printf("\n");
 }
 
@@ -255,8 +252,8 @@ Real log_func(const Real* args, uintptr_t nargs) {
 void test_arithmetic_errors() {
     printf("=== Test Arithmetic Errors ===\n");
     
-    ExprArena* arena = expr_arena_new(4096);
-    ExprBatch* batch = expr_batch_new(arena);
+    // Arena managed internally: 4096);
+    ExprBatch* batch = expr_batch_new(8192);
     ExprContext* ctx = expr_context_new();
     
     // Division by zero
@@ -274,8 +271,8 @@ void test_arithmetic_errors() {
     }
     
     // Square root of negative
-    expr_arena_reset(arena);
-    batch = expr_batch_new(arena);
+    expr_batch_free(batch);
+    batch = expr_batch_new(1024);
     expr_context_add_function(ctx, "sqrt", 1, sqrt_func);
     
     expr_batch_add_expression(batch, "sqrt(-1.0)");
@@ -292,8 +289,8 @@ void test_arithmetic_errors() {
     }
     
     // Log of zero/negative
-    expr_arena_reset(arena);
-    batch = expr_batch_new(arena);
+    expr_batch_free(batch);
+    batch = expr_batch_new(1024);
     expr_context_add_function(ctx, "log", 1, log_func);
     
     expr_batch_add_expression(batch, "log(0.0)");
@@ -311,7 +308,6 @@ void test_arithmetic_errors() {
     
     expr_batch_free(batch);
     expr_context_free(ctx);
-    expr_arena_free(arena);
     printf("\n");
 }
 
@@ -320,8 +316,7 @@ void test_memory_limits() {
     printf("=== Test Memory Limits ===\n");
     
     // Test very small arena
-    ExprArena* tiny_arena = expr_arena_new(64); // Very small
-    ExprBatch* batch = expr_batch_new(tiny_arena);
+    ExprBatch* batch = expr_batch_new(64); // Very small arena
     
     // Try to add expressions until we run out of memory
     int count = 0;
@@ -344,11 +339,10 @@ void test_memory_limits() {
     }
     
     expr_batch_free(batch);
-    expr_arena_free(tiny_arena);
     
     // Test expression complexity limit
-    ExprArena* arena = expr_arena_new(8192);
-    batch = expr_batch_new(arena);
+    // Arena managed internally: 8192);
+    batch = expr_batch_new(1024);
     
     // Build a deeply nested expression
     char nested[1024] = "1";
@@ -366,7 +360,6 @@ void test_memory_limits() {
     }
     
     expr_batch_free(batch);
-    expr_arena_free(arena);
     printf("\n");
 }
 
@@ -374,8 +367,8 @@ void test_memory_limits() {
 void test_boundary_conditions() {
     printf("=== Test Boundary Conditions ===\n");
     
-    ExprArena* arena = expr_arena_new(4096);
-    ExprBatch* batch = expr_batch_new(arena);
+    // Arena managed internally: 4096);
+    ExprBatch* batch = expr_batch_new(8192);
     ExprContext* ctx = expr_context_new();
     
     // Test very large numbers
@@ -391,8 +384,8 @@ void test_boundary_conditions() {
     }
     
     // Test very small numbers
-    expr_arena_reset(arena);
-    batch = expr_batch_new(arena);
+    expr_batch_free(batch);
+    batch = expr_batch_new(1024);
     expr_batch_add_expression(batch, "1e-308 * 1e-308");
     result = expr_batch_evaluate(batch, ctx);
     if (result == 0) {
@@ -401,8 +394,8 @@ void test_boundary_conditions() {
     }
     
     // Test zero expressions
-    expr_arena_reset(arena);
-    batch = expr_batch_new(arena);
+    expr_batch_free(batch);
+    batch = expr_batch_new(1024);
     result = expr_batch_evaluate(batch, ctx); // No expressions added
     if (result != 0) {
         printf("✓ Evaluating empty batch caught (error: %d)\n", result);
@@ -411,8 +404,8 @@ void test_boundary_conditions() {
     }
     
     // Test maximum parameters
-    expr_arena_reset(arena);
-    batch = expr_batch_new(arena);
+    expr_batch_free(batch);
+    batch = expr_batch_new(1024);
     int max_params = 0;
     for (int i = 0; i < 1000; i++) {
         char name[16];
@@ -427,7 +420,6 @@ void test_boundary_conditions() {
     
     expr_batch_free(batch);
     expr_context_free(ctx);
-    expr_arena_free(arena);
     printf("\n");
 }
 

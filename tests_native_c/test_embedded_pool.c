@@ -34,8 +34,7 @@ typedef struct {
     uint32_t write_index;
     uint32_t read_index;
     
-    // Pre-parsed batch builder
-    void* arena;
+    // Pre-parsed batch builder (now includes arena internally)
     void* batch_builder;
     void* eval_context;
     
@@ -97,18 +96,10 @@ int embedded_pool_init(void) {
         return -1;
     }
     
-    // Create arena for zero-allocation expression evaluation
-    g_pool.arena = expr_arena_new(16384); // 16KB arena for embedded system
-    if (!g_pool.arena) {
-        printf("Failed to create arena\n");
-        expr_context_free(g_pool.eval_context);
-        return -1;
-    }
-    
-    g_pool.batch_builder = expr_batch_new(g_pool.arena);
+    // Create batch with integrated arena for zero-allocation expression evaluation
+    g_pool.batch_builder = expr_batch_new(16384); // 16KB arena for embedded system
     if (!g_pool.batch_builder) {
         printf("Failed to create batch builder\n");
-        expr_arena_free(g_pool.arena);
         expr_context_free(g_pool.eval_context);
         return -1;
     }
@@ -241,10 +232,7 @@ void embedded_pool_cleanup(void) {
         g_pool.batch_builder = NULL;
     }
     
-    if (g_pool.arena) {
-        expr_arena_free(g_pool.arena);
-        g_pool.arena = NULL;
-    }
+    // Arena is now managed internally by batch
     
     if (g_pool.eval_context) {
         expr_context_free(g_pool.eval_context);

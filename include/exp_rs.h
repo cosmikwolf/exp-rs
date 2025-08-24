@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-
+#define EXP_RS_CUSTOM_ALLOC
 
 /**
  * FFI error codes (negative to distinguish from ExprError codes)
@@ -77,13 +77,6 @@ typedef Real (*NativeFunc)(const Real *args, uintptr_t n_args);
 typedef struct ExprBatch {
   uint8_t _private[0];
 } ExprBatch;
-
-/**
- * Opaque type for memory arena
- */
-typedef struct ExprArena {
-  uint8_t _private[0];
-} ExprArena;
 
 /**
  * Result structure for FFI operations
@@ -305,55 +298,26 @@ int32_t expr_batch_remove_expression_function(struct ExprBatch *batch,
                                               const char *name);
 
 /**
- * Create a new memory arena
+ * Create a new expression batch with its own arena
+ *
+ * This creates both an arena and a batch in a single allocation.
+ * The arena is automatically sized based on the size_hint parameter.
  *
  * # Parameters
- * - `size_hint`: Suggested size in bytes (0 for default)
- *
- * # Returns
- * Pointer to new arena, or NULL on allocation failure
- *
- * # Safety
- * The returned pointer must be freed with expr_arena_free()
- */
-__attribute__((aligned(8))) struct ExprArena *expr_arena_new(uintptr_t size_hint);
-
-/**
- * Free a memory arena
- *
- * # Safety
- * - The pointer must have been created by expr_arena_new()
- * - All batches using this arena must be freed first
- */
-__attribute__((aligned(8))) void expr_arena_free(struct ExprArena *arena);
-
-/**
- * Reset an arena for reuse
- *
- * This clears all allocations but keeps the memory for reuse.
- *
- * # Safety
- * No references to arena-allocated data must exist
- */
-__attribute__((aligned(8))) void expr_arena_reset(struct ExprArena *arena);
-
-/**
- * Create a new expression batch
- *
- * # Parameters
- * - `arena`: Memory arena for allocations
+ * - `size_hint`: Suggested arena size in bytes (0 for default of 8KB)
  *
  * # Returns
  * Pointer to new batch, or NULL on failure
  *
  * # Safety
- * - The arena must remain valid for the batch's lifetime
  * - The returned pointer must be freed with expr_batch_free()
  */
-__attribute__((aligned(8))) struct ExprBatch *expr_batch_new(struct ExprArena *arena);
+__attribute__((aligned(8))) struct ExprBatch *expr_batch_new(uintptr_t size_hint);
 
 /**
- * Free an expression batch
+ * Free an expression batch and its arena
+ *
+ * This frees both the batch and its associated arena in one operation.
  *
  * # Safety
  * The pointer must have been created by expr_batch_new()

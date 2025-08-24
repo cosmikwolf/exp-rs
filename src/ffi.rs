@@ -76,9 +76,33 @@ use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::ffi::{CStr, c_char, c_void};
 use core::ptr;
+use core::mem;
 
 // Re-export for external visibility
 pub use crate::expression::ArenaBatchBuilder as ArenaBatchBuilderExport;
+
+// Internal wrapper that owns both the arena and the batch
+struct BatchWithArena {
+    arena: *mut Bump,  // Raw pointer to the arena we leaked
+    batch: *mut ArenaBatchBuilder<'static>,  // Raw pointer to the batch
+}
+
+impl Drop for BatchWithArena {
+    fn drop(&mut self) {
+        // Drop the batch first (it has references into the arena)
+        if !self.batch.is_null() {
+            unsafe {
+                let _ = Box::from_raw(self.batch);
+            }
+        }
+        // Then drop the arena
+        if !self.arena.is_null() {
+            unsafe {
+                let _ = Box::from_raw(self.arena);
+            }
+        }
+    }
+}
 
 // ============================================================================
 // Global Allocator for no_std ARM
@@ -710,7 +734,8 @@ pub extern "C" fn expr_batch_add_expression_function(
         return -1;
     }
 
-    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let builder = unsafe { &mut *wrapper.batch };
 
     // Parse strings
     let name_cstr = unsafe { CStr::from_ptr(name) };
@@ -764,7 +789,8 @@ pub extern "C" fn expr_batch_remove_expression_function(
         return -1;
     }
 
-    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let builder = unsafe { &mut *wrapper.batch };
 
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
@@ -785,83 +811,102 @@ pub extern "C" fn expr_batch_remove_expression_function(
 }
 
 // ============================================================================
-// Arena Management
+// Arena Management - DEPRECATED (arena is now managed internally by batch)
 // ============================================================================
 
-/// Create a new memory arena
-///
-/// # Parameters
-/// - `size_hint`: Suggested size in bytes (0 for default)
-///
-/// # Returns
-/// Pointer to new arena, or NULL on allocation failure
-///
-/// # Safety
-/// The returned pointer must be freed with expr_arena_free()
-#[unsafe(no_mangle)]
-pub extern "C" fn expr_arena_new(size_hint: usize) -> *mut ExprArena {
-    let size = if size_hint == 0 { 8192 } else { size_hint };
-    let arena = Box::new(Bump::with_capacity(size));
-    Box::into_raw(arena) as *mut ExprArena
-}
+// These functions are no longer needed as the batch now manages its own arena.
+// They are kept here commented out for reference.
 
-/// Free a memory arena
-///
-/// # Safety
-/// - The pointer must have been created by expr_arena_new()
-/// - All batches using this arena must be freed first
-#[unsafe(no_mangle)]
-pub extern "C" fn expr_arena_free(arena: *mut ExprArena) {
-    if arena.is_null() {
-        return;
-    }
-    unsafe {
-        let _ = Box::from_raw(arena as *mut Bump);
-    }
-}
+// /// Create a new memory arena
+// ///
+// /// # Parameters
+// /// - `size_hint`: Suggested size in bytes (0 for default)
+// ///
+// /// # Returns
+// /// Pointer to new arena, or NULL on allocation failure
+// ///
+// /// # Safety
+// /// The returned pointer must be freed with expr_arena_free()
+// #[unsafe(no_mangle)]
+// pub extern "C" fn expr_arena_new(size_hint: usize) -> *mut ExprArena {
+//     let size = if size_hint == 0 { 8192 } else { size_hint };
+//     let arena = Box::new(Bump::with_capacity(size));
+//     Box::into_raw(arena) as *mut ExprArena
+// }
 
-/// Reset an arena for reuse
-///
-/// This clears all allocations but keeps the memory for reuse.
-///
-/// # Safety
-/// No references to arena-allocated data must exist
-#[unsafe(no_mangle)]
-pub extern "C" fn expr_arena_reset(arena: *mut ExprArena) {
-    if arena.is_null() {
-        return;
-    }
-    let arena = unsafe { &mut *(arena as *mut Bump) };
-    arena.reset();
-}
+// /// Free a memory arena
+// ///
+// /// # Safety
+// /// - The pointer must have been created by expr_arena_new()
+// /// - All batches using this arena must be freed first
+// #[unsafe(no_mangle)]
+// pub extern "C" fn expr_arena_free(arena: *mut ExprArena) {
+//     if arena.is_null() {
+//         return;
+//     }
+//     unsafe {
+//         let _ = Box::from_raw(arena as *mut Bump);
+//     }
+// }
+
+// /// Reset an arena for reuse
+// ///
+// /// This clears all allocations but keeps the memory for reuse.
+// ///
+// /// # Safety
+// /// No references to arena-allocated data must exist
+// #[unsafe(no_mangle)]
+// pub extern "C" fn expr_arena_reset(arena: *mut ExprArena) {
+//     if arena.is_null() {
+//         return;
+//     }
+//     let arena = unsafe { &mut *(arena as *mut Bump) };
+//     arena.reset();
+// }
 
 // ============================================================================
 // Batch Evaluation (Primary API)
 // ============================================================================
 
-/// Create a new expression batch
+/// Create a new expression batch with its own arena
+///
+/// This creates both an arena and a batch in a single allocation.
+/// The arena is automatically sized based on the size_hint parameter.
 ///
 /// # Parameters
-/// - `arena`: Memory arena for allocations
+/// - `size_hint`: Suggested arena size in bytes (0 for default of 8KB)
 ///
 /// # Returns
 /// Pointer to new batch, or NULL on failure
 ///
 /// # Safety
-/// - The arena must remain valid for the batch's lifetime
 /// - The returned pointer must be freed with expr_batch_free()
 #[unsafe(no_mangle)]
-pub extern "C" fn expr_batch_new(arena: *mut ExprArena) -> *mut ExprBatch {
-    if arena.is_null() {
-        return ptr::null_mut();
-    }
-
-    let arena = unsafe { &*(arena as *const Bump) };
-    let builder = Box::new(ArenaBatchBuilder::new(arena));
-    Box::into_raw(builder) as *mut ExprBatch
+pub extern "C" fn expr_batch_new(size_hint: usize) -> *mut ExprBatch {
+    // Use default size if 0 is passed
+    let arena_size = if size_hint == 0 { 8192 } else { size_hint };
+    
+    // Create the arena and leak it to get a 'static reference
+    let arena = Box::new(Bump::with_capacity(arena_size));
+    let arena_ptr = Box::into_raw(arena);
+    let arena_ref: &'static Bump = unsafe { &*arena_ptr };
+    
+    // Create the batch with the leaked arena reference
+    let batch = Box::new(ArenaBatchBuilder::new(arena_ref));
+    let batch_ptr = Box::into_raw(batch);
+    
+    // Create the wrapper that tracks both pointers for cleanup
+    let wrapper = Box::new(BatchWithArena { 
+        arena: arena_ptr, 
+        batch: batch_ptr 
+    });
+    
+    Box::into_raw(wrapper) as *mut ExprBatch
 }
 
-/// Free an expression batch
+/// Free an expression batch and its arena
+///
+/// This frees both the batch and its associated arena in one operation.
 ///
 /// # Safety
 /// The pointer must have been created by expr_batch_new()
@@ -871,7 +916,8 @@ pub extern "C" fn expr_batch_free(batch: *mut ExprBatch) {
         return;
     }
     unsafe {
-        let _ = Box::from_raw(batch as *mut ArenaBatchBuilder);
+        // Cast back to BatchWithArena and let Drop handle cleanup
+        let _ = Box::from_raw(batch as *mut BatchWithArena);
     }
 }
 
@@ -896,8 +942,8 @@ pub extern "C" fn expr_batch_clear(batch: *mut ExprBatch) -> i32 {
     }
 
     unsafe {
-        let batch = &mut *(batch as *mut ArenaBatchBuilder);
-        batch.clear();
+        let wrapper = &mut *(batch as *mut BatchWithArena);
+        (*wrapper.batch).clear();
     }
 
     0
@@ -923,7 +969,8 @@ pub extern "C" fn expr_batch_add_expression(
         );
     }
 
-    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let builder = unsafe { &mut *wrapper.batch };
 
     let expr_cstr = unsafe { CStr::from_ptr(expr) };
     let expr_str = match expr_cstr.to_str() {
@@ -964,7 +1011,8 @@ pub extern "C" fn expr_batch_add_variable(
         );
     }
 
-    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let builder = unsafe { &mut *wrapper.batch };
 
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
@@ -998,7 +1046,8 @@ pub extern "C" fn expr_batch_set_variable(batch: *mut ExprBatch, index: usize, v
         return -1;
     }
 
-    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let builder = unsafe { &mut *wrapper.batch };
 
     match builder.set_param(index, value) {
         Ok(_) => 0,
@@ -1020,7 +1069,8 @@ pub extern "C" fn expr_batch_evaluate(batch: *mut ExprBatch, ctx: *mut ExprConte
         return -1;
     }
 
-    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let builder = unsafe { &mut *wrapper.batch };
 
     let eval_ctx = if ctx.is_null() {
         alloc::rc::Rc::new(EvalContext::new())
@@ -1051,7 +1101,8 @@ pub extern "C" fn expr_batch_get_result(batch: *const ExprBatch, index: usize) -
         return Real::NAN;
     }
 
-    let builder = unsafe { &*(batch as *const ArenaBatchBuilder) };
+    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let builder = unsafe { &*wrapper.batch };
     builder.get_result(index).unwrap_or(Real::NAN)
 }
 
@@ -1069,7 +1120,8 @@ pub extern "C" fn expr_batch_arena_bytes(batch: *const ExprBatch) -> usize {
         return 0;
     }
 
-    let builder = unsafe { &*(batch as *const ArenaBatchBuilder) };
+    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let builder = unsafe { &*wrapper.batch };
     builder.arena_allocated_bytes()
 }
 
@@ -1090,7 +1142,8 @@ pub extern "C" fn expr_batch_evaluate_ex(
         return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null batch pointer");
     }
 
-    let builder = unsafe { &mut *(batch as *mut ArenaBatchBuilder) };
+    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let builder = unsafe { &mut *wrapper.batch };
 
     let eval_ctx = if ctx.is_null() {
         alloc::rc::Rc::new(EvalContext::new())

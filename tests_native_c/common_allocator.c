@@ -14,6 +14,7 @@ static atomic_size_t total_deallocations = 0;
 static atomic_size_t current_bytes = 0;
 static atomic_size_t peak_bytes = 0;
 static atomic_size_t total_allocated_bytes = 0;
+static atomic_size_t total_deallocated_bytes = 0;
 static atomic_bool tracking_enabled = false;
 
 // Memory allocation tracking structure
@@ -58,6 +59,7 @@ void init_memory_tracking() {
     atomic_store(&current_bytes, 0);
     atomic_store(&peak_bytes, 0);
     atomic_store(&total_allocated_bytes, 0);
+    atomic_store(&total_deallocated_bytes, 0);
 }
 
 // Enable/disable allocation tracking
@@ -112,6 +114,7 @@ static void tracked_free(void* ptr) {
             
             // Update statistics
             atomic_fetch_add(&total_deallocations, 1);
+            atomic_fetch_add(&total_deallocated_bytes, size);
             atomic_fetch_sub(&current_bytes, size);
             
             original_free(header);
@@ -163,6 +166,7 @@ memory_stats_t get_memory_stats() {
     stats.current_bytes = atomic_load(&current_bytes);
     stats.peak_bytes = atomic_load(&peak_bytes);
     stats.total_allocated_bytes = atomic_load(&total_allocated_bytes);
+    stats.total_deallocated_bytes = atomic_load(&total_deallocated_bytes);
     stats.leaked_allocs = stats.total_allocs - stats.total_deallocs;
     return stats;
 }
@@ -185,4 +189,5 @@ void reset_memory_stats() {
     atomic_store(&current_bytes, 0);
     atomic_store(&peak_bytes, 0);
     atomic_store(&total_allocated_bytes, 0);
+    atomic_store(&total_deallocated_bytes, 0);
 }

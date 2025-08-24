@@ -19,13 +19,11 @@ static void track_memory(const char *step_name, memory_stats_t *baseline) {
 }
 
 // Helper function to cleanup and exit on error
-static void cleanup_and_exit(ExprBatch *batch, ExprArena *arena,
+static void cleanup_and_exit(ExprBatch *batch,
                              ExprContext *ctx, const char *error_msg) {
   printf("ERROR: %s\n", error_msg);
   if (batch)
     expr_batch_free(batch);
-  if (arena)
-    expr_arena_free(arena);
   if (ctx)
     expr_context_free(ctx);
   exit(1);
@@ -33,21 +31,21 @@ static void cleanup_and_exit(ExprBatch *batch, ExprArena *arena,
 
 // Helper function to handle ExprResult errors
 static void handle_expr_result(ExprResult result, const char *operation,
-                               ExprBatch *batch, ExprArena *arena,
+                               ExprBatch *batch,
                                ExprContext *ctx) {
   if (result.status != 0) {
     printf("ERROR: %s failed: %s\n", operation, result.error);
-    cleanup_and_exit(batch, arena, ctx, "ExprResult failure");
+    cleanup_and_exit(batch, ctx, "ExprResult failure");
   }
 }
 
 // Helper function to handle integer result errors
 static void handle_int_result(int32_t result, const char *operation,
-                              ExprBatch *batch, ExprArena *arena,
+                              ExprBatch *batch,
                               ExprContext *ctx) {
   if (result != 0) {
     printf("ERROR: %s failed with error code: %d\n", operation, result);
-    cleanup_and_exit(batch, arena, ctx, "Operation failure");
+    cleanup_and_exit(batch, ctx, "Operation failure");
   }
 }
 
@@ -65,30 +63,27 @@ int main() {
   printf("\n1. Creating context...\n");
   ExprContext *ctx = expr_context_new();
   if (!ctx)
-    cleanup_and_exit(NULL, NULL, NULL, "Failed to create context");
+    cleanup_and_exit(NULL, NULL, "Failed to create context");
   track_memory("context creation", &baseline);
 
   // 2. Create arena and batch
   printf("\n2. Creating arena and batch...\n");
-  ExprArena *arena = expr_arena_new(8192); // 8KB arena
-  if (!arena)
-    cleanup_and_exit(NULL, NULL, ctx, "Failed to create arena");
-
-  ExprBatch *batch = expr_batch_new(arena);
+  // Create batch with integrated arena (8KB)
+  ExprBatch *batch = expr_batch_new(8192);
   if (!batch)
-    cleanup_and_exit(NULL, arena, ctx, "Failed to create batch");
+    cleanup_and_exit(NULL, ctx, "Failed to create batch");
   track_memory("batch/arena creation", &baseline);
 
   // 3. Register native function
   printf("\n3. Registering native function 'double_it'...\n");
   int32_t result =
       expr_context_add_function(ctx, "double_it", 1, test_double_function);
-  handle_int_result(result, "native function registration", batch, arena, ctx);
+  handle_int_result(result, "native function registration", batch, ctx);
   track_memory("native function registration", &baseline);
 
   printf("\n3.5 Registering native function 'double_it'... a second time\n");
   result = expr_context_add_function(ctx, "double_it", 1, test_double_function);
-  handle_int_result(result, "native function registration", batch, arena, ctx);
+  handle_int_result(result, "native function registration", batch, ctx);
   track_memory("native function registration", &baseline);
 
   // 4. Try to add expression function with same name (should fail)
@@ -122,7 +117,7 @@ int main() {
 
   // 11. Reset arena
   printf("\n11. Resetting arena...\n");
-  expr_arena_reset(arena);
+  // Arena reset is no longer available with integrated arena
   memory_stats_t after_reset = get_memory_stats();
   printf("Memory after arena reset: %zu bytes (%+ld)\n",
          after_reset.current_bytes,
@@ -143,12 +138,12 @@ int main() {
   printf("\n12. Re-adding expressions after reset...\n");
   ExprResult expr3_result = expr_batch_add_expression(batch, "double_it(x)");
   handle_expr_result(expr3_result, "expression re-addition after reset", batch,
-                     arena, ctx);
+                     ctx);
   track_memory("expression re-addition after reset", &baseline);
 
   // Cleanup
   expr_batch_free(batch);
-  expr_arena_free(arena);
+  // Arena is freed with batch
   expr_context_free(ctx);
 
   print_memory_stats("Final");

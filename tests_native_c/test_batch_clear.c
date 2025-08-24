@@ -24,17 +24,9 @@ int main() {
         return 1;
     }
 
-    ExprArena *arena = expr_arena_new(2048);  // 2KB arena
-    if (!arena) {
-        printf("ERROR: Failed to create arena\n");
-        expr_context_free(ctx);
-        return 1;
-    }
-
-    ExprBatch *batch = expr_batch_new(arena);
+    ExprBatch *batch = expr_batch_new(2048);  // 2KB arena
     if (!batch) {
         printf("ERROR: Failed to create batch\n");
-        expr_arena_free(arena);
         expr_context_free(ctx);
         return 1;
     }
@@ -191,7 +183,6 @@ int main() {
 
 cleanup:
     expr_batch_free(batch);
-    expr_arena_free(arena);
     expr_context_free(ctx);
 
     print_memory_stats("Final");

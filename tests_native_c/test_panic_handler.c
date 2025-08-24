@@ -26,8 +26,8 @@ void panic_logger(const unsigned char* msg, size_t len) {
 // Test function that should trigger a panic
 void test_panic_trigger() {
     ExprContext* ctx = expr_context_new();
-    ExprArena* arena = expr_arena_new(8192);
-    ExprBatch* batch = expr_batch_new(arena);
+    // Arena is now managed internally by batch
+    ExprBatch* batch = expr_batch_new(8192);
     
     // Create an expression that should cause issues
     // For now, let's try something that might overflow or cause internal errors
@@ -42,7 +42,6 @@ void test_panic_trigger() {
     printf("   - Expression evaluation returned: %d\n", status);
     
     expr_batch_free(batch);
-    expr_arena_free(arena);
     expr_context_free(ctx);
 }
 
@@ -60,8 +59,8 @@ int main() {
     panic_flag = 0;
     
     ExprContext* ctx = expr_context_new();
-    ExprArena* arena = expr_arena_new(8192);
-    ExprBatch* batch = expr_batch_new(arena);
+    // Arena is now managed internally by batch
+    ExprBatch* batch = expr_batch_new(8192);
     expr_batch_add_expression(batch, "2 + 3");
     int status = expr_batch_evaluate(batch, ctx);
     Real result = expr_batch_get_result(batch, 0);
@@ -71,7 +70,6 @@ int main() {
     printf("   - Panic flag: %d (expected 0)\n", panic_flag);
     
     expr_batch_free(batch);
-    expr_arena_free(arena);
     expr_context_free(ctx);
     
     // Test 3: Try to trigger panic in a subprocess

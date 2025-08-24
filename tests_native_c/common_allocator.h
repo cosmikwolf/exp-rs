@@ -23,6 +23,7 @@ typedef struct {
     size_t current_bytes;
     size_t peak_bytes;
     size_t total_allocated_bytes;
+    size_t total_deallocated_bytes;
     size_t leaked_allocs;
 } memory_stats_t;
 

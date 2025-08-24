@@ -24,7 +24,7 @@ void test_memory_and_arena_analysis() {
     memory_stats_t start = get_memory_stats();
     
     // Try with a minimal arena - 4KB to see how much it actually needs
-    ExprArena* arena = expr_arena_new(4 * 1024);
+    // Arena is now managed internally by batch
     memory_stats_t after_arena = get_memory_stats();
     printf("Arena: +%zu allocs, +%zu bytes\n", 
            after_arena.total_allocs - start.total_allocs,
@@ -40,7 +40,7 @@ void test_memory_and_arena_analysis() {
     expr_context_add_function(ctx, "cos", 1, native_cos);
     expr_context_add_function(ctx, "sqrt", 1, native_sqrt);
     
-    ExprBatch* builder = expr_batch_new(arena);
+    ExprBatch* builder = expr_batch_new(4 * 1024);
     memory_stats_t after_batch = get_memory_stats();
     printf("Batch: +%zu allocs, +%zu bytes\n", 
            after_batch.total_allocs - after_context.total_allocs,
@@ -198,7 +198,6 @@ void test_memory_and_arena_analysis() {
     printf("After freeing batch: %zu bytes in use\n", after_batch_free.current_bytes);
     
     // Free arena
-    expr_arena_free(arena);
     memory_stats_t after_arena_free = get_memory_stats();
     printf("After freeing arena: %zu bytes in use\n", after_arena_free.current_bytes);
     

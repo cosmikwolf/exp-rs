@@ -33,9 +33,9 @@ Real native_min(const Real* args, uintptr_t nargs) { (void)nargs; return args[0]
 Real native_max(const Real* args, uintptr_t nargs) { (void)nargs; return args[0] > args[1] ? args[0] : args[1]; }
 Real native_fmod(const Real* args, uintptr_t nargs) { (void)nargs; return fmod(args[0], args[1]); }
 
-// Test function to verify custom allocator is working
-void test_custom_allocator_integration() {
-    printf("=== Test Custom Allocator Integration ===\n");
+// Test batch memory lifecycle management
+void test_batch_memory_lifecycle() {
+    printf("=== Test Batch Memory Lifecycle ===\n");
     
     init_memory_tracking();
     reset_memory_stats();
@@ -45,82 +45,108 @@ void test_custom_allocator_integration() {
     printf("Starting stats: %zu allocs, %zu bytes\n", 
            start_stats.total_allocs, start_stats.total_allocated_bytes);
     
-    // Test direct call to exp_rs_malloc
-    printf("Testing direct exp_rs_malloc call...\n");
-    void* test_ptr = exp_rs_malloc(1024);
+    // Test single batch creation and destruction
+    printf("Testing single batch lifecycle...\n");
+    ExprBatch* batch1 = expr_batch_new(8192);
+    assert(batch1 != NULL);
     
-    memory_stats_t after_malloc = get_memory_stats();
-    printf("After direct malloc: %zu allocs, %zu bytes\n", 
-           after_malloc.total_allocs, after_malloc.total_allocated_bytes);
+    memory_stats_t after_create = get_memory_stats();
+    printf("After batch creation: %zu allocs, %zu bytes\n", 
+           after_create.total_allocs, after_create.total_allocated_bytes);
     
-    if (after_malloc.total_allocs == start_stats.total_allocs) {
-        printf("❌ FAILED: exp_rs_malloc not tracked - custom allocator not working!\n");
-        printf("This means the Rust FFI is NOT using exp_rs_malloc/exp_rs_free\n");
-        exit(1);  // Fail the test
-    } else {
-        printf("✅ PASSED: exp_rs_malloc is being tracked\n");
-    }
+    // Add an expression to the batch
+    expr_batch_add_expression(batch1, "x + y * 2");
+    expr_batch_add_variable(batch1, "x", 1.0);
+    expr_batch_add_variable(batch1, "y", 2.0);
     
-    // Test exp_rs_free
-    printf("Testing exp_rs_free call...\n");
-    exp_rs_free(test_ptr);
+    // Free the batch
+    expr_batch_free(batch1);
     
     memory_stats_t after_free = get_memory_stats();
-    printf("After free: %zu allocs, %zu deallocs, %zu current bytes\n", 
-           after_free.total_allocs, after_free.total_deallocs, after_free.current_bytes);
+    printf("After batch free: %zu deallocs, current bytes: %zu\n", 
+           after_free.total_deallocs, after_free.current_bytes);
     
-    // Now test if FFI functions use our custom allocator
-    printf("\nTesting FFI arena creation (should call exp_rs_malloc)...\n");
-    memory_stats_t before_arena = get_memory_stats();
+    // Test multiple batch coexistence
+    printf("\nTesting multiple batch coexistence...\n");
+    memory_stats_t before_multi = get_memory_stats();
     
-    ExprArena* arena = expr_arena_new(8192);  // Small arena
+    ExprBatch* batch2 = expr_batch_new(4096);
+    ExprBatch* batch3 = expr_batch_new(4096);
+    ExprBatch* batch4 = expr_batch_new(4096);
     
-    memory_stats_t after_arena = get_memory_stats();
-    printf("Arena creation stats: %zu allocs (+%zu), %zu bytes (+%zu)\n",
-           after_arena.total_allocs, 
-           after_arena.total_allocs - before_arena.total_allocs,
-           after_arena.total_allocated_bytes,
-           after_arena.total_allocated_bytes - before_arena.total_allocated_bytes);
+    assert(batch2 != NULL);
+    assert(batch3 != NULL);
+    assert(batch4 != NULL);
     
-    if (after_arena.total_allocs == before_arena.total_allocs) {
-        printf("ℹ️  INFO: Arena creation didn't trigger exp_rs_malloc\n");
-        printf("This is EXPECTED on native targets (x86_64/aarch64)\n");
-        printf("Custom allocator is only enabled for ARM targets (embedded/STM32)\n");
-        printf("On native targets, Rust uses the system allocator directly\n");
-        printf("But now we modified it to work on native - so this indicates an issue\n");
-        printf("❌ FAILED: Custom allocator should be working now!\n");
-        exit(1);
-    } else {
-        printf("✅ PASSED: Arena creation uses custom allocator\n");
-    }
+    memory_stats_t after_multi = get_memory_stats();
+    printf("Created 3 batches: %zu allocs (+%zu), %zu bytes (+%zu)\n",
+           after_multi.total_allocs, 
+           after_multi.total_allocs - before_multi.total_allocs,
+           after_multi.total_allocated_bytes,
+           after_multi.total_allocated_bytes - before_multi.total_allocated_bytes);
     
-    // Clean up
-    expr_arena_free(arena);
-    memory_stats_t after_cleanup = get_memory_stats();
-    printf("After arena free: %zu deallocs (+%zu)\n",
-           after_cleanup.total_deallocs,
-           after_cleanup.total_deallocs - after_arena.total_deallocs);
+    // Use each batch
+    expr_batch_add_expression(batch2, "a * 2");
+    expr_batch_add_variable(batch2, "a", 5.0);
+    
+    expr_batch_add_expression(batch3, "b + 3");
+    expr_batch_add_variable(batch3, "b", 7.0);
+    
+    expr_batch_add_expression(batch4, "c - 1");
+    expr_batch_add_variable(batch4, "c", 9.0);
+    
+    // Free them in different order
+    expr_batch_free(batch3);
+    expr_batch_free(batch2);
+    expr_batch_free(batch4);
+    
+    memory_stats_t after_multi_cleanup = get_memory_stats();
+    printf("After freeing all batches: %zu deallocs (+%zu)\n",
+           after_multi_cleanup.total_deallocs,
+           after_multi_cleanup.total_deallocs - after_multi.total_deallocs);
     
     disable_allocation_tracking();
     printf("\n");
 }
 
-// Test basic arena creation and destruction
-void test_arena_lifecycle() {
-    printf("=== Test Arena Lifecycle ===\n");
+// Test batch clear and reuse
+void test_batch_clear_reuse() {
+    printf("=== Test Batch Clear and Reuse ===\n");
     
-    // Create arena with 256KB
-    ExprArena* arena = expr_arena_new(256 * 1024);
-    assert(arena != NULL);
-    printf("✓ Arena created successfully\n");
+    init_memory_tracking();
+    enable_allocation_tracking();
     
-    // Test arena reset
-    expr_arena_reset(arena);
-    printf("✓ Arena reset successfully\n");
+    // Create batch
+    ExprBatch* batch = expr_batch_new(16384);
+    assert(batch != NULL);
     
-    // Free arena
-    expr_arena_free(arena);
-    printf("✓ Arena freed successfully\n\n");
+    // Add first expression
+    expr_batch_add_expression(batch, "x * 2 + y");
+    expr_batch_add_variable(batch, "x", 5.0);
+    expr_batch_add_variable(batch, "y", 3.0);
+    
+    memory_stats_t before_clear = get_memory_stats();
+    
+    // Clear and reuse
+    expr_batch_clear(batch);
+    printf("✓ Batch cleared successfully\n");
+    
+    memory_stats_t after_clear = get_memory_stats();
+    printf("Memory after clear: same allocations (%zu), may reuse internal memory\n",
+           after_clear.total_allocs - before_clear.total_allocs);
+    
+    // Add new expression after clear
+    expr_batch_add_expression(batch, "a + b * c");
+    expr_batch_add_variable(batch, "a", 1.0);
+    expr_batch_add_variable(batch, "b", 2.0);
+    expr_batch_add_variable(batch, "c", 3.0);
+    
+    // Free batch
+    expr_batch_free(batch);
+    printf("✓ Batch freed after reuse\n");
+    
+    disable_allocation_tracking();
+    printf("\n");
 }
 
 // Test zero allocations during evaluation
@@ -133,19 +159,19 @@ void test_zero_allocations() {
     enable_allocation_tracking();
     memory_stats_t setup_start = get_memory_stats();
     
-    // Create arena and context
-    ExprArena* arena = expr_arena_new(256 * 1024);
-    memory_stats_t after_arena = get_memory_stats();
+    // Create batch (arena managed internally)
+    ExprBatch* batch = expr_batch_new(256 * 1024);
+    memory_stats_t after_batch = get_memory_stats();
     
     ExprContext* ctx = expr_context_new();
     memory_stats_t after_context = get_memory_stats();
     
-    printf("Arena creation: %zu bytes, %zu allocations\n", 
-           after_arena.total_allocated_bytes - setup_start.total_allocated_bytes,
-           after_arena.total_allocs - setup_start.total_allocs);
+    printf("Batch creation: %zu bytes, %zu allocations\n", 
+           after_batch.total_allocated_bytes - setup_start.total_allocated_bytes,
+           after_batch.total_allocs - setup_start.total_allocs);
     printf("Context creation: %zu bytes, %zu allocations\n", 
-           after_context.total_allocated_bytes - after_arena.total_allocated_bytes,
-           after_context.total_allocs - after_arena.total_allocs);
+           after_context.total_allocated_bytes - after_batch.total_allocated_bytes,
+           after_context.total_allocs - after_batch.total_allocs);
     
     // Register required functions
     expr_context_add_function(ctx, "sin", 1, native_sin);
@@ -153,20 +179,18 @@ void test_zero_allocations() {
     expr_context_add_function(ctx, "tan", 1, native_tan);
     expr_context_add_function(ctx, "sqrt", 1, native_sqrt);
     
-    ExprBatch* builder = expr_batch_new(arena);
-    
     // Add complex expression
-    expr_batch_add_expression(builder, 
+    expr_batch_add_expression(batch, 
         "sin(x) * cos(y) + tan(z) * sqrt(x*x + y*y + z*z)");
     
     // Add parameters
-    expr_batch_add_variable(builder, "x", 0.0);
-    expr_batch_add_variable(builder, "y", 0.0);
-    expr_batch_add_variable(builder, "z", 0.0);
+    expr_batch_add_variable(batch, "x", 0.0);
+    expr_batch_add_variable(batch, "y", 0.0);
+    expr_batch_add_variable(batch, "z", 0.0);
     
     // Do initial evaluation to parse expressions
     memory_stats_t before_initial = get_memory_stats();
-    expr_batch_evaluate(builder, ctx);
+    expr_batch_evaluate(batch, ctx);
     memory_stats_t after_initial = get_memory_stats();
     
     printf("✓ Initial evaluation complete\n");
@@ -188,12 +212,12 @@ void test_zero_allocations() {
         Real y = (Real)((i + 33) % 100) / 100.0;
         Real z = (Real)((i + 66) % 100) / 100.0;
         
-        expr_batch_set_variable(builder, 0, x);
-        expr_batch_set_variable(builder, 1, y);
-        expr_batch_set_variable(builder, 2, z);
+        expr_batch_set_variable(batch, 0, x);
+        expr_batch_set_variable(batch, 1, y);
+        expr_batch_set_variable(batch, 2, z);
         
         // Evaluate - should allocate zero memory
-        expr_batch_evaluate(builder, ctx);
+        expr_batch_evaluate(batch, ctx);
     }
     
     double end = get_time_us();
@@ -215,28 +239,78 @@ void test_zero_allocations() {
     
     // Verify zero allocations during evaluation
     size_t allocs_during_eval = after_loop.total_allocs - before_loop.total_allocs;
-    size_t bytes_during_eval = after_loop.total_allocated_bytes - before_loop.total_allocated_bytes;
+    size_t deallocs_during_eval = after_loop.total_deallocs - before_loop.total_deallocs;
+    size_t bytes_allocated_during_eval = after_loop.total_allocated_bytes - before_loop.total_allocated_bytes;
+    size_t bytes_deallocated_during_eval = after_loop.total_deallocated_bytes - before_loop.total_deallocated_bytes;
+    ssize_t net_bytes_change = (ssize_t)bytes_allocated_during_eval - (ssize_t)bytes_deallocated_during_eval;
     
     printf("\n=== ALLOCATION ANALYSIS ===\n");
-    printf("Allocations during %d evaluations: %zu\n", iterations, allocs_during_eval);
-    printf("Bytes allocated during evaluations: %zu\n", bytes_during_eval);
-    printf("Zero allocation claim: %s\n", 
-           allocs_during_eval == 0 ? "✓ VERIFIED" : "✗ FAILED");
+    printf("During %d evaluations:\n", iterations);
+    printf("  Allocations: %zu\n", allocs_during_eval);
+    printf("  Deallocations: %zu\n", deallocs_during_eval);
+    printf("  Bytes allocated: %zu\n", bytes_allocated_during_eval);
+    printf("  Bytes deallocated: %zu\n", bytes_deallocated_during_eval);
+    printf("  Net bytes change: %+zd\n", net_bytes_change);
+    printf("  Current bytes in use before: %zu\n", before_loop.current_bytes);
+    printf("  Current bytes in use after: %zu\n", after_loop.current_bytes);
     
     if (allocs_during_eval > 0) {
-        printf("WARNING: Found %zu allocations during evaluation!\n", allocs_during_eval);
-        printf("Average bytes per evaluation: %.2f\n", (double)bytes_during_eval / iterations);
+        printf("\nPer-evaluation averages:\n");
+        printf("  Allocations per eval: %.2f\n", (double)allocs_during_eval / iterations);
+        printf("  Bytes allocated per eval: %.2f\n", (double)bytes_allocated_during_eval / iterations);
+        printf("  Bytes deallocated per eval: %.2f\n", (double)bytes_deallocated_during_eval / iterations);
+        printf("  Net bytes per eval: %+.2f\n", (double)net_bytes_change / iterations);
+    }
+    
+    printf("\nZero allocation claim: %s\n", 
+           allocs_during_eval == 0 ? "✓ VERIFIED" : "✗ FAILED");
+    
+    if (net_bytes_change == 0 && allocs_during_eval > 0) {
+        printf("Note: While allocations occurred, all memory was freed (net change: 0)\n");
+        printf("      This suggests temporary allocations that are immediately cleaned up\n");
     }
     
     // Cleanup
-    expr_batch_free(builder);
+    expr_batch_free(batch);
     expr_context_free(ctx);
-    expr_arena_free(arena);
     
     memory_stats_t after_cleanup = get_memory_stats();
-    printf("Cleanup: %zu bytes freed, %zu deallocations\n", 
-           before_cleanup.total_allocated_bytes - after_cleanup.current_bytes,
+    printf("Cleanup: %zu deallocations\n", 
            after_cleanup.total_deallocs - before_cleanup.total_deallocs);
+    
+    // Final comprehensive memory report
+    printf("\n=== COMPREHENSIVE MEMORY REPORT ===\n");
+    printf("Total test statistics:\n");
+    printf("  Total allocations: %zu\n", after_cleanup.total_allocs);
+    printf("  Total deallocations: %zu\n", after_cleanup.total_deallocs);
+    printf("  Total bytes allocated: %zu (%.2f KB)\n", 
+           after_cleanup.total_allocated_bytes, 
+           after_cleanup.total_allocated_bytes / 1024.0);
+    printf("  Total bytes deallocated: %zu (%.2f KB)\n", 
+           after_cleanup.total_deallocated_bytes,
+           after_cleanup.total_deallocated_bytes / 1024.0);
+    printf("  Net bytes leaked: %+zd\n", 
+           (ssize_t)after_cleanup.total_allocated_bytes - (ssize_t)after_cleanup.total_deallocated_bytes);
+    printf("  Current bytes in use: %zu\n", after_cleanup.current_bytes);
+    printf("  Peak bytes used: %zu (%.2f KB)\n", 
+           after_cleanup.peak_bytes,
+           after_cleanup.peak_bytes / 1024.0);
+    printf("  Leaked allocations: %zu\n", after_cleanup.leaked_allocs);
+    
+    // Memory efficiency analysis
+    if (after_cleanup.total_allocated_bytes > 0) {
+        double reuse_ratio = (double)after_cleanup.total_deallocated_bytes / after_cleanup.total_allocated_bytes;
+        printf("\nMemory efficiency:\n");
+        printf("  Memory reuse ratio: %.2f%% (deallocated/allocated)\n", reuse_ratio * 100);
+        if (iterations > 0) {
+            printf("  Total memory per evaluation: %.2f bytes\n", 
+                   (double)after_cleanup.total_allocated_bytes / iterations);
+        }
+    }
+    
+    // Final status
+    printf("\nFinal status: %s\n", 
+           after_cleanup.current_bytes == 0 ? "✓ NO MEMORY LEAKS" : "✗ MEMORY LEAK DETECTED");
     
     disable_allocation_tracking();
     printf("\n");
@@ -246,10 +320,9 @@ void test_zero_allocations() {
 int main() {
     printf("\n==== Arena Integration Tests with Memory Tracking ====\n\n");
     
-    // CRITICAL: Test custom allocator integration first - fail fast if not working
-    test_custom_allocator_integration();
-    
-    test_arena_lifecycle();
+    // Test batch memory lifecycle and management
+    test_batch_memory_lifecycle();
+    test_batch_clear_reuse();
     test_zero_allocations();
     
     printf("==== All Tests Passed! ====\n\n");

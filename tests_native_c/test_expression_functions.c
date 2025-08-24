@@ -12,9 +12,8 @@ int main() {
         return 1;
     }
     
-    // Create arena and batch for testing
-    ExprArena* arena = expr_arena_new(8192);
-    ExprBatch* batch = expr_batch_new(arena);
+    // Create batch with integrated arena for testing
+    ExprBatch* batch = expr_batch_new(8192);
     
     // Test 1: Add expression functions
     printf("1. Adding expression functions:\n");
@@ -136,7 +135,7 @@ int main() {
     // Test 8: Multiple batches with different functions
     printf("\n8. Multiple batches with different functions:\n");
     
-    ExprBatch* batch2 = expr_batch_new(arena);
+    ExprBatch* batch2 = expr_batch_new(8192);
     
     // Add different function to batch2
     result = expr_batch_add_expression_function(batch2, "quadruple", "x", "x*4");
@@ -194,7 +193,6 @@ int main() {
     // Clean up
     expr_batch_free(batch2);
     expr_batch_free(batch);
-    expr_arena_free(arena);
     expr_context_free(ctx);
     
     printf("\n=== All Expression Function Tests Completed ===\n");

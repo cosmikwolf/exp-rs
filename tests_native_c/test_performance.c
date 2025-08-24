@@ -68,23 +68,20 @@ void benchmark_setup_overhead(uint64_t now_max) {
     // Arena creation
     const uint64_t arena_start = nanotime_now();
     for (int i = 0; i < 10000; i++) {
-        ExprArena* arena = expr_arena_new(32768);
-        expr_arena_free(arena);
+        // Arena managed internally: 32768);
     }
     const uint64_t arena_end = nanotime_now();
     const double arena_us = nanotime_interval(arena_start, arena_end, now_max) / 1000.0 / 10000.0;
     printf("  Arena creation (32KB): %.3f µs\n", arena_us);
     
     // Builder creation with arena
-    ExprArena* test_arena = expr_arena_new(32768);
+    // Arena managed internally: 32768);
     const uint64_t builder_start = nanotime_now();
     for (int i = 0; i < 10000; i++) {
-        ExprBatch* builder = expr_batch_new(test_arena);
+        ExprBatch* builder = expr_batch_new(32768);
         expr_batch_free(builder);
-        expr_arena_reset(test_arena);
     }
     const uint64_t builder_end = nanotime_now();
-    expr_arena_free(test_arena);
     const double builder_us = nanotime_interval(builder_start, builder_end, now_max) / 1000.0 / 10000.0;
     printf("  Builder creation + reset: %.3f µs\n", builder_us);
 }
@@ -107,12 +104,11 @@ void benchmark_parsing(ExprContext* ctx, uint64_t now_max) {
     double param_values[] = {1.5, 2.3, 3.7, 0.5, 1.2, -0.8, 2.1, 0.9, 1.4, 0.7};
     
     // Full parsing with arena reuse
-    ExprArena* parse_arena = expr_arena_new(32768);
+    // Arena managed internally: 32768);
     const uint64_t parse_start = nanotime_now();
     
     for (int i = 0; i < 1000; i++) {
-        if (i > 0) expr_arena_reset(parse_arena);
-        ExprBatch* builder = expr_batch_new(parse_arena);
+        ExprBatch* builder = expr_batch_new(32768);
         
         // Add parameters
         for (int p = 0; p < 10; p++) {
@@ -128,7 +124,6 @@ void benchmark_parsing(ExprContext* ctx, uint64_t now_max) {
     }
     
     const uint64_t parse_end = nanotime_now();
-    expr_arena_free(parse_arena);
     const double parse_total_us = nanotime_interval(parse_start, parse_end, now_max) / 1000.0 / 1000.0;
     printf("  Full setup (10 params + 7 exprs): %.3f µs\n", parse_total_us);
     printf("  Per expression parsing: ~%.3f µs\n", parse_total_us / 7.0);
@@ -155,8 +150,7 @@ void benchmark_evaluation(ExprContext* ctx, uint64_t now_max) {
     double param_values[] = {1.5, 2.3, 3.7, 0.5, 1.2, -0.8, 2.1, 0.9, 1.4, 0.7};
     
     // Setup once
-    ExprArena* eval_arena = expr_arena_new(32768);
-    ExprBatch* eval_builder = expr_batch_new(eval_arena);
+    ExprBatch* eval_builder = expr_batch_new(32768);
     for (int p = 0; p < 10; p++) {
         expr_batch_add_variable(eval_builder, param_names[p], param_values[p]);
     }
@@ -213,8 +207,7 @@ void benchmark_evaluation(ExprContext* ctx, uint64_t now_max) {
     // Individual expression performance
     printf("\n  Individual Expression Timing:\n");
     for (int e = 0; e < 7; e++) {
-        expr_arena_reset(eval_arena);
-        ExprBatch* single_builder = expr_batch_new(eval_arena);
+        ExprBatch* single_builder = expr_batch_new(32768);
         
         // Add parameters
         for (int p = 0; p < 10; p++) {
@@ -239,7 +232,6 @@ void benchmark_evaluation(ExprContext* ctx, uint64_t now_max) {
     }
     
     expr_batch_free(eval_builder);
-    expr_arena_free(eval_arena);
 }
 
 // Benchmark batch size scaling
@@ -258,9 +250,8 @@ void benchmark_batch_scaling(ExprContext* ctx, uint64_t now_max) {
         int batch_size = batch_sizes[b];
         int iterations = 100000 / batch_size;
         
-        // Create arena and builder
-        ExprArena* batch_arena = expr_arena_new(32768);
-        ExprBatch* batch_builder = expr_batch_new(batch_arena);
+        // Create builder with integrated arena
+        ExprBatch* batch_builder = expr_batch_new(32768);
         
         // Setup
         for (int p = 0; p < 4; p++) {
@@ -295,7 +286,6 @@ void benchmark_batch_scaling(ExprContext* ctx, uint64_t now_max) {
                (iterations * batch_size) / (elapsed / 1e6));
         
         expr_batch_free(batch_builder);
-        expr_arena_free(batch_arena);
     }
 }
 
@@ -312,8 +302,7 @@ void benchmark_arena_reuse(ExprContext* ctx, uint64_t now_max) {
     // Test 1: New arena each time
     const uint64_t new_start = nanotime_now();
     for (int i = 0; i < iterations; i++) {
-        ExprArena* arena = expr_arena_new(8192);
-        ExprBatch* builder = expr_batch_new(arena);
+        ExprBatch* builder = expr_batch_new(8192);
         
         for (int p = 0; p < 4; p++) {
             expr_batch_add_variable(builder, param_names[p], param_values[p]);
@@ -322,17 +311,14 @@ void benchmark_arena_reuse(ExprContext* ctx, uint64_t now_max) {
         expr_batch_evaluate(builder, ctx);
         
         expr_batch_free(builder);
-        expr_arena_free(arena);
     }
     const uint64_t new_end = nanotime_now();
     const double new_us = nanotime_interval(new_start, new_end, now_max) / 1000.0 / iterations;
     
-    // Test 2: Arena reuse
-    ExprArena* reuse_arena = expr_arena_new(8192);
+    // Test 2: Batch reuse pattern
     const uint64_t reuse_start = nanotime_now();
     for (int i = 0; i < iterations; i++) {
-        if (i > 0) expr_arena_reset(reuse_arena);
-        ExprBatch* builder = expr_batch_new(reuse_arena);
+        ExprBatch* builder = expr_batch_new(8192);
         
         for (int p = 0; p < 4; p++) {
             expr_batch_add_variable(builder, param_names[p], param_values[p]);
@@ -343,7 +329,6 @@ void benchmark_arena_reuse(ExprContext* ctx, uint64_t now_max) {
         expr_batch_free(builder);
     }
     const uint64_t reuse_end = nanotime_now();
-    expr_arena_free(reuse_arena);
     const double reuse_us = nanotime_interval(reuse_start, reuse_end, now_max) / 1000.0 / iterations;
     
     printf("  New arena each time: %.3f µs/iteration\n", new_us);
