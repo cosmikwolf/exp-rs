@@ -56,7 +56,7 @@ static inline void custom_arm_sqrt_f64(double in, double *out) {
 #error "Neither USE_F32 nor USE_F64 is defined."
 #endif
 
-// Using the EvalResult struct directly
+// Using the ExprResult struct from new batch-based API
 
 static Real test_float(void) { return 1.0; }
 
@@ -67,29 +67,44 @@ static int approx_eq(Real a, Real b, Real eps) {
 static test_result_t test_simple_eval(void) {
   qemu_printf("Testing basic FFI functions with %s mode\n", TEST_NAME);
 
-  // Create a test context with math functions
-  struct EvalContextOpaque* ctx = create_test_context();
+  // Create context and batch
+  struct ExprContext* ctx = create_test_context();
   if (!ctx) {
     qemu_print("Failed to create test context\n");
     return TEST_FAIL;
   }
 
-  struct EvalResult eval = exp_rs_context_eval("2+2*2", ctx);
-  qemu_printf("exp_rs_context_eval(\"2+2*2\") = " FORMAT_SPEC " (status=%d)\n",
-              eval.value, eval.status);
-
-  if (eval.status != 0) {
-    qemu_print("Test failed: eval error: ");
-    if (eval.error) {
-      qemu_print(eval.error);
-      exp_rs_free_error((char *)eval.error);
-    }
-    qemu_print("\n");
+  struct ExprBatch* batch = expr_batch_new(8192);
+  if (!batch) {
+    qemu_print("Failed to create batch\n");
+    expr_context_free(ctx);
     return TEST_FAIL;
   }
 
-  if (FABS(eval.value - 6.0) > TEST_PRECISION) {
-    qemu_printf("Test failed: expected 6.0, got " FORMAT_SPEC "\n", eval.value);
+  struct ExprResult eval_expr = expr_batch_add_expression(batch, "2+2*2");
+  if (eval_expr.status != 0) {
+    qemu_print("Failed to add expression\n");
+    qemu_printf("Error: %s\n", eval_expr.error);
+    expr_batch_free(batch);
+    expr_context_free(ctx);
+    return TEST_FAIL;
+  }
+
+  int32_t eval_status = expr_batch_evaluate(batch, ctx);
+  if (eval_status != 0) {
+    qemu_print("Failed to evaluate batch\n");
+    expr_batch_free(batch);
+    expr_context_free(ctx);
+    return TEST_FAIL;
+  }
+
+  Real eval_value = expr_batch_get_result(batch, eval_expr.index);
+  qemu_printf("Expression \"2+2*2\" = " FORMAT_SPEC "\n", eval_value);
+
+  if (FABS(eval_value - 6.0) > TEST_PRECISION) {
+    qemu_printf("Test failed: expected 6.0, got " FORMAT_SPEC "\n", eval_value);
+    expr_batch_free(batch);
+    expr_context_free(ctx);
     return TEST_FAIL;
   }
 

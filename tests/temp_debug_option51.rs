@@ -6,7 +6,7 @@ use bumpalo::Bump;
 fn temp_test_simple_expression_function() {
     let arena = Bump::new();
     let mut builder = ArenaBatchBuilder::new(&arena);
-    let mut ctx = EvalContext::new();
+    let ctx = EvalContext::new();
 
     // Register basic math operators
     #[cfg(not(feature = "libm"))]
@@ -15,8 +15,8 @@ fn temp_test_simple_expression_function() {
         ctx.register_native_function("*", 2, |args| args[0] * args[1]);
     }
 
-    // Register a simple expression function
-    ctx.register_expression_function("double", &["x"], "x * 2").unwrap();
+    // Register expression function in the batch instead of context
+    builder.register_expression_function("double", &["x"], "x * 2").unwrap();
 
     let ctx_rc = Rc::new(ctx);
 
@@ -40,7 +40,7 @@ fn temp_test_simple_expression_function() {
 fn temp_test_expression_function_with_direct_arg() {
     let arena = Bump::new();
     let mut builder = ArenaBatchBuilder::new(&arena);
-    let mut ctx = EvalContext::new();
+    let ctx = EvalContext::new();
 
     // Register basic math operators
     #[cfg(not(feature = "libm"))]
@@ -49,8 +49,8 @@ fn temp_test_expression_function_with_direct_arg() {
         ctx.register_native_function("*", 2, |args| args[0] * args[1]);
     }
 
-    // Register a simple expression function  
-    ctx.register_expression_function("double", &["x"], "x * 2").unwrap();
+    // Register expression function in the batch instead of context
+    builder.register_expression_function("double", &["x"], "x * 2").unwrap();
 
     let ctx_rc = Rc::new(ctx);
 

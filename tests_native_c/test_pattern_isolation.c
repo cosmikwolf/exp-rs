@@ -13,11 +13,10 @@ int main() {
         return 1;
     }
     
-    // Add some shared functions to context
-    printf("1. Setting up shared context functions:\n");
-    expr_context_add_expression_function(ctx, "normalize", "x,min,max", "(x-min)/(max-min)");
-    expr_context_add_expression_function(ctx, "clamp", "x,min,max", "min(max(x,min),max)");
-    printf("   - Added shared functions: normalize, clamp\n");
+    // Note: Shared expression functions are no longer supported in context
+    // All expression functions are now batch-specific
+    printf("1. Context created (shared native functions only):\n");
+    printf("   - Expression functions are now batch-specific only\n");
     
     // Create arena for all patterns
     // Arena is now managed internally by batch
@@ -30,21 +29,24 @@ int main() {
     expr_batch_add_expression_function(audio_pattern, "amplify", "signal,gain", "signal*gain");
     expr_batch_add_expression_function(audio_pattern, "fade", "signal,factor", "signal*factor");
     expr_batch_add_expression_function(audio_pattern, "mix", "a,b,ratio", "a*(1-ratio)+b*ratio");
-    printf("   - Audio pattern: amplify, fade, mix\n");
+    expr_batch_add_expression_function(audio_pattern, "normalize", "x,min,max", "(x-min)/(max-min)");
+    printf("   - Audio pattern: amplify, fade, mix, normalize\n");
     
     // Pattern 2: Video processing channel  
     ExprBatch* video_pattern = expr_batch_new(16384);
     expr_batch_add_expression_function(video_pattern, "brightness", "pixel,factor", "min(pixel*factor,1)");
     expr_batch_add_expression_function(video_pattern, "contrast", "pixel,factor", "((pixel-0.5)*factor)+0.5");
     expr_batch_add_expression_function(video_pattern, "gamma", "pixel,g", "pixel^(1/g)");
-    printf("   - Video pattern: brightness, contrast, gamma\n");
+    expr_batch_add_expression_function(video_pattern, "normalize", "x,min,max", "(x-min)/(max-min)");
+    printf("   - Video pattern: brightness, contrast, gamma, normalize\n");
     
     // Pattern 3: Sensor data processing
     ExprBatch* sensor_pattern = expr_batch_new(16384);
     expr_batch_add_expression_function(sensor_pattern, "smooth", "prev,curr,alpha", "prev*(1-alpha)+curr*alpha");
     expr_batch_add_expression_function(sensor_pattern, "threshold", "value,thresh", "value>thresh?1:0");
     expr_batch_add_expression_function(sensor_pattern, "scale", "value,factor,offset", "value*factor+offset");
-    printf("   - Sensor pattern: smooth, threshold, scale\n");
+    expr_batch_add_expression_function(sensor_pattern, "normalize", "x,min,max", "(x-min)/(max-min)");
+    printf("   - Sensor pattern: smooth, threshold, scale, normalize\n");
     
     // Test 3: Each pattern uses its own functions
     printf("\n3. Testing pattern-specific functions:\n");
@@ -101,10 +103,10 @@ int main() {
     printf("   - Sensor pattern trying video function: %s\n",
            result != 0 ? "failed as expected" : "unexpectedly succeeded");
     
-    // Test 5: Shared context functions are available to all
-    printf("\n5. Testing shared context functions:\n");
+    // Test 5: Each batch has its own normalize function
+    printf("\n5. Testing batch-specific normalize functions:\n");
     
-    // All patterns can use normalize from context
+    // All patterns have their own normalize function
     expr_batch_add_expression(audio_pattern, "normalize(5, 0, 10)");
     expr_batch_add_expression(video_pattern, "normalize(128, 0, 255)");
     expr_batch_add_expression(sensor_pattern, "normalize(25, 20, 30)");
@@ -125,7 +127,7 @@ int main() {
     printf("   - Sensor: normalize(25, 20, 30) = %.2f (expected 0.50)\n",
            expr_batch_get_result(sensor_pattern, 4));
     
-    // Test 6: Override context function in one pattern
+    // Test 6: Override existing function in one pattern
     printf("\n6. Testing function override in specific pattern:\n");
     
     // Override normalize in audio pattern to work differently

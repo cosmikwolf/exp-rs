@@ -339,21 +339,28 @@
 //! # {
 //! extern crate alloc;
 //! use exp_rs::context::EvalContext;
-//! use exp_rs::engine::interp;
+//! use exp_rs::expression::ArenaBatchBuilder;
 //! use alloc::rc::Rc;
+//! use bumpalo::Bump;
 //!
 //! fn main() {
-//!     let mut ctx = EvalContext::new();
+//!     let arena = Bump::new();
+//!     let mut builder = ArenaBatchBuilder::new(&arena);
+//!     let ctx = EvalContext::new();
 //!
-//!     // Register an expression function
-//!     ctx.register_expression_function(
+//!     // Register an expression function in the batch
+//!     builder.register_expression_function(
 //!         "hypotenuse",
 //!         &["a", "b"],
 //!         "sqrt(a^2 + b^2)"
 //!     ).unwrap();
 //!
-//!     // Use the custom function
-//!     let result = interp("hypotenuse(3, 4)", Some(Rc::new(ctx))).unwrap();
+//!     // Add expression that uses the custom function
+//!     builder.add_expression("hypotenuse(3, 4)").unwrap();
+//!
+//!     // Evaluate the batch
+//!     builder.eval(&Rc::new(ctx)).unwrap();
+//!     let result = builder.get_result(0).unwrap();
 //!     assert_eq!(result, 5.0);
 //! }
 //! # }

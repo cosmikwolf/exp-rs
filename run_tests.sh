@@ -95,9 +95,22 @@ check_reconfigure() {
 
 	# Get current configuration - meson configure shows values in the second column
 	# The output format is like: "  use_f32  true  Enable 32-bit..."
-	current_use_f32=$(cd "$BUILD_DIR" && meson configure | grep -E "^\s*use_f32" | awk '{print $2}')
-	current_test_native=$(cd "$BUILD_DIR" && meson configure | grep -E "^\s*test_native" | awk '{print $2}')
-	current_qemu_tests=$(cd "$BUILD_DIR" && meson configure | grep -E "^\s*enable_exprs_qemu_tests" | awk '{print $2}')
+	if ! cd "$BUILD_DIR" 2>/dev/null; then
+		echo "Error: Cannot access build directory $BUILD_DIR"
+		return 0  # Force reconfigure
+	fi
+	
+	current_use_f32=$(meson configure 2>/dev/null | grep -E "^\s*use_f32\s" | awk '{print $2}' | head -1)
+	current_test_native=$(meson configure 2>/dev/null | grep -E "^\s*test_native\s" | awk '{print $2}' | head -1)
+	current_qemu_tests=$(meson configure 2>/dev/null | grep -E "^\s*enable_exprs_qemu_tests\s" | awk '{print $2}' | head -1)
+	
+	cd - >/dev/null
+	
+	# If any values are empty, force reconfiguration
+	if [ -z "$current_use_f32" ] || [ -z "$current_test_native" ] || [ -z "$current_qemu_tests" ]; then
+		echo "Warning: Could not read current meson configuration. Forcing reconfigure."
+		return 0  # Force reconfigure
+	fi
 
 	# Determine expected values
 	if [ "$FLOAT_MODE" = "f32" ]; then
@@ -114,19 +127,26 @@ check_reconfigure() {
 		expected_qemu_tests="true"
 	fi
 
+	# Debug output for troubleshooting
+	if [ "$VERBOSE" -eq 1 ]; then
+		echo "DEBUG: current_use_f32='$current_use_f32' expected_use_f32='$expected_use_f32'"
+		echo "DEBUG: current_test_native='$current_test_native' expected_test_native='$expected_test_native'"
+		echo "DEBUG: current_qemu_tests='$current_qemu_tests' expected_qemu_tests='$expected_qemu_tests'"
+	fi
+
 	# Check if reconfiguration is needed
 	if [ "$current_use_f32" != "$expected_use_f32" ]; then
-		echo "Float mode changed: current=$current_use_f32, expected=$expected_use_f32"
+		echo "Float mode changed: current='$current_use_f32', expected='$expected_use_f32'"
 		needs_reconfigure=1
 	fi
 
 	if [ "$current_test_native" != "$expected_test_native" ]; then
-		echo "Test target changed: native tests current=$current_test_native, expected=$expected_test_native"
+		echo "Test target changed: native tests current='$current_test_native', expected='$expected_test_native'"
 		needs_reconfigure=1
 	fi
 
 	if [ "$current_qemu_tests" != "$expected_qemu_tests" ]; then
-		echo "Test target changed: QEMU tests current=$current_qemu_tests, expected=$expected_qemu_tests"
+		echo "Test target changed: QEMU tests current='$current_qemu_tests', expected='$expected_qemu_tests'"
 		needs_reconfigure=1
 	fi
 
@@ -135,7 +155,7 @@ check_reconfigure() {
 		echo "Meson configuration needs to be updated for your selected options."
 		echo "This requires a clean reconfiguration."
 		echo "Press Enter to proceed, or Ctrl-C to exit."
-		read -r
+		read -r </dev/tty
 		return 0
 	else
 		return 1

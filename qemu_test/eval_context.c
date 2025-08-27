@@ -32,267 +32,305 @@
 #error "Neither USE_F32 nor USE_F64 is defined."
 #endif
 
-// Using the EvalResult struct directly
+// Using the ExprResult struct from new batch-based API
 
 // Helper to check approximate equality
 static int approx_eq(Real a, Real b, Real eps) {
     return FABS(a - b) < eps;
 }
 
-// Test setting and getting parameters
+// Test setting and getting variables using batch
 test_result_t test_param_set_get() {
-    qemu_printf("Testing parameter set/get in %s mode...\n", TEST_NAME);
+    qemu_printf("Testing variable set/get in %s mode...\n", TEST_NAME);
     
-    // Create a test context with math functions
-    struct EvalContextOpaque* ctx = create_test_context();
+    // Create context and batch
+    struct ExprContext* ctx = create_test_context();
     if (!ctx) {
         qemu_print("Failed to create context\n");
         return TEST_FAIL;
     }
     
-    // Set parameters
+    struct ExprBatch* batch = expr_batch_new(8192);
+    if (!batch) {
+        qemu_print("Failed to create batch\n");
+        expr_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    // Add variables to batch
     Real a_val = 42.0;
     Real b_val = 123.5;
     
-    struct EvalResult set_result_a = exp_rs_context_set_parameter(ctx, "a", a_val);
+    struct ExprResult set_result_a = expr_batch_add_variable(batch, "a", a_val);
     if (set_result_a.status != 0) {
-        qemu_print("Error setting parameter 'a'\n");
-        if (set_result_a.error) {
-            qemu_printf("Error: %s\n", set_result_a.error);
-            exp_rs_free_error((char*)set_result_a.error);
-        }
-        exp_rs_context_free(ctx);
+        qemu_print("Error adding variable 'a'\n");
+        qemu_printf("Error: %s\n", set_result_a.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
-    struct EvalResult set_result_b = exp_rs_context_set_parameter(ctx, "b", b_val);
+    struct ExprResult set_result_b = expr_batch_add_variable(batch, "b", b_val);
     if (set_result_b.status != 0) {
-        qemu_print("Error setting parameter 'b'\n");
-        if (set_result_b.error) {
-            qemu_printf("Error: %s\n", set_result_b.error);
-            exp_rs_free_error((char*)set_result_b.error);
-        }
-        exp_rs_context_free(ctx);
+        qemu_print("Error adding variable 'b'\n");
+        qemu_printf("Error: %s\n", set_result_b.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
-    // Test getting parameters by using them in expressions
-    struct EvalResult result_a = exp_rs_context_eval("a", ctx);
-    if (result_a.status != 0) {
-        qemu_print("Error evaluating 'a'\n");
-        exp_rs_context_free(ctx);
+    // Add expressions to evaluate the variables
+    struct ExprResult expr_a = expr_batch_add_expression(batch, "a");
+    if (expr_a.status != 0) {
+        qemu_print("Error adding expression 'a'\n");
+        qemu_printf("Error: %s\n", expr_a.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
-    struct EvalResult result_b = exp_rs_context_eval("b", ctx);
-    if (result_b.status != 0) {
-        qemu_print("Error evaluating 'b'\n");
-        exp_rs_context_free(ctx);
+    struct ExprResult expr_b = expr_batch_add_expression(batch, "b");
+    if (expr_b.status != 0) {
+        qemu_print("Error adding expression 'b'\n");
+        qemu_printf("Error: %s\n", expr_b.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
+    
+    // Evaluate the batch
+    int32_t eval_status = expr_batch_evaluate(batch, ctx);
+    if (eval_status != 0) {
+        qemu_print("Error evaluating batch\n");
+        expr_batch_free(batch);
+        expr_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    // Get results
+    Real result_a_value = expr_batch_get_result(batch, expr_a.index);
+    Real result_b_value = expr_batch_get_result(batch, expr_b.index);
     
     // Check values
-    qemu_printf("a = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", result_a.value, a_val);
-    qemu_printf("b = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", result_b.value, b_val);
+    qemu_printf("a = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", result_a_value, a_val);
+    qemu_printf("b = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", result_b_value, b_val);
     
-    if (!approx_eq(result_a.value, a_val, TEST_PRECISION) || 
-        !approx_eq(result_b.value, b_val, TEST_PRECISION)) {
-        qemu_print("Parameter values don't match\n");
-        exp_rs_context_free(ctx);
+    if (!approx_eq(result_a_value, a_val, TEST_PRECISION) || 
+        !approx_eq(result_b_value, b_val, TEST_PRECISION)) {
+        qemu_print("Variable values don't match\n");
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
     // Clean up
-    exp_rs_context_free(ctx);
+    expr_batch_free(batch);
+    expr_context_free(ctx);
     
-    qemu_print("Parameter set/get test passed\n");
+    qemu_print("Variable set/get test passed\n");
     return TEST_PASS;
 }
 
-// Test expression function registration
+// Test expression function registration (now batch-specific)
 test_result_t test_expression_function() {
     qemu_printf("Testing expression function in %s mode...\n", TEST_NAME);
     
-    // Create a test context with math functions
-    struct EvalContextOpaque* ctx = create_test_context();
+    // Create context and batch
+    struct ExprContext* ctx = create_test_context();
     if (!ctx) {
         qemu_print("Failed to create context\n");
         return TEST_FAIL;
     }
     
-    // Register an expression function
+    struct ExprBatch* batch = expr_batch_new(8192);
+    if (!batch) {
+        qemu_print("Failed to create batch\n");
+        expr_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    // Register an expression function (batch-specific)
     const char* func_name = "my_func";
-    const char* param1_name = "x";
-    const char* param2_name = "y";
-    const char* params[] = {param1_name, param2_name};
+    const char* params = "x,y";  // Comma-separated parameter names
     const char* expr = "x^2 + y^2 + 2*x*y";
     
-    struct EvalResult reg_result = exp_rs_context_register_expression_function(
-        ctx, func_name, (const char**)params, 2, expr);
+    int32_t reg_result = expr_batch_add_expression_function(
+        batch, func_name, params, expr);
     
-    if (reg_result.status != 0) {
-        qemu_printf("Failed to register function\n");
-        if (reg_result.error) {
-            qemu_printf("Error: %s\n", reg_result.error);
-            exp_rs_free_error((char*)reg_result.error);
-        }
-        exp_rs_context_free(ctx);
+    if (reg_result != 0) {
+        qemu_printf("Failed to register function, error code: %d\n", reg_result);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
-    // Set parameters for testing
-    struct EvalResult set_result_a = exp_rs_context_set_parameter(ctx, "a", 3.0);
+    // Add variables to batch for testing
+    struct ExprResult set_result_a = expr_batch_add_variable(batch, "a", 3.0);
     if (set_result_a.status != 0) {
-        qemu_print("Error setting parameter 'a'\n");
-        if (set_result_a.error) {
-            qemu_printf("Error: %s\n", set_result_a.error);
-            exp_rs_free_error((char*)set_result_a.error);
-        }
-        exp_rs_context_free(ctx);
+        qemu_print("Error adding variable 'a'\n");
+        qemu_printf("Error: %s\n", set_result_a.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
-    struct EvalResult set_result_b = exp_rs_context_set_parameter(ctx, "b", 4.0);
+    struct ExprResult set_result_b = expr_batch_add_variable(batch, "b", 4.0);
     if (set_result_b.status != 0) {
-        qemu_print("Error setting parameter 'b'\n");
-        if (set_result_b.error) {
-            qemu_printf("Error: %s\n", set_result_b.error);
-            exp_rs_free_error((char*)set_result_b.error);
-        }
-        exp_rs_context_free(ctx);
+        qemu_print("Error adding variable 'b'\n");
+        qemu_printf("Error: %s\n", set_result_b.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
-    // Test using the function
-    struct EvalResult result = exp_rs_context_eval("my_func(a, b)", ctx);
-    if (result.status != 0) {
-        qemu_print("Error evaluating 'my_func(a, b)'\n");
-        if (result.error) {
-            qemu_printf("Error: %s\n", result.error);
-            exp_rs_free_error((char*)result.error);
-        }
-        exp_rs_context_free(ctx);
+    // Add expression using the function and evaluate
+    struct ExprResult expr_result = expr_batch_add_expression(batch, "my_func(a, b)");
+    if (expr_result.status != 0) {
+        qemu_print("Error adding expression 'my_func(a, b)'\n");
+        qemu_printf("Error: %s\n", expr_result.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
+    
+    // Evaluate the batch
+    int32_t eval_status = expr_batch_evaluate(batch, ctx);
+    if (eval_status != 0) {
+        qemu_print("Error evaluating batch\n");
+        expr_batch_free(batch);
+        expr_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    // Get the result
+    Real result_value = expr_batch_get_result(batch, expr_result.index);
     
     // Expected result: (a^2 + b^2 + 2*a*b) = (3^2 + 4^2 + 2*3*4) = 9 + 16 + 24 = 49
     Real expected = 49.0;
     
     qemu_printf("my_func(3, 4) = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", 
-                result.value, expected);
+                result_value, expected);
     
-    if (!approx_eq(result.value, expected, TEST_PRECISION)) {
+    if (!approx_eq(result_value, expected, TEST_PRECISION)) {
         qemu_print("Function result doesn't match expected value\n");
-        exp_rs_context_free(ctx);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
     // Clean up
-    exp_rs_context_free(ctx);
+    expr_batch_free(batch);
+    expr_context_free(ctx);
     
     qemu_print("Expression function test passed\n");
     return TEST_PASS;
 }
 
-// Test nested functions
+// Test nested functions (batch-specific)
 test_result_t test_nested_functions() {
     qemu_printf("Testing nested functions in %s mode...\n", TEST_NAME);
     
-    // Create a test context with math functions
-    struct EvalContextOpaque* ctx = create_test_context();
+    // Create context and batch
+    struct ExprContext* ctx = create_test_context();
     if (!ctx) {
         qemu_print("Failed to create context\n");
         return TEST_FAIL;
     }
     
-    // Register first function
+    struct ExprBatch* batch = expr_batch_new(8192);
+    if (!batch) {
+        qemu_print("Failed to create batch\n");
+        expr_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    // Register first function (batch-specific)
     const char* func1_name = "squared";
-    const char* param1_name = "x";
-    const char* params1[] = {param1_name};
+    const char* params1 = "x";  // Comma-separated parameter names
     const char* expr1 = "x^2";
     
-    struct EvalResult reg_result1 = exp_rs_context_register_expression_function(
-        ctx, func1_name, (const char**)params1, 1, expr1);
+    int32_t reg_result1 = expr_batch_add_expression_function(
+        batch, func1_name, params1, expr1);
     
-    if (reg_result1.status != 0) {
-        qemu_printf("Failed to register function 1\n");
-        if (reg_result1.error) {
-            qemu_printf("Error: %s\n", reg_result1.error);
-            exp_rs_free_error((char*)reg_result1.error);
-        }
-        exp_rs_context_free(ctx);
+    if (reg_result1 != 0) {
+        qemu_printf("Failed to register function 1, error code: %d\n", reg_result1);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
     // Register second function that uses the first
     const char* func2_name = "sum_of_squares";
-    const char* param2a_name = "a";
-    const char* param2b_name = "b";
-    const char* params2[] = {param2a_name, param2b_name};
+    const char* params2 = "a,b";  // Comma-separated parameter names
     const char* expr2 = "squared(a) + squared(b)";
     
-    struct EvalResult reg_result2 = exp_rs_context_register_expression_function(
-        ctx, func2_name, (const char**)params2, 2, expr2);
+    int32_t reg_result2 = expr_batch_add_expression_function(
+        batch, func2_name, params2, expr2);
     
-    if (reg_result2.status != 0) {
-        qemu_printf("Failed to register function 2\n");
-        if (reg_result2.error) {
-            qemu_printf("Error: %s\n", reg_result2.error);
-            exp_rs_free_error((char*)reg_result2.error);
-        }
-        exp_rs_context_free(ctx);
+    if (reg_result2 != 0) {
+        qemu_printf("Failed to register function 2, error code: %d\n", reg_result2);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
-    // Set parameters for testing
-    struct EvalResult set_result_x = exp_rs_context_set_parameter(ctx, "x", 3.0);
+    // Add variables to batch for testing
+    struct ExprResult set_result_x = expr_batch_add_variable(batch, "x", 3.0);
     if (set_result_x.status != 0) {
-        qemu_print("Error setting parameter 'x'\n");
-        if (set_result_x.error) {
-            qemu_printf("Error: %s\n", set_result_x.error);
-            exp_rs_free_error((char*)set_result_x.error);
-        }
-        exp_rs_context_free(ctx);
+        qemu_print("Error adding variable 'x'\n");
+        qemu_printf("Error: %s\n", set_result_x.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
-    struct EvalResult set_result_y = exp_rs_context_set_parameter(ctx, "y", 4.0);
+    struct ExprResult set_result_y = expr_batch_add_variable(batch, "y", 4.0);
     if (set_result_y.status != 0) {
-        qemu_print("Error setting parameter 'y'\n");
-        if (set_result_y.error) {
-            qemu_printf("Error: %s\n", set_result_y.error);
-            exp_rs_free_error((char*)set_result_y.error);
-        }
-        exp_rs_context_free(ctx);
+        qemu_print("Error adding variable 'y'\n");
+        qemu_printf("Error: %s\n", set_result_y.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
-    // Test using the nested functions
-    struct EvalResult result = exp_rs_context_eval("sum_of_squares(x, y)", ctx);
-    if (result.status != 0) {
-        qemu_print("Error evaluating 'sum_of_squares(x, y)'\n");
-        if (result.error) {
-            qemu_printf("Error: %s\n", result.error);
-            exp_rs_free_error((char*)result.error);
-        }
-        exp_rs_context_free(ctx);
+    // Add expression using the nested functions and evaluate
+    struct ExprResult expr_result = expr_batch_add_expression(batch, "sum_of_squares(x, y)");
+    if (expr_result.status != 0) {
+        qemu_print("Error adding expression 'sum_of_squares(x, y)'\n");
+        qemu_printf("Error: %s\n", expr_result.error);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
+    
+    // Evaluate the batch
+    int32_t eval_status = expr_batch_evaluate(batch, ctx);
+    if (eval_status != 0) {
+        qemu_print("Error evaluating batch\n");
+        expr_batch_free(batch);
+        expr_context_free(ctx);
+        return TEST_FAIL;
+    }
+    
+    // Get the result
+    Real result_value = expr_batch_get_result(batch, expr_result.index);
     
     // Expected result: x^2 + y^2 = 3^2 + 4^2 = 9 + 16 = 25
     Real expected = 25.0;
     
     qemu_printf("sum_of_squares(3, 4) = " FORMAT_SPEC " (expected " FORMAT_SPEC ")\n", 
-                result.value, expected);
+                result_value, expected);
     
-    if (!approx_eq(result.value, expected, TEST_PRECISION)) {
+    if (!approx_eq(result_value, expected, TEST_PRECISION)) {
         qemu_print("Nested function result doesn't match expected value\n");
-        exp_rs_context_free(ctx);
+        expr_batch_free(batch);
+        expr_context_free(ctx);
         return TEST_FAIL;
     }
     
     // Clean up
-    exp_rs_context_free(ctx);
+    expr_batch_free(batch);
+    expr_context_free(ctx);
     
     qemu_print("Nested functions test passed\n");
     return TEST_PASS;

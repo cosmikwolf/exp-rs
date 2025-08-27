@@ -28,7 +28,6 @@ mod tests {
 
     use super::*;
     use crate::AstExpr;
-    use crate::FunctionRegistry;
     use crate::Real;
     use crate::context::EvalContext;
     use crate::engine::interp;
@@ -49,32 +48,7 @@ mod tests {
     // Test helper functions removed - tests now use the public API (interp) directly
     // which uses the iterative evaluator path
 
-    #[test]
-    fn test_eval_expression_function_polynomial() {
-        let mut ctx = create_test_context();
-        ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
-            .unwrap();
-        // Use the public API instead of internal functions
-        let val = interp("polynomial(3)", Some(Rc::new(ctx))).unwrap();
-        assert_eq!(val, 58.0); // 3^3 + 2*3^2 + 3*3 + 4 = 27 + 18 + 9 + 4 = 58
-    }
 
-    #[test]
-    fn test_eval_expression_function_simple() {
-        let mut ctx = EvalContext::new();
-
-        // Test double function
-        ctx.register_expression_function("double", &["x"], "x*2")
-            .unwrap();
-        let val = interp("double(7)", Some(Rc::new(ctx.clone()))).unwrap();
-        assert_eq!(val, 14.0);
-
-        // Test increment function
-        ctx.register_expression_function("inc", &["x"], "x+1")
-            .unwrap();
-        let val = interp("inc(41)", Some(Rc::new(ctx))).unwrap();
-        assert_eq!(val, 42.0);
-    }
 
     #[test]
     fn test_eval_native_function_simple() {
@@ -187,17 +161,11 @@ mod tests {
     }
 
     #[test]
-    fn test_eval_function_native_and_expression() {
-        let mut ctx = create_test_context();
+    fn test_eval_function_native() {
+        let ctx = create_test_context();
         // Native function - use the public API
-        let val = interp("sin(0)", Some(Rc::new(ctx.clone()))).unwrap();
+        let val = interp("sin(0)", Some(Rc::new(ctx))).unwrap();
         assert!((val - 0.0).abs() < 1e-10);
-
-        // Expression function
-        ctx.register_expression_function("double", &["x"], "x*2")
-            .unwrap();
-        let val2 = interp("double(5)", Some(Rc::new(ctx))).unwrap();
-        assert_eq!(val2, 10.0);
     }
 
     #[test]
@@ -610,7 +578,6 @@ mod tests {
         }
         // If cos wasn't registered by create_test_context and libm is enabled, this might fail
         if ctx
-            .function_registry
             .native_functions
             .contains_key(&"cos".try_into_function_name().unwrap())
             || cfg!(feature = "libm")
@@ -630,167 +597,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_override_builtin_expression() {
-        let mut ctx = create_test_context(); // Start with defaults (if enabled)
 
-        // Override 'cos' with an expression function
-        ctx.register_expression_function("cos", &["x"], "x * 10")
-            .unwrap();
-
-        // Create Rc once and clone as needed
-        let mut ctx_rc = Rc::new(ctx.clone());
-
-        // Override 'max' with an expression function that uses 'min'
-        // Ensure 'min' is available first
-        #[cfg(not(feature = "libm"))]
-        {
-            let _ = ctx.register_native_function("min", 2, |args| args[0].min(args[1]));
-            // Update Rc after modifying ctx
-            ctx_rc = Rc::new(ctx.clone());
-        }
-        // If min wasn't registered by create_test_context and libm is enabled, this might fail
-        if ctx
-            .function_registry
-            .native_functions
-            .contains_key(&"min".try_into_function_name().unwrap())
-            || cfg!(feature = "libm")
-        {
-            ctx.register_expression_function("max", &["a", "b"], "min(a, b)")
-                .unwrap();
-            // Update Rc after modifying ctx
-            ctx_rc = Rc::new(ctx.clone());
-
-            // Test overridden max
-            let val_max = interp("max(10, 2)", Some(ctx_rc.clone())).unwrap();
-            assert_eq!(val_max, 2.0, "Expression 'max' override failed");
-        } else {
-            // Cannot register max if min is unavailable
-            let reg_err = ctx.register_expression_function("max", &["a", "b"], "min(a, b)");
-            // Depending on when parsing/checking happens, this might succeed or fail
-            // If it succeeds, evaluation will fail later.
-            if reg_err.is_ok() {
-                // Update Rc after modifying ctx
-                ctx_rc = Rc::new(ctx.clone());
-                let eval_err = interp("max(10, 2)", Some(ctx_rc.clone())).unwrap_err();
-                assert!(matches!(eval_err, ExprError::UnknownFunction { name } if name == "min"));
-            }
-        }
-
-        // Test overridden cos
-        let val_cos = interp("cos(5)", Some(ctx_rc.clone())).unwrap();
-        assert_eq!(val_cos, 50.0, "Expression 'cos' override failed");
-
-        // Test a non-overridden function still works (sin)
-        #[cfg(not(feature = "libm"))]
-        {
-            let _ = ctx.register_native_function("sin", 1, |args| args[0].sin());
-            // Update Rc after modifying ctx
-            ctx_rc = Rc::new(ctx.clone());
-        }
-        if ctx
-            .function_registry
-            .native_functions
-            .contains_key(&"sin".try_into_function_name().unwrap())
-            || cfg!(feature = "libm")
-        {
-            let val_sin = interp("sin(0)", Some(ctx_rc.clone())).unwrap();
-            assert!(
-                (val_sin - 0.0).abs() < 1e-9,
-                "Built-in/default 'sin' failed after override"
-            );
-        } else {
-            let err = interp("sin(0)", Some(ctx_rc)).unwrap_err();
-            assert!(matches!(err, ExprError::UnknownFunction { .. }));
-        }
-    }
-
-    #[test]
-    fn test_expression_function_uses_correct_context() {
-        let mut ctx = create_test_context(); // Start with defaults (if enabled)
-        ctx.set_parameter("a", 10.0)
-            .expect("Failed to set parameter"); // Variable in outer context
-        ctx.constants
-            .insert("my_const".try_into_heapless().unwrap(), 100.0)
-            .expect("Failed to insert constant"); // Constant in outer context
-
-        // Define func1_const(x) = x + my_const
-        // Expression functions inherit constants.
-        ctx.register_expression_function("func1_const", &["x"], "x + my_const")
-            .unwrap();
-
-        // Create Rc and update after each ctx modification
-        let mut ctx_rc = Rc::new(ctx.clone());
-
-        let val1 = interp("func1_const(5)", Some(ctx_rc.clone())).unwrap();
-        assert_eq!(val1, 105.0, "func1_const should use constant from context");
-
-        // Define func_uses_outer_var(x) = x + a
-        ctx.register_expression_function("func_uses_outer_var", &["x"], "x + a")
-            .unwrap();
-        ctx_rc = Rc::new(ctx.clone());
-
-        // Add a test to check if 'a' is visible inside the function
-        let result = interp("func_uses_outer_var(5)", Some(ctx_rc.clone()));
-        match result {
-            Ok(val) => {
-                assert_eq!(
-                    val, 15.0,
-                    "func_uses_outer_var should use variable 'a' from context"
-                );
-            }
-            Err(e) => {
-                println!("Error evaluating func_uses_outer_var(5): {:?}", e);
-                panic!(
-                    "Expected Ok(15.0) for func_uses_outer_var(5), got error: {:?}",
-                    e
-                );
-            }
-        }
-
-        // Add a test for parameter shadowing
-        ctx.register_expression_function("shadow_test", &["a"], "a + 1")
-            .unwrap();
-        ctx_rc = Rc::new(ctx.clone());
-
-        let val_shadow = interp("shadow_test(7)", Some(ctx_rc.clone())).unwrap();
-        assert_eq!(
-            val_shadow, 8.0,
-            "Parameter 'a' should shadow context variable 'a'"
-        );
-
-        // Verify original 'a' in outer context is unchanged
-        let val_a = interp("a", Some(ctx_rc)).unwrap();
-        assert_eq!(val_a, 10.0, "Context 'a' should remain unchanged");
-    }
 
     // Additional tests for polynomial expression function and related checks
 
-    #[test]
-    fn test_polynomial_expression_function_direct() {
-        let mut ctx = EvalContext::new();
-        ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
-            .unwrap();
-
-        // Create Rc once
-        let ctx_rc = Rc::new(ctx);
-
-        // Test for x = 2
-        let result = interp("polynomial(2)", Some(ctx_rc.clone())).unwrap();
-        assert!(
-            (result - 26.0).abs() < 1e-10,
-            "Expected 26.0, got {}",
-            result
-        );
-
-        // Test for x = 3
-        let result = interp("polynomial(3)", Some(ctx_rc)).unwrap();
-        assert!(
-            (result - 58.0).abs() < 1e-10,
-            "Expected 58.0, got {}",
-            result
-        );
-    }
 
     #[test]
     fn test_polynomial_subexpressions() {
@@ -829,7 +639,7 @@ mod tests {
         let mut ctx = EvalContext::new();
 
         // Clear any auto-registered functions for clean test
-        ctx.function_registry = Rc::new(FunctionRegistry::default());
+        ctx.native_functions = Rc::new(crate::types::NativeFunctionMap::new());
 
         // Register the operators needed for the expression
         let _ = ctx.register_native_function("+", 2, |args| args[0] + args[1]);
@@ -853,80 +663,7 @@ mod tests {
         // Optionally, walk the AST and check node types here if desired
     }
 
-    // New test for debugging polynomial function and body evaluation
-    #[test]
-    fn test_polynomial_integration_debug() {
-        let mut ctx = EvalContext::new();
-        ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
-            .unwrap();
 
-        // Parse the expressions for debugging
-        // Create Rc for ctx
-        let ctx_rc = Rc::new(ctx.clone());
-
-        // Evaluate polynomial(2)
-        let result = interp("polynomial(2)", Some(ctx_rc)).unwrap();
-        println!("polynomial(2) = {}", result);
-
-        // Evaluate the body directly with x=2
-        let _ = ctx.set_parameter("x", 2.0);
-        let ctx_rc2 = Rc::new(ctx);
-        let direct_result = interp("x^3 + 2*x^2 + 3*x + 4", Some(ctx_rc2)).unwrap();
-        println!("Direct eval with x=2: {}", direct_result);
-    }
-
-    // Test for function argument passing and context mapping in polynomial
-    #[test]
-    fn test_polynomial_argument_mapping_debug() {
-        let mut ctx = EvalContext::new();
-        ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
-            .unwrap();
-
-        // Create Rc and update when ctx changes
-        let mut ctx_rc = Rc::new(ctx.clone());
-
-        // Test with a literal
-        let result_lit = interp("polynomial(10)", Some(ctx_rc.clone())).unwrap();
-        println!("polynomial(10) = {}", result_lit);
-        assert_eq!(result_lit, 1234.0);
-
-        // Test with a variable
-        let _ = ctx.set_parameter("z", 10.0);
-        ctx_rc = Rc::new(ctx.clone());
-
-        let result_var = interp("polynomial(z)", Some(ctx_rc.clone())).unwrap();
-        println!("polynomial(z) = {}", result_var);
-        assert_eq!(result_var, 1234.0);
-
-        // Test with a subexpression
-        let _ = ctx.set_parameter("a", 5.0);
-        let _ = ctx.set_parameter("b", 10.0);
-        ctx_rc = Rc::new(ctx.clone());
-
-        let result_sub = interp("polynomial(a + b / 2)", Some(ctx_rc.clone())).unwrap();
-        println!("polynomial(a + b / 2) = {}", result_sub);
-        assert_eq!(result_sub, 1234.0);
-
-        // Test with a nested polynomial call
-        let result_nested = interp("polynomial(polynomial(2))", Some(ctx_rc)).unwrap();
-        println!("polynomial(polynomial(2)) = {}", result_nested);
-    }
-    #[test]
-    fn test_polynomial_shadowing_variable() {
-        let mut ctx = EvalContext::new();
-        let _ = ctx.set_parameter("x", 100.0); // Shadowing variable
-        ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
-            .unwrap();
-
-        let ctx_rc = Rc::new(ctx);
-        let result = interp("polynomial(2)", Some(ctx_rc)).unwrap();
-
-        assert!(
-            (result - 26.0).abs() < 1e-10,
-            "Expected 26.0, got {}",
-            result
-        );
-    }
 
     //============= Recursion Tracking Tests =============//
 
@@ -948,41 +685,6 @@ mod tests {
         // so there's no need to check for reset behavior
     }
 
-    #[test]
-    fn test_nested_function_calls() {
-        // Test that nested function calls are properly tracked
-        let mut ctx = EvalContext::new();
-
-        // Register some simple functions that call each other
-        ctx.register_expression_function("double", &["x"], "x * 2")
-            .unwrap();
-        ctx.register_expression_function("triple", &["x"], "x * 3")
-            .unwrap();
-        ctx.register_expression_function("add_10", &["x"], "x + 10")
-            .unwrap();
-
-        // Create a nested call without recursion
-        let result = interp("double(triple(add_10(5)))", Some(Rc::new(ctx.clone())));
-
-        assert!(
-            result.is_ok(),
-            "Failed to evaluate nested calls: {:?}",
-            result.err()
-        );
-        assert_eq!(
-            result.unwrap(),
-            2.0 * 3.0 * (5.0 + 10.0),
-            "Incorrect result for nested calls"
-        );
-
-        // Verify the counter is reset
-        let depth = RECURSION_DEPTH.load(Ordering::Relaxed);
-        assert!(
-            depth < 10,
-            "Recursion depth not properly reset after nested calls, got {}",
-            depth
-        );
-    }
 
     #[test]
     fn test_recursion_depth_with_non_recursive_expressions() {
@@ -1069,61 +771,6 @@ mod tests {
         }
     }
 
-    // Test for AST caching effect on polynomial evaluation
-    #[test]
-    fn test_polynomial_ast_cache_effect() {
-        use std::rc::Rc;
 
-        let mut ctx = EvalContext::new();
-        // AST cache no longer needed with arena allocation
-        ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
-            .unwrap();
 
-        let expr = "polynomial(2)";
-
-        // Create an Rc for ctx
-        let ctx_rc = Rc::new(ctx);
-
-        // First evaluation (should parse and cache)
-        let result1 = crate::engine::interp(expr, Some(ctx_rc.clone())).unwrap();
-        println!("First eval with cache: {}", result1);
-
-        // Second evaluation (should use cache)
-        let result2 = crate::engine::interp(expr, Some(ctx_rc)).unwrap();
-        println!("Second eval with cache: {}", result2);
-
-        assert_eq!(result1, result2);
-        assert!((result1 - 26.0).abs() < 1e-10);
-    }
-
-    // Test for function overriding
-    #[test]
-    fn test_polynomial_function_overriding() {
-        let mut ctx = EvalContext::new();
-        ctx.register_expression_function("polynomial", &["x"], "x + 1")
-            .unwrap();
-        ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
-            .unwrap();
-
-        let ctx_rc = Rc::new(ctx);
-        let result = interp("polynomial(2)", Some(ctx_rc)).unwrap();
-
-        println!("polynomial(2) after overriding = {}", result);
-        assert!((result - 26.0).abs() < 1e-10);
-    }
-
-    // Test for built-in function name collision
-    #[test]
-    fn test_polynomial_name_collision_with_builtin() {
-        let mut ctx = EvalContext::new();
-        // Register a function named "sin" that overrides built-in
-        ctx.register_expression_function("sin", &["x"], "x + 100")
-            .unwrap();
-
-        let ctx_rc = Rc::new(ctx);
-        let result = interp("sin(2)", Some(ctx_rc)).unwrap();
-
-        println!("sin(2) with override = {}", result);
-        assert_eq!(result, 102.0);
-    }
 }

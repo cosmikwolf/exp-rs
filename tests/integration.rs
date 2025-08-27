@@ -874,69 +874,6 @@ fn test_advanced_native_functions() {
 }
 
 /// Level 10: Expression functions and YAML configuration
-#[test]
-fn test_expression_functions() {
-    // Create a context with some variables
-    #[cfg(not(feature = "libm"))]
-    let mut ctx = create_context();
-    #[cfg(feature = "libm")]
-    let mut ctx = EvalContext::new();
-    set_var(&mut ctx, "x", 5.0);
-    set_var(&mut ctx, "y", 10.0);
-
-    // Register an expression function that calculates the hypotenuse of a right triangle
-    ctx.register_expression_function("hypotenuse", &["a", "b"], "sqrt(a^2 + b^2)")
-        .unwrap();
-
-    // Test the expression function with variables
-    let result = interp("hypotenuse(x, y)", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    assert_approx_eq!(
-        result,
-        11.18034 as Real,
-        1e-5 as Real // Cast expected and epsilon
-    );
-
-    // Register an expression function that uses another expression function
-    ctx.register_expression_function(
-        "distance",
-        &["x1", "y1", "x2", "y2"],
-        "hypotenuse(x2 - x1, y2 - y1)",
-    )
-    .unwrap();
-
-    // Test the nested expression function
-    let result2 = interp("distance(0, 0, 3, 4)", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    assert_eq!(result2, 5.0, "distance(0, 0, 3, 4) should be 5.0");
-
-    // Register a more complex expression function
-    ctx.register_expression_function("polynomial", &["x"], "x^3 + 2*x^2 + 3*x + 4")
-        .unwrap();
-
-    // Test the polynomial function
-    let result3 = interp("polynomial(2)", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    println!("polynomial(2) = {}", result3); // Debug output
-    // For x=2: 2^3 + 2*2^2 + 3*2 + 4 = 8 + 8 + 6 + 4 = 26
-    assert_eq!(result3, 26.0, "polynomial(2) should be 26.0");
-
-    // Test expression function with a complex expression as argument
-    let result4 = interp("polynomial(x + y / 2)", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    let x = 5.0;
-    let y = 10.0;
-    let arg: Real = x + y / 2.0;
-    // For x=5, y=10: arg = 10.0
-    // polynomial(10) = 10^3 + 2*10^2 + 3*10 + 4 = 1000 + 200 + 30 + 4 = 1234
-    // Calculate expected value without using libm directly
-    let expected = arg.powf(3.0) + 2.0 * arg.powf(2.0) + 3.0 * arg + 4.0;
-    println!("polynomial({}) = {}", arg, result4);
-    println!("expected = {}", expected);
-    assert!(
-        (result4 - expected as Real).abs() < 1e-6,
-        "polynomial({}) should be {} (got {})",
-        arg,
-        expected,
-        result4
-    );
-}
 
 /// Level 11: Parsing and evaluating expressions from a configuration
 #[test]
@@ -1043,28 +980,10 @@ fn test_recursion_limits() {
     });
 
     // Now register our simple recursive function that just delegates to the native one
-    ctx.register_expression_function("recurse", &["x"], "recurse_sum(x)")
-        .unwrap();
+    // REMOVED: ctx.register_expression_function("recurse", &["x"], "recurse_sum(x)")
 
-    // Test with small values
-    let result = interp("recurse(5)", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    // Sum of 1+2+3+4+5 = 15
-    assert_eq!(result, 15.0, "recurse(5) should equal 15.0");
-
-    // Test with medium values
-    let result = interp("recurse(10)", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    // Sum of 1+2+3+...+10 = 55
-    assert_eq!(result, 55.0, "recurse(10) should equal 55.0");
-
-    // Test with formula result to verify
-    let result = interp("recurse(20)", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    // Sum of 1+2+3+...+20 = 20*21/2 = 210
-    assert_eq!(result, 210.0, "recurse(20) should equal 210.0");
-
-    // Test larger value
-    let result = interp("recurse(50)", Some(std::rc::Rc::new(ctx.clone()))).unwrap();
-    // Sum of 1+2+3+...+50 = 50*51/2 = 1275
-    assert_eq!(result, 1275.0, "recurse(50) should equal 1275.0");
+    // REMOVED: Tests for expression function 'recurse' that no longer exists
+    // since we removed expression functions from the context
 
     // Now let's implement a truly recursive function to test recursion limits
     // We'll need to do this with native functions since the expression syntax doesn't
@@ -1073,12 +992,11 @@ fn test_recursion_limits() {
     // Let's use the expression evaluator itself to handle the recursion
     // This will properly track recursion depth using our library's mechanism
     // Register a recursive expression function that calls itself
-    ctx.register_expression_function(
-        "recursive_sum",
-        &["n"],
-        "n <= 1 ? n : n + recursive_sum(n-1)",
-    )
-    .unwrap();
+    // REMOVED: ctx.register_expression_function(
+    //    "recursive_sum",
+    //    &["n"],
+    //    "n <= 1 ? n : n + recursive_sum(n-1)",
+    // )
 
     // Use a different approach that directly calculates the sum
     // without creating a recursion cycle between the interpreter and native code
@@ -1312,7 +1230,7 @@ fn test_recursion_limits() {
 
     // Skip the infinite recursion test since it's moved to a separate test
 
-    println!("Expression function recursion test passed!");
+    println!("Native function recursion test passed!");
 
     println!("All recursion tests passed successfully!");
 }

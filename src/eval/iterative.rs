@@ -548,13 +548,7 @@ impl<'arena> EvalEngine<'arena> {
             }
         }
 
-        // Try expression function from context (second priority) - clone it to avoid borrowing issues
-        let expr_func = ctx.get_expression_function(&name).cloned();
-        if let Some(func) = expr_func {
-            return self.process_expression_function(&func, args_start, arg_count, ctx_id);
-        }
-
-        // Try native function
+        // Try native function (expression functions no longer exist in context)
         if let Some(func) = ctx.get_native_function(&name) {
             if arg_count != func.arity {
                 return Err(ExprError::InvalidFunctionCall {

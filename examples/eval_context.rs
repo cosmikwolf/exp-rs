@@ -80,8 +80,7 @@ fn main() {
         let _ = ctx.register_native_function("exp", 1, c_fn!(exp));
         let _ = ctx.register_native_function("log", 1, c_fn!(log));
         let _ = ctx.register_native_function("sqrt", 1, c_fn!(sqrt));
-        ctx.register_expression_function("fancy", &["x"], "sin(x) + cos(x) + 42")
-            .unwrap();
+        // REMOVED: Expression functions no longer supported in context
     }
 
     #[cfg(feature = "f32")]
@@ -106,16 +105,15 @@ fn main() {
             let _ = ctx.register_native_function("sqrt", 1, c_fn!(sqrt));
         }
 
-        ctx.register_expression_function("fancy", &["x"], "sin(x) + cos(x) + 42")
-            .unwrap();
+        // REMOVED: Expression functions no longer supported in context
     }
 
     let exprs = [
         "sin(1.0)",
         "cos(1.0)",
         "sqrt(9)",
-        "fancy(0.5)",
-        "fancy(2.0) + sqrt(16)",
+        "sin(0.5) + cos(0.5) + 42",
+        "sin(2.0) + cos(2.0) + 42 + sqrt(16)",
     ];
 
     for expr in &exprs {

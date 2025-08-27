@@ -90,7 +90,7 @@ int main() {
   printf("\n4. Trying to register expression function with same name "
          "'double_it'...\n");
   int32_t expr_fn_result =
-      expr_context_add_expression_function(ctx, "double_it", "y", "y * 3");
+      expr_batch_add_expression_function(batch, "double_it", "y", "y * 3");
   if (expr_fn_result == 0) {
     printf("WARNING: Expected failure but expression function was registered "
            "successfully\n");
@@ -104,7 +104,7 @@ int main() {
   printf("\n4.5 Trying to register expression function with same name "
          "'double_it' a second time...\n");
   expr_fn_result =
-      expr_context_add_expression_function(ctx, "double_it", "y", "y * 3");
+      expr_batch_add_expression_function(batch, "double_it", "y", "y * 3");
   if (expr_fn_result == 0) {
     printf("WARNING: Expected failure but expression function was registered "
            "successfully\n");

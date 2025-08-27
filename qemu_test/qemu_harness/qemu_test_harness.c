@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 void qemu_printf(const char *fmt, ...) {
   char buf[256];
@@ -137,8 +138,7 @@ void qemu_exit(int status) {
 #define TIMER1_LOAD ((volatile uint32_t *)(CMSDK_TIMER1_BASE + 0x00))
 #define TIMER1_VALUE ((volatile uint32_t *)(CMSDK_TIMER1_BASE + 0x04))
 #define TIMER1_CONTROL ((volatile uint32_t *)(CMSDK_TIMER1_BASE + 0x08))
-#define TIMER1_INTCLR ((volatile uint32_t *)(CMSDK_TIMER1_BASE + 0x0C))
-#define TIMER1_RIS ((volatile uint32_t *)(CMSDK_TIMER1_BASE + 0x10))
+// TIMER1_INTCLR and TIMER1_RIS are already defined in qemu_test_harness.h
 #define TIMER1_MIS ((volatile uint32_t *)(CMSDK_TIMER1_BASE + 0x14))
 #define TIMER1_BGLOAD ((volatile uint32_t *)(CMSDK_TIMER1_BASE + 0x18))
 

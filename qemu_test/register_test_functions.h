@@ -5,8 +5,8 @@
 #include <math.h>
 
 // Function prototypes for registering math functions
-struct EvalContextOpaque* create_test_context(void);
-void register_test_math_functions(struct EvalContextOpaque* ctx);
+struct ExprContext* create_test_context(void);
+void register_test_math_functions(struct ExprContext* ctx);
 
 // Math function wrappers - use Real type from exp_rs.h
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))

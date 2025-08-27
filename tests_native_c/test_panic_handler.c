@@ -33,7 +33,7 @@ void test_panic_trigger() {
     // For now, let's try something that might overflow or cause internal errors
     
     // Try 1: Create a recursive expression function that should hit recursion limits
-    expr_context_add_expression_function(ctx, "recurse", "x", "recurse(x+1)");
+    expr_batch_add_expression_function(batch, "recurse", "x", "recurse(x+1)");
     expr_batch_add_expression(batch, "recurse(1)");
     
     int status = expr_batch_evaluate(batch, ctx);

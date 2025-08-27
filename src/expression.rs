@@ -539,27 +539,16 @@ mod tests {
     }
 
     #[test]
-    fn test_arena_batch_local_functions_override_context() {
+    fn test_arena_batch_local_functions() {
         let arena = Bump::new();
 
-        // Create context with a function
-        let mut ctx = EvalContext::new();
-        ctx.register_expression_function("calc", &["x"], "x * 2")
-            .unwrap();
-        let ctx = Rc::new(ctx);
+        // Create basic context
+        let ctx = Rc::new(EvalContext::new());
 
-        // Test 1: Use context function
+        // Test: Local arena function
         {
             let mut builder = ArenaBatchBuilder::new(&arena);
-            builder.add_expression("calc(5)").unwrap();
-            builder.eval(&ctx).unwrap();
-            assert_eq!(builder.get_result(0), Some(10.0)); // x * 2 = 10
-        }
-
-        // Test 2: Local function overrides context function
-        {
-            let mut builder = ArenaBatchBuilder::new(&arena);
-            // Register local function with same name (should override)
+            // Register local function
             builder.register_expression_function("calc", &["x"], "x * 3")
                 .unwrap();
             builder.add_expression("calc(5)").unwrap();
