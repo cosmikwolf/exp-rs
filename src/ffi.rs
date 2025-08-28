@@ -239,8 +239,9 @@ mod embedded_allocator {
     use super::*;
     use embedded_alloc::TlsfHeap;
     use core::alloc::{GlobalAlloc, Layout};
+    use core::sync::atomic::{AtomicUsize, Ordering};
 
-    use core::sync::atomic::{AtomicBool, Ordering};
+    use core::sync::atomic::AtomicBool;
     
     // Wrapper around TlsfHeap to track allocations
     pub struct TrackingHeap {
@@ -256,6 +257,10 @@ mod embedded_allocator {
             }
         }
         
+        pub fn is_initialized(&self) -> bool {
+            self.initialized.load(Ordering::Acquire)
+        }
+        
         pub unsafe fn init(&self, start_addr: usize, size: usize) {
             unsafe {
                 self.heap.init(start_addr, size);
@@ -263,12 +268,15 @@ mod embedded_allocator {
             self.initialized.store(true, Ordering::Release);
         }
         
-        // Auto-initialize if not already done
+        // Auto-initialize if not already done (uses default size)
         fn ensure_initialized(&self) {
             if !self.initialized.load(Ordering::Acquire) {
                 unsafe {
                     let heap_ptr = core::ptr::addr_of_mut!(HEAP_MEM);
-                    self.heap.init(heap_ptr as usize, HEAP_SIZE);
+                    let heap_size = CURRENT_HEAP_SIZE.load(Ordering::Acquire);
+                    let size = if heap_size == 0 { DEFAULT_HEAP_SIZE } else { heap_size };
+                    self.heap.init(heap_ptr as usize, size);
+                    CURRENT_HEAP_SIZE.store(size, Ordering::Release);
                 }
                 self.initialized.store(true, Ordering::Release);
             }
@@ -317,9 +325,13 @@ mod embedded_allocator {
     #[global_allocator]
     pub static HEAP: TrackingHeap = TrackingHeap::new();
 
-    // Static heap memory - 128KB to handle multiple large arenas
-    pub const HEAP_SIZE: usize = 1048576; // 1MB for native tests
-    pub static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+    // Maximum heap size (2MB for embedded, allows runtime configuration up to this limit)
+    pub const MAX_HEAP_SIZE: usize = 2 * 1024 * 1024; // 2MB maximum
+    pub const DEFAULT_HEAP_SIZE: usize = 1048576; // 1MB default
+    pub static mut HEAP_MEM: [MaybeUninit<u8>; MAX_HEAP_SIZE] = [MaybeUninit::uninit(); MAX_HEAP_SIZE];
+    
+    // Current configured heap size (initialized to 0, set by exp_rs_heap_init_with_size)
+    pub static CURRENT_HEAP_SIZE: AtomicUsize = AtomicUsize::new(0);
 }
 
 // When custom_cbindgen_alloc is NOT enabled, use standard system allocator
@@ -371,20 +383,71 @@ mod system_allocator {
     pub static HEAP: TrackingSystemHeap = TrackingSystemHeap;
 }
 
-// Ensure heap is initialized before any allocations
+// Initialize heap with default size (backward compatibility)
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_heap_init() {
+    exp_rs_heap_init_with_size(0); // Use default size
+}
+
+// Initialize heap with specified size
+// Returns 0 on success, negative error code on failure
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_heap_init_with_size(heap_size: usize) -> i32 {
     #[cfg(feature = "custom_cbindgen_alloc")]
     {
-        unsafe {
-            let heap_ptr = core::ptr::addr_of_mut!(embedded_allocator::HEAP_MEM);
-            embedded_allocator::HEAP.init(heap_ptr as usize, embedded_allocator::HEAP_SIZE);
+        use embedded_allocator::*;
+        
+        let size = if heap_size == 0 { DEFAULT_HEAP_SIZE } else { heap_size };
+        
+        // Validate size doesn't exceed maximum
+        if size > MAX_HEAP_SIZE {
+            return -1; // Size too large
         }
+        
+        // Check if already initialized
+        if HEAP.is_initialized() {
+            return -2; // Already initialized
+        }
+        
+        unsafe {
+            let heap_ptr = core::ptr::addr_of_mut!(HEAP_MEM);
+            HEAP.init(heap_ptr as usize, size);
+            CURRENT_HEAP_SIZE.store(size, core::sync::atomic::Ordering::Release);
+        }
+        0
     }
     #[cfg(not(feature = "custom_cbindgen_alloc"))]
     {
         // For system allocator, no initialization needed
-        // The system allocator is always ready to use
+        let _size = if heap_size == 0 { 1048576 } else { heap_size }; // Default 1MB
+        // No actual initialization needed for system allocator
+        0
+    }
+}
+
+// Get current configured heap size
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_heap_size() -> usize {
+    #[cfg(feature = "custom_cbindgen_alloc")]
+    {
+        embedded_allocator::CURRENT_HEAP_SIZE.load(core::sync::atomic::Ordering::Acquire)
+    }
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    {
+        0 // System allocator doesn't have a fixed heap size
+    }
+}
+
+// Get maximum heap size
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_max_heap_size() -> usize {
+    #[cfg(feature = "custom_cbindgen_alloc")]
+    {
+        embedded_allocator::MAX_HEAP_SIZE
+    }
+    #[cfg(not(feature = "custom_cbindgen_alloc"))]
+    {
+        0 // System allocator doesn't have a maximum
     }
 }
 
