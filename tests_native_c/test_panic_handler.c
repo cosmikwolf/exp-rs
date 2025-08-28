@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include "../include/exp_rs.h"
+#include "common_allocator.h"
 
 // Global panic flag
 static int panic_flag = 0;
@@ -46,6 +47,7 @@ void test_panic_trigger() {
 }
 
 int main() {
+    init_memory_tracking();
     printf("=== Panic Handler Test ===\n\n");
     
     // Test 1: Register panic handler

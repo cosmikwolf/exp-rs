@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <math.h>
 #include "../include/exp_rs.h"
+#include "common_allocator.h"
 
 // Test pattern-based architecture where different channels have different functions
 int main() {
+    init_memory_tracking();
     printf("=== Pattern Isolation Test ===\n\n");
     
     // Create shared context with common functions

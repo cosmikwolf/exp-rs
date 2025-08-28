@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "common_allocator.h"
 
 #ifdef __APPLE__
 #include <malloc/malloc.h>
@@ -65,6 +66,7 @@ size_t get_context_memory_usage(ExprContext *ctx) {
 }
 
 int main() {
+  init_memory_tracking();
   printf("\n==== Empty Context Test ====\n\n");
 
   // Create empty context

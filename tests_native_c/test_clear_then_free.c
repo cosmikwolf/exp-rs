@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "exp_rs.h"
+#include "common_allocator.h"
 
 // Test that clear followed by free works correctly
 void test_clear_then_free() {
@@ -132,6 +133,7 @@ void test_clear_preserves_validity() {
 }
 
 int main() {
+    init_memory_tracking();
     printf("\n==== Clear and Free Interaction Tests ====\n\n");
     
     // FFI error codes

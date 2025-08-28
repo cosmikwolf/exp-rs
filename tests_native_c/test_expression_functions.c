@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <math.h>
 #include "../include/exp_rs.h"
+#include "common_allocator.h"
 
 int main() {
+    init_memory_tracking();
     printf("=== Expression Function Test ===\n\n");
     
     // Create context

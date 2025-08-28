@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <math.h>
 #include "exp_rs.h"
+#include "common_allocator.h"
 
 // Helper to check if an error code indicates parse error
 int is_parse_error(int32_t code) {
@@ -425,6 +426,7 @@ void test_boundary_conditions() {
 
 
 int main() {
+    init_memory_tracking();
     printf("\n==== Expression Error Handling Tests ====\n\n");
     
     test_invalid_expressions();

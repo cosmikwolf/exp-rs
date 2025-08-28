@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <setjmp.h>
 #include "exp_rs.h"
+#include "common_allocator.h"
 
 // FFI error codes from exp_rs.h
 #define FFI_ERROR_NULL_POINTER -1
@@ -222,6 +223,7 @@ void test_invalid_pointer_detection() {
 }
 
 int main() {
+    init_memory_tracking();
     printf("\n==== Double-Free Protection Tests ====\n\n");
     
     test_double_free_protection();
