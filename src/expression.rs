@@ -557,3 +557,16 @@ mod tests {
         }
     }
 }
+
+// Implement Drop to manually free heap-allocated strings in ExpressionFunction objects
+// This prevents memory leaks when the batch contains expression functions
+impl<'arena> Drop for ArenaBatchBuilder<'arena> {
+    fn drop(&mut self) {
+        // Manually clear local functions to ensure String objects are dropped
+        // This is important because if the arena is dropped before this builder,
+        // the String objects won't get their destructors called
+        if let Some(funcs) = self.local_functions {
+            funcs.borrow_mut().clear();
+        }
+    }
+}
