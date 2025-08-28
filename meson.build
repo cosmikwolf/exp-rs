@@ -32,10 +32,11 @@ cargo_profile_flag = ['--release']
 
 # Build Rust static library using cargo build
 if get_option('test_native')
+  message('Building for native tests in ' + meson.current_source_dir())
   # Native build for host tests
   exp_rs_build = custom_target(
     'cargo_build',
-    output: 'libexp_rs.a',
+    output: ['libexp_rs.a', 'exp_rs.h'],
     command: [
       'cargo',
       'build',
@@ -61,10 +62,19 @@ if get_option('test_native')
     console: true,
   )
 else
+  message(
+    'Cross-compiling for QEMU tests in '
+    + meson.current_build_dir()
+    + 'with features:',
+  )
+  message(
+    '--features', ','.join(rust_features),
+  )
+
   # Cross-compilation build for QEMU tests
   exp_rs_build = custom_target(
     'cargo_build',
-    output: 'libexp_rs.a',
+    output: ['libexp_rs.a', 'exp_rs.h'],
     command: [
       'cargo',
       'build',
@@ -73,20 +83,24 @@ else
       cargo_profile_flag,
       '--no-default-features',
       '--features', ','.join(rust_features),
-      '--target-dir', meson.current_build_dir(),
+      # '--target-dir', meson.current_build_dir(),
       '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
       '--lib', '&&',
       'cp',
-      meson.current_source_dir() + '/include/exp_rs.h',
-      meson.current_build_dir(),
+      meson.current_source_dir()
+      + '/target/cortex-m7-strict/'
+      + cargo_profile
+      + '/exp_rs.h',
+      meson.current_build_dir() + '/exp_rs.h',
       '&&',
       'cp',
-      meson.current_build_dir()
-      + '/cortex-m7-strict/'
+      meson.current_source_dir()
+      + '/target/cortex-m7-strict/'
       + cargo_profile
       + '/libexp_rs.a',
       meson.current_build_dir() + '/libexp_rs.a',
     ],
+    # depend_files: files(meson.current_source_dir()),
     build_always_stale: false,
     build_by_default: false,
     console: true,
@@ -94,9 +108,9 @@ else
 endif
 
 exp_rs_dep = declare_dependency(
-  # sources: ['src/ffi.rs'],
-  include_directories: include_directories('include'),
-  link_with: exp_rs_build,
+  link_with: exp_rs_build[0],
+  sources: exp_rs_build[1],
+  include_directories: include_directories('./'),
 )
 
 # Include the qemu_test subdir if building qemu tests

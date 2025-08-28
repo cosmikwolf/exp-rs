@@ -137,14 +137,12 @@ mod allocator {
     // External function declarations
     #[cfg(feature = "custom_cbindgen_alloc")]
     unsafe extern "C" {
-        // Use custom allocation functions provided by the user
         fn exp_rs_malloc(size: usize) -> *mut core::ffi::c_void;
         fn exp_rs_free(ptr: *mut core::ffi::c_void);
     }
 
     #[cfg(not(feature = "custom_cbindgen_alloc"))]
     unsafe extern "C" {
-        // Use standard C malloc/free
         fn malloc(size: usize) -> *mut core::ffi::c_void;
         fn free(ptr: *mut core::ffi::c_void);
     }
@@ -604,7 +602,6 @@ pub extern "C" fn expr_context_add_function(
         None => -4, // Cannot get mutable access
     }
 }
-
 
 /// Add an expression function to a batch
 ///

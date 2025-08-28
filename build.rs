@@ -5,13 +5,25 @@ fn main() {
         return;
     }
 
+    // print out all the environment variables for debugging
+    // for (key, value) in std::env::vars() {
+    //     println!("cargo:warning={}={}", key, value);
+    // }
+
     let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let out_dir = "include";
+    let out_dir = std::env::var("OUT_DIR").unwrap();
 
     // Ensure the include directory exists
-    std::fs::create_dir_all(out_dir).expect("Failed to create include directory");
+    std::fs::create_dir_all(out_dir.clone()).expect("Failed to create include directory");
 
-    let header_path = std::path::Path::new(&out_dir).join("exp_rs.h");
+    let header_path = std::path::Path::new(&out_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("exp_rs.h");
 
     // Create a config for cbindgen
     let mut config =
@@ -32,6 +44,7 @@ fn main() {
     } else if std::env::var("CARGO_FEATURE_F32").is_ok() {
         after_includes_string.push("#define USE_F32".to_string());
     }
+
     if std::env::var("CARGO_FEATURE_CUSTOM_CBINDGEN_ALLOC").is_ok() {
         after_includes_string.push("#define EXP_RS_CUSTOM_ALLOC".to_string());
     }

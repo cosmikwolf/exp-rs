@@ -39,5 +39,10 @@
     ],
     "deny": []
   },
-  "enableAllProjectMcpServers": false
+  "enableAllProjectMcpServers": false,
+  "enabledMcpjsonServers": [
+    "rust-tools",
+    "context7",
+    "tree-sitter"
+  ]
 }

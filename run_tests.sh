@@ -97,19 +97,19 @@ check_reconfigure() {
 	# The output format is like: "  use_f32  true  Enable 32-bit..."
 	if ! cd "$BUILD_DIR" 2>/dev/null; then
 		echo "Error: Cannot access build directory $BUILD_DIR"
-		return 0  # Force reconfigure
+		return 0 # Force reconfigure
 	fi
-	
+
 	current_use_f32=$(meson configure 2>/dev/null | grep -E "^\s*use_f32\s" | awk '{print $2}' | head -1)
 	current_test_native=$(meson configure 2>/dev/null | grep -E "^\s*test_native\s" | awk '{print $2}' | head -1)
 	current_qemu_tests=$(meson configure 2>/dev/null | grep -E "^\s*enable_exprs_qemu_tests\s" | awk '{print $2}' | head -1)
-	
+
 	cd - >/dev/null
-	
+
 	# If any values are empty, force reconfiguration
 	if [ -z "$current_use_f32" ] || [ -z "$current_test_native" ] || [ -z "$current_qemu_tests" ]; then
 		echo "Warning: Could not read current meson configuration. Forcing reconfigure."
-		return 0  # Force reconfigure
+		return 0 # Force reconfigure
 	fi
 
 	# Determine expected values
@@ -187,13 +187,14 @@ setup_meson() {
 
 	# Test target
 	if [ "$TEST_TARGET" = "native" ]; then
-		meson_args+=("-Dtest_native=true")
-		meson_args+=("-Dcustom_cbindgen_alloc=true")
-		meson_args+=("-Denable_exprs_qemu_tests=false")
+		meson_args+=("-D" "test_native=true")
+		meson_args+=("-D" "custom_cbindgen_alloc=true")
+		meson_args+=("-D" "enable_exprs_qemu_tests=false")
 	else
 		meson_args+=("--cross-file=qemu_test/qemu_harness/arm-cortex-m7-qemu.ini")
-		meson_args+=("-Dtest_native=false")
-		meson_args+=("-Denable_exprs_qemu_tests=true")
+		meson_args+=("-D" "test_native=false")
+		meson_args+=("-D" "custom_cbindgen_alloc=true")
+		meson_args+=("-D" "enable_exprs_qemu_tests=true")
 	fi
 
 	if [ "$reconfigure" = true ]; then
