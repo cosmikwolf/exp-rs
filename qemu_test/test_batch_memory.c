@@ -12,7 +12,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Simple memory tracking for embedded
+// Try to include dladdr for symbol resolution
+#ifdef __GLIBC__
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#define HAS_DLADDR 1
+#else
+#define HAS_DLADDR 0
+#endif
+
+// Memory tracking for embedded using allocation table
 static size_t total_allocated = 0;
 static size_t total_freed = 0;
 static size_t current_allocated = 0;
@@ -20,9 +29,29 @@ static size_t peak_allocated = 0;
 static size_t allocation_count = 0;
 static size_t free_count = 0;
 
-// Simple allocation tracking - just counters (no headers to avoid Bumpalo
-// conflicts) Bumpalo overwrites any headers we add, so we use simple
-// counter-based tracking
+// Allocation table to track individual allocations with caller info
+#define MAX_ALLOCATIONS 2000
+static struct {
+  void *ptr;
+  size_t size;
+  void *caller;  // Who allocated this memory
+} allocation_table[MAX_ALLOCATIONS];
+static int allocation_table_size = 0;
+
+// Helper function to format caller address with symbol name if available
+static void format_caller(void *addr, char *buffer, size_t buffer_size) {
+#if HAS_DLADDR
+    Dl_info info;
+    if (dladdr(addr, &info) && info.dli_sname) {
+        snprintf(buffer, buffer_size, "%s+%p", info.dli_sname, 
+                 (void*)((char*)addr - (char*)info.dli_saddr));
+    } else {
+        snprintf(buffer, buffer_size, "%p", addr);
+    }
+#else
+    snprintf(buffer, buffer_size, "%p", addr);
+#endif
+}
 
 // Helper to show arena usage with detailed information
 void show_arena_usage(ExprBatch *batch, const char *label) {
@@ -42,26 +71,79 @@ void *exp_rs_malloc(size_t size) {
   void *ptr = malloc(size);
 
   if (ptr) {
-    // Simple counter-based tracking (no headers that Bumpalo can overwrite)
+    // Track allocation in table with caller info
+    if (allocation_table_size < MAX_ALLOCATIONS) {
+      allocation_table[allocation_table_size].ptr = ptr;
+      allocation_table[allocation_table_size].size = size;
+      allocation_table[allocation_table_size].caller = __builtin_return_address(0);
+      allocation_table_size++;
+    }
+    
+    // Update counters
     total_allocated += size;
     current_allocated += size;
     allocation_count++;
     if (current_allocated > peak_allocated) {
       peak_allocated = current_allocated;
     }
-    qemu_printf("[ALLOC] %d bytes at %p (total: %d, count: %d)\n", (int)size,
-                ptr, (int)current_allocated, (int)allocation_count);
+    qemu_printf("[ALLOC] %d bytes at %p (total: %d, count: %d, table: %d)\n", 
+                (int)size, ptr, (int)current_allocated, (int)allocation_count, allocation_table_size);
   }
   return ptr;
 }
 
 void exp_rs_free(void *ptr) {
   if (ptr) {
+    size_t freed_size = 0;
+    
+    // Find allocation in table and remove it
+    for (int i = 0; i < allocation_table_size; i++) {
+      if (allocation_table[i].ptr == ptr) {
+        freed_size = allocation_table[i].size;
+        void *alloc_caller = allocation_table[i].caller;
+        void *free_caller = __builtin_return_address(0);
+        
+        char alloc_caller_str[256];
+        char free_caller_str[256];
+        format_caller(alloc_caller, alloc_caller_str, sizeof(alloc_caller_str));
+        format_caller(free_caller, free_caller_str, sizeof(free_caller_str));
+        
+        qemu_printf("[FREE] ptr %p allocated by %s, freed by %s\n", 
+                    ptr, alloc_caller_str, free_caller_str);
+        
+        // Remove entry by moving last entry to this position
+        allocation_table[i] = allocation_table[allocation_table_size - 1];
+        allocation_table_size--;
+        break;
+      }
+    }
+    
+    // Update counters
+    if (freed_size > 0) {
+      current_allocated -= freed_size;
+      total_freed += freed_size;
+    }
     free_count++;
-    qemu_printf("[FREE] ptr %p (free count: %d)\n", ptr, (int)free_count);
+    
+    qemu_printf("[FREE] ptr %p (freed: %d bytes, free count: %d, table: %d)\n", 
+                ptr, (int)freed_size, (int)free_count, allocation_table_size);
     free(ptr);
-    // Note: We can't accurately track freed bytes because Bumpalo overwrites
-    // our tracking headers when it does internal bump allocation
+  }
+}
+
+// Helper function to dump remaining allocations
+void dump_remaining_allocations(void) {
+  if (allocation_table_size > 0) {
+    qemu_printf("\n=== REMAINING ALLOCATIONS ===\n");
+    for (int i = 0; i < allocation_table_size; i++) {
+      char caller_str[256];
+      format_caller(allocation_table[i].caller, caller_str, sizeof(caller_str));
+      qemu_printf("LEAK: %d bytes at %p allocated by %s\n", 
+                  (int)allocation_table[i].size, 
+                  allocation_table[i].ptr, 
+                  caller_str);
+    }
+    qemu_printf("=== END REMAINING ALLOCATIONS ===\n");
   }
 }
 
@@ -591,6 +673,9 @@ int main(void) {
   if (ctx) {
     expr_context_free(ctx);
   }
+
+  // Dump any remaining allocations
+  dump_remaining_allocations();
 
   // Final report
   qemu_printf("\n");
