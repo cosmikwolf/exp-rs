@@ -3,5 +3,6 @@
 !.aider.conf
 /target
 /build*/
+/.docs-cache
 CLAUDE.md
 CONVENTIONS.md
