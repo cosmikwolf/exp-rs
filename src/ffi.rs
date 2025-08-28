@@ -77,7 +77,7 @@ use bumpalo::Bump;
 use core::ffi::{CStr, c_char, c_void};
 use core::mem::MaybeUninit;
 use core::ptr;
-use embedded_alloc::TlsfHeap;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 // Re-export for external visibility
 pub use crate::expression::ArenaBatchBuilder as ArenaBatchBuilderExport;
@@ -123,32 +123,119 @@ impl Drop for BatchWithArena {
 }
 
 // ============================================================================
-// Global Allocator using embedded-alloc TlsfHeap
+// Global Allocator - conditional based on custom_cbindgen_alloc feature
 // ============================================================================
 
-// Global heap allocator using TLSF (Two-Level Segregated Fit) algorithm
-// This provides O(1) allocation/deallocation with good fragmentation resistance
-#[global_allocator]
-static HEAP: TlsfHeap = TlsfHeap::empty();
+// Allocation tracking
+static TOTAL_ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+static TOTAL_FREED: AtomicUsize = AtomicUsize::new(0);
+static ALLOCATION_COUNT: AtomicUsize = AtomicUsize::new(0);
+static FREE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-// Static heap memory - 128KB to handle multiple large arenas
-// This includes space for bumpalo arenas and other allocations
-const HEAP_SIZE: usize = 131072;
-static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+// When custom_cbindgen_alloc is enabled, use TlsfHeap for embedded targets
+#[cfg(feature = "custom_cbindgen_alloc")]
+mod embedded_allocator {
+    use super::*;
+    use embedded_alloc::TlsfHeap;
+    use core::alloc::{GlobalAlloc, Layout};
 
-// For non-custom allocator builds, initialize during static initialization
-#[cfg(not(feature = "custom_cbindgen_alloc"))]
-fn init_heap_once() {
     use core::sync::atomic::{AtomicBool, Ordering};
-    static HEAP_INITIALIZED: AtomicBool = AtomicBool::new(false);
-
-    if !HEAP_INITIALIZED.load(Ordering::Acquire) {
-        unsafe {
-            let heap_ptr = core::ptr::addr_of_mut!(HEAP_MEM);
-            HEAP.init(heap_ptr as usize, HEAP_SIZE);
-        }
-        HEAP_INITIALIZED.store(true, Ordering::Release);
+    
+    // Wrapper around TlsfHeap to track allocations
+    pub struct TrackingHeap {
+        heap: TlsfHeap,
+        initialized: AtomicBool,
     }
+
+    impl TrackingHeap {
+        pub const fn new() -> Self {
+            Self {
+                heap: TlsfHeap::empty(),
+                initialized: AtomicBool::new(false),
+            }
+        }
+        
+        pub unsafe fn init(&self, start_addr: usize, size: usize) {
+            unsafe {
+                self.heap.init(start_addr, size);
+            }
+            self.initialized.store(true, Ordering::Release);
+        }
+        
+        // Auto-initialize if not already done
+        fn ensure_initialized(&self) {
+            if !self.initialized.load(Ordering::Acquire) {
+                unsafe {
+                    let heap_ptr = core::ptr::addr_of_mut!(HEAP_MEM);
+                    self.heap.init(heap_ptr as usize, HEAP_SIZE);
+                }
+                self.initialized.store(true, Ordering::Release);
+            }
+        }
+    }
+
+    unsafe impl GlobalAlloc for TrackingHeap {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            self.ensure_initialized();
+            let ptr = unsafe { self.heap.alloc(layout) };
+            if !ptr.is_null() {
+                TOTAL_ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
+                ALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
+            }
+            ptr
+        }
+        
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            self.ensure_initialized();
+            unsafe {
+                self.heap.dealloc(ptr, layout);
+            }
+            TOTAL_FREED.fetch_add(layout.size(), Ordering::Relaxed);
+            FREE_COUNT.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    // Global heap allocator using TLSF (Two-Level Segregated Fit) algorithm
+    #[global_allocator]
+    pub static HEAP: TrackingHeap = TrackingHeap::new();
+
+    // Static heap memory - 128KB to handle multiple large arenas
+    pub const HEAP_SIZE: usize = 1048576; // 1MB for native tests
+    pub static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+}
+
+// When custom_cbindgen_alloc is NOT enabled, use standard system allocator
+#[cfg(not(feature = "custom_cbindgen_alloc"))]
+mod system_allocator {
+    use super::*;
+    extern crate std;
+    use std::alloc::{GlobalAlloc, Layout, System};
+
+    // Wrapper around System allocator to track allocations
+    pub struct TrackingSystemHeap;
+
+    unsafe impl GlobalAlloc for TrackingSystemHeap {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            let ptr = unsafe { System.alloc(layout) };
+            if !ptr.is_null() {
+                TOTAL_ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
+                ALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
+            }
+            ptr
+        }
+        
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            unsafe {
+                System.dealloc(ptr, layout);
+            }
+            TOTAL_FREED.fetch_add(layout.size(), Ordering::Relaxed);
+            FREE_COUNT.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    // Global heap allocator using standard system allocator
+    #[global_allocator]
+    pub static HEAP: TrackingSystemHeap = TrackingSystemHeap;
 }
 
 // Ensure heap is initialized before any allocations
@@ -157,15 +244,45 @@ pub extern "C" fn exp_rs_heap_init() {
     #[cfg(feature = "custom_cbindgen_alloc")]
     {
         unsafe {
-            let heap_ptr = core::ptr::addr_of_mut!(HEAP_MEM);
-            HEAP.init(heap_ptr as usize, HEAP_SIZE);
+            let heap_ptr = core::ptr::addr_of_mut!(embedded_allocator::HEAP_MEM);
+            embedded_allocator::HEAP.init(heap_ptr as usize, embedded_allocator::HEAP_SIZE);
         }
     }
     #[cfg(not(feature = "custom_cbindgen_alloc"))]
     {
-        init_heap_once();
+        // For system allocator, no initialization needed
+        // The system allocator is always ready to use
     }
 }
+
+// Get allocation statistics for C code
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_total_allocated() -> usize {
+    TOTAL_ALLOCATED.load(Ordering::Relaxed)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_total_freed() -> usize {
+    TOTAL_FREED.load(Ordering::Relaxed)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_allocation_count() -> usize {
+    ALLOCATION_COUNT.load(Ordering::Relaxed)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_free_count() -> usize {
+    FREE_COUNT.load(Ordering::Relaxed)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_current_allocated() -> usize {
+    let allocated = TOTAL_ALLOCATED.load(Ordering::Relaxed);
+    let freed = TOTAL_FREED.load(Ordering::Relaxed);
+    allocated.saturating_sub(freed)
+}
+
 
 // Critical section implementation for single-core ARM targets
 #[cfg(all(target_arch = "arm", not(test)))]
@@ -191,6 +308,21 @@ unsafe fn _critical_section_1_0_release(restore_state: critical_section::RawRest
         }
     }
     // If bit 0 was set, interrupts were already disabled, so leave them disabled
+}
+
+// Critical section implementation for native/host targets (tests and native builds)
+#[cfg(not(all(target_arch = "arm", not(test))))]
+#[unsafe(no_mangle)]
+fn _critical_section_1_0_acquire() -> critical_section::RawRestoreState {
+    // For native builds, we don't need real critical sections
+    // Just return a dummy value - there are no interrupts to disable
+    0
+}
+
+#[cfg(not(all(target_arch = "arm", not(test))))]
+#[unsafe(no_mangle)]
+unsafe fn _critical_section_1_0_release(_restore_state: critical_section::RawRestoreState) {
+    // For native builds, no-op - there are no interrupts to restore
 }
 
 // ============================================================================
@@ -419,18 +551,6 @@ pub extern "C" fn expr_context_native_function_count(ctx: *const ExprContext) ->
     }
 }
 
-/// Get the count of expression functions in a context
-#[unsafe(no_mangle)]
-pub extern "C" fn expr_context_expression_function_count(ctx: *const ExprContext) -> usize {
-    if ctx.is_null() {
-        return 0;
-    }
-
-    unsafe {
-        let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
-        ctx.list_expression_functions().len()
-    }
-}
 
 /// Get a native function name by index
 /// Returns the length of the name, or 0 if index is out of bounds
@@ -468,41 +588,6 @@ pub extern "C" fn expr_context_get_native_function_name(
     }
 }
 
-/// Get an expression function name by index
-/// Returns the length of the name, or 0 if index is out of bounds
-/// If buffer is NULL, just returns the length needed
-#[unsafe(no_mangle)]
-pub extern "C" fn expr_context_get_expression_function_name(
-    ctx: *const ExprContext,
-    index: usize,
-    buffer: *mut u8,
-    buffer_size: usize,
-) -> usize {
-    if ctx.is_null() {
-        return 0;
-    }
-
-    unsafe {
-        let ctx = &*(ctx as *const alloc::rc::Rc<EvalContext>);
-        let functions = ctx.list_expression_functions();
-
-        if index >= functions.len() {
-            return 0;
-        }
-
-        let name = &functions[index];
-        let name_bytes = name.as_bytes();
-
-        if buffer.is_null() {
-            return name_bytes.len();
-        }
-
-        let copy_len = core::cmp::min(name_bytes.len(), buffer_size);
-        core::ptr::copy_nonoverlapping(name_bytes.as_ptr(), buffer, copy_len);
-
-        name_bytes.len()
-    }
-}
 
 /// Add a native function to the context
 ///

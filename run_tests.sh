@@ -9,6 +9,7 @@ TEST_NAME=""
 FLOAT_MODE="f64" # Default to f64 mode
 LIST_TESTS=0
 TEST_TARGET="native" # Default to native tests
+ALLOCATOR_MODE="system" # Default to system allocator for native tests
 
 show_help() {
 	echo "Usage: $0 [options]"
@@ -21,6 +22,9 @@ show_help() {
 	echo "  -v, --verbose     Run tests with verbose output"
 	echo "  -t, --test NAME   Run a specific test by name"
 	echo "  -m, --mode MODE   Float mode: f32 or f64 (default: f64)"
+	echo "  -a, --allocator MODE  Allocator mode for native tests: system or custom (default: system)"
+	echo "                        system = uses standard malloc with Rust tracking"
+	echo "                        custom = uses TlsfHeap with C-side tracking"
 	echo "  -l, --list        List all available tests for the selected target"
 	echo "  -h, --help        Show this help message"
 }
@@ -67,6 +71,20 @@ while [ "$#" -gt 0 ]; do
 			exit 1
 		fi
 		;;
+	-a | --allocator)
+		if [ -n "$2" ]; then
+			if [ "$2" = "system" ] || [ "$2" = "custom" ]; then
+				ALLOCATOR_MODE="$2"
+				shift 2
+			else
+				echo "Error: --allocator must be either system or custom"
+				exit 1
+			fi
+		else
+			echo "Error: --allocator requires a value (system or custom)"
+			exit 1
+		fi
+		;;
 	-l | --list)
 		LIST_TESTS=1
 		shift
@@ -88,9 +106,11 @@ check_reconfigure() {
 	local current_use_f32
 	local current_test_native
 	local current_qemu_tests
+	local current_custom_alloc
 	local expected_use_f32
 	local expected_test_native
 	local expected_qemu_tests
+	local expected_custom_alloc
 	local needs_reconfigure=0
 
 	# Get current configuration - meson configure shows values in the second column
@@ -103,11 +123,12 @@ check_reconfigure() {
 	current_use_f32=$(meson configure 2>/dev/null | grep -E "^\s*use_f32\s" | awk '{print $2}' | head -1)
 	current_test_native=$(meson configure 2>/dev/null | grep -E "^\s*test_native\s" | awk '{print $2}' | head -1)
 	current_qemu_tests=$(meson configure 2>/dev/null | grep -E "^\s*enable_exprs_qemu_tests\s" | awk '{print $2}' | head -1)
+	current_custom_alloc=$(meson configure 2>/dev/null | grep -E "^\s*custom_cbindgen_alloc\s" | awk '{print $2}' | head -1)
 
 	cd - >/dev/null
 
 	# If any values are empty, force reconfiguration
-	if [ -z "$current_use_f32" ] || [ -z "$current_test_native" ] || [ -z "$current_qemu_tests" ]; then
+	if [ -z "$current_use_f32" ] || [ -z "$current_test_native" ] || [ -z "$current_qemu_tests" ] || [ -z "$current_custom_alloc" ]; then
 		echo "Warning: Could not read current meson configuration. Forcing reconfigure."
 		return 0 # Force reconfigure
 	fi
@@ -122,9 +143,17 @@ check_reconfigure() {
 	if [ "$TEST_TARGET" = "native" ]; then
 		expected_test_native="true"
 		expected_qemu_tests="false"
+		# Set custom allocator based on allocator mode for native tests
+		if [ "$ALLOCATOR_MODE" = "custom" ]; then
+			expected_custom_alloc="true"
+		else
+			expected_custom_alloc="false"
+		fi
 	else
 		expected_test_native="false"
 		expected_qemu_tests="true"
+		# QEMU tests always use custom allocator
+		expected_custom_alloc="true"
 	fi
 
 	# Debug output for troubleshooting
@@ -132,6 +161,8 @@ check_reconfigure() {
 		echo "DEBUG: current_use_f32='$current_use_f32' expected_use_f32='$expected_use_f32'"
 		echo "DEBUG: current_test_native='$current_test_native' expected_test_native='$expected_test_native'"
 		echo "DEBUG: current_qemu_tests='$current_qemu_tests' expected_qemu_tests='$expected_qemu_tests'"
+		echo "DEBUG: current_custom_alloc='$current_custom_alloc' expected_custom_alloc='$expected_custom_alloc'"
+		echo "DEBUG: allocator_mode='$ALLOCATOR_MODE'"
 	fi
 
 	# Check if reconfiguration is needed
@@ -147,6 +178,11 @@ check_reconfigure() {
 
 	if [ "$current_qemu_tests" != "$expected_qemu_tests" ]; then
 		echo "Test target changed: QEMU tests current='$current_qemu_tests', expected='$expected_qemu_tests'"
+		needs_reconfigure=1
+	fi
+
+	if [ "$current_custom_alloc" != "$expected_custom_alloc" ]; then
+		echo "Allocator mode changed: current='$current_custom_alloc', expected='$expected_custom_alloc'"
 		needs_reconfigure=1
 	fi
 
@@ -188,8 +224,13 @@ setup_meson() {
 	# Test target
 	if [ "$TEST_TARGET" = "native" ]; then
 		meson_args+=("-D" "test_native=true")
-		meson_args+=("-D" "custom_cbindgen_alloc=true")
 		meson_args+=("-D" "enable_exprs_qemu_tests=false")
+		# Set custom allocator based on allocator mode
+		if [ "$ALLOCATOR_MODE" = "custom" ]; then
+			meson_args+=("-D" "custom_cbindgen_alloc=true")
+		else
+			meson_args+=("-D" "custom_cbindgen_alloc=false")
+		fi
 	else
 		meson_args+=("--cross-file=qemu_test/qemu_harness/arm-cortex-m7-qemu.ini")
 		meson_args+=("-D" "test_native=false")
@@ -220,7 +261,11 @@ fi
 
 # If list tests is requested, show available tests and exit
 if [ "$LIST_TESTS" -eq 1 ]; then
-	echo "Available tests for $TEST_TARGET target in $FLOAT_MODE mode:"
+	if [ "$TEST_TARGET" = "native" ]; then
+		echo "Available tests for $TEST_TARGET target in $FLOAT_MODE mode with $ALLOCATOR_MODE allocator:"
+	else
+		echo "Available tests for $TEST_TARGET target in $FLOAT_MODE mode:"
+	fi
 	echo "================================================="
 	meson test -C "$BUILD_DIR" --list | while read -r test; do
 		echo "  $test"
@@ -237,11 +282,19 @@ fi
 # fi
 
 # Compile the tests
-echo "Compiling $TEST_TARGET tests..."
+if [ "$TEST_TARGET" = "native" ]; then
+	echo "Compiling $TEST_TARGET tests with $ALLOCATOR_MODE allocator..."
+else
+	echo "Compiling $TEST_TARGET tests..."
+fi
 meson compile -C "$BUILD_DIR"
 
 # Run the tests
-echo "Running $TEST_TARGET tests in $FLOAT_MODE mode..."
+if [ "$TEST_TARGET" = "native" ]; then
+	echo "Running $TEST_TARGET tests in $FLOAT_MODE mode with $ALLOCATOR_MODE allocator..."
+else
+	echo "Running $TEST_TARGET tests in $FLOAT_MODE mode..."
+fi
 if [ -n "$TEST_NAME" ]; then
 	# Run specific test if name provided
 	echo "Running test: $TEST_NAME"
@@ -259,4 +312,8 @@ else
 	fi
 fi
 
-echo "Tests completed ($TEST_TARGET target, $FLOAT_MODE mode)"
+if [ "$TEST_TARGET" = "native" ]; then
+	echo "Tests completed ($TEST_TARGET target, $FLOAT_MODE mode, $ALLOCATOR_MODE allocator)"
+else
+	echo "Tests completed ($TEST_TARGET target, $FLOAT_MODE mode)"
+fi

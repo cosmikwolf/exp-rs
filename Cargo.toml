@@ -22,13 +22,14 @@ serde = { version = "1.0", features = ["derive"], default-features = false }
 bumpalo = { version = "3.16", default-features = false, features = [
   "collections",
 ] }
-embedded-alloc = { version = "0.6", features = ["tlsf"] }
+embedded-alloc = { version = "0.6", features = ["tlsf"], optional = true }
 critical-section = { version = "1.2", features = ["restore-state-u32"] }
 [features]
 default = ["libm"]
 f32 = []
 libm = ["dep:libm"]
 custom_cbindgen_alloc = [
+  "dep:embedded-alloc",
 ] # Use exp_rs_malloc and exp_rs_free instead of malloc/free
 
 # Note: 64-bit floating point is now the default when f32 is not enabled

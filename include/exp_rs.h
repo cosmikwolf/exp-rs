@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-
+#define EXP_RS_CUSTOM_ALLOC
 
 /**
  * FFI error codes (negative to distinguish from ExprError codes)
@@ -23,6 +23,10 @@
 #define FFI_ERROR_CANNOT_GET_MUTABLE_ACCESS -4
 
 #define FFI_ERROR_INVALID_POINTER -5
+
+#if defined(EXP_RS_CUSTOM_ALLOC)
+#define HEAP_SIZE 1048576
+#endif
 
 #define EXP_RS_MAX_VARIABLES 16
 
@@ -114,6 +118,18 @@ typedef struct ExprResult {
 extern "C" {
 #endif // __cplusplus
 
+__attribute__((aligned(8))) void exp_rs_heap_init(void);
+
+__attribute__((aligned(8))) uintptr_t exp_rs_get_total_allocated(void);
+
+__attribute__((aligned(8))) uintptr_t exp_rs_get_total_freed(void);
+
+__attribute__((aligned(8))) uintptr_t exp_rs_get_allocation_count(void);
+
+__attribute__((aligned(8))) uintptr_t exp_rs_get_free_count(void);
+
+__attribute__((aligned(8))) uintptr_t exp_rs_get_current_allocated(void);
+
 /**
  * Register a panic handler
  *
@@ -180,12 +196,6 @@ __attribute__((aligned(8)))
 uintptr_t expr_context_native_function_count(const struct ExprContext *ctx);
 
 /**
- * Get the count of expression functions in a context
- */
-__attribute__((aligned(8)))
-uintptr_t expr_context_expression_function_count(const struct ExprContext *ctx);
-
-/**
  * Get a native function name by index
  * Returns the length of the name, or 0 if index is out of bounds
  * If buffer is NULL, just returns the length needed
@@ -195,17 +205,6 @@ uintptr_t expr_context_get_native_function_name(const struct ExprContext *ctx,
                                                 uintptr_t index,
                                                 uint8_t *buffer,
                                                 uintptr_t buffer_size);
-
-/**
- * Get an expression function name by index
- * Returns the length of the name, or 0 if index is out of bounds
- * If buffer is NULL, just returns the length needed
- */
-__attribute__((aligned(8)))
-uintptr_t expr_context_get_expression_function_name(const struct ExprContext *ctx,
-                                                    uintptr_t index,
-                                                    uint8_t *buffer,
-                                                    uintptr_t buffer_size);
 
 /**
  * Add a native function to the context
@@ -444,22 +443,6 @@ uintptr_t expr_estimate_arena_size(uintptr_t expression_count,
  * Force a panic for testing purposes (only available in debug builds)
  */
 __attribute__((aligned(8))) void exp_rs_test_trigger_panic(void);
-
-#if defined(EXP_RS_CUSTOM_ALLOC)
-extern void *exp_rs_malloc(uintptr_t size);
-#endif
-
-#if defined(EXP_RS_CUSTOM_ALLOC)
-extern void exp_rs_free(void *ptr);
-#endif
-
-#if !defined(EXP_RS_CUSTOM_ALLOC)
-extern void *malloc(uintptr_t size);
-#endif
-
-#if !defined(EXP_RS_CUSTOM_ALLOC)
-extern void free(void *ptr);
-#endif
 
 #ifdef __cplusplus
 }  // extern "C"

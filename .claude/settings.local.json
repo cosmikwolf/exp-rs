@@ -35,7 +35,11 @@
       "Bash(SKIP_FFI_BUILD=1 cargo test --lib expression_functions::tests::test_expression_function_with_context_variables -- --nocapture --exact)",
       "mcp__tree-sitter__get_file",
       "Bash(SKIP_FFI_BUILD=1 cargo test temp_test_expression_function_with_direct_arg -- --nocapture)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(./build-native-custom/tests_native_c/test_batch_api:*)",
+      "Bash(meson compile:*)",
+      "Bash(meson test:*)",
+      "Bash(./run_tests.sh:*)"
     ],
     "deny": []
   },

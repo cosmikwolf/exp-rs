@@ -31,6 +31,23 @@ static void* (*original_malloc)(size_t) = NULL;
 static void (*original_free)(void*) = NULL;
 static bool tracking_initialized = false;
 
+// Forward declarations for Rust allocator tracking functions
+// These are always available regardless of custom_cbindgen_alloc feature
+extern size_t exp_rs_get_total_allocated(void);
+extern size_t exp_rs_get_total_freed(void);
+extern size_t exp_rs_get_allocation_count(void);
+extern size_t exp_rs_get_free_count(void);
+extern size_t exp_rs_get_current_allocated(void);
+
+// Track whether we're using custom allocator or system allocator
+// We detect this by checking if our exp_rs_malloc is being called
+static atomic_bool custom_allocator_used = false;
+
+// Check if we're using custom allocator
+bool using_custom_allocator() {
+    return atomic_load(&custom_allocator_used);
+}
+
 // ============================================================================
 // Core Allocator Implementation
 // ============================================================================
@@ -38,6 +55,10 @@ static bool tracking_initialized = false;
 // Initialize memory tracking
 void init_memory_tracking() {
     if (!tracking_initialized) {
+        // Initialize the TlsfHeap if custom allocator will be used
+        // We do this early since any malloc call might trigger Rust allocations
+        exp_rs_heap_init();
+        
         // Use dlsym to get the real malloc/free functions
         // This bypasses any potential symbol conflicts
         #ifdef __APPLE__
@@ -131,8 +152,15 @@ static void tracked_free(void* ptr) {
 // Public API Implementation
 // ============================================================================
 
-// Required by exp-rs custom allocator
+// ============================================================================
+// Dual-Mode Allocator Support
+// ============================================================================
+
+// Required by exp-rs custom allocator (when custom_cbindgen_alloc is enabled)
 void* exp_rs_malloc(size_t size) {
+    // Mark that custom allocator is being used
+    atomic_store(&custom_allocator_used, true);
+    
     if (!tracking_initialized) {
         init_memory_tracking();
     }
@@ -146,6 +174,9 @@ void* exp_rs_malloc(size_t size) {
 }
 
 void exp_rs_free(void* ptr) {
+    // Mark that custom allocator is being used
+    atomic_store(&custom_allocator_used, true);
+    
     if (!tracking_initialized) {
         init_memory_tracking();
     }
@@ -158,16 +189,46 @@ void exp_rs_free(void* ptr) {
     }
 }
 
-// Get memory statistics
+// ============================================================================
+// System Allocator Tracking (for when custom_cbindgen_alloc is disabled)
+// ============================================================================
+
+// When custom allocator is disabled, we get allocation stats from Rust's built-in tracking
+// No need to intercept malloc/free - we query Rust directly
+
+// Stubs for API compatibility (not used when system allocator is active)
+void mark_rust_allocation_start() {
+    // No-op when using system allocator - Rust tracks its own allocations
+}
+
+void mark_rust_allocation_end() {
+    // No-op when using system allocator
+}
+
+// Get memory statistics - works with both custom and system allocator
 memory_stats_t get_memory_stats() {
     memory_stats_t stats;
-    stats.total_allocs = atomic_load(&total_allocations);
-    stats.total_deallocs = atomic_load(&total_deallocations);
-    stats.current_bytes = atomic_load(&current_bytes);
-    stats.peak_bytes = atomic_load(&peak_bytes);
-    stats.total_allocated_bytes = atomic_load(&total_allocated_bytes);
-    stats.total_deallocated_bytes = atomic_load(&total_deallocated_bytes);
-    stats.leaked_allocs = stats.total_allocs - stats.total_deallocs;
+    
+    if (using_custom_allocator()) {
+        // Use our C-side tracking when custom allocator is active
+        stats.total_allocs = atomic_load(&total_allocations);
+        stats.total_deallocs = atomic_load(&total_deallocations);
+        stats.current_bytes = atomic_load(&current_bytes);
+        stats.peak_bytes = atomic_load(&peak_bytes);
+        stats.total_allocated_bytes = atomic_load(&total_allocated_bytes);
+        stats.total_deallocated_bytes = atomic_load(&total_deallocated_bytes);
+        stats.leaked_allocs = stats.total_allocs - stats.total_deallocs;
+    } else {
+        // Use Rust-side tracking when system allocator is active
+        stats.total_allocs = exp_rs_get_allocation_count();
+        stats.total_deallocs = exp_rs_get_free_count();
+        stats.current_bytes = exp_rs_get_current_allocated();
+        stats.peak_bytes = 0; // Rust doesn't track peak - would need to be added
+        stats.total_allocated_bytes = exp_rs_get_total_allocated();
+        stats.total_deallocated_bytes = exp_rs_get_total_freed();
+        stats.leaked_allocs = stats.total_allocs - stats.total_deallocs;
+    }
+    
     return stats;
 }
 

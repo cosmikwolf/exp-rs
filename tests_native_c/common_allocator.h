@@ -2,6 +2,7 @@
 #define COMMON_ALLOCATOR_H
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +30,14 @@ typedef struct {
 
 memory_stats_t get_memory_stats(void);
 void print_memory_stats(const char* phase);
+
+// Dual-mode allocator support
+void mark_rust_allocation_start(void);
+void mark_rust_allocation_end(void);
+bool using_custom_allocator(void);
+
+// Heap initialization (when custom allocator is enabled)
+void exp_rs_heap_init(void);
 
 #ifdef __cplusplus
 }

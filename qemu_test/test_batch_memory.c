@@ -53,14 +53,20 @@ static void format_caller(void *addr, char *buffer, size_t buffer_size) {
 #endif
 }
 
+// Rust allocation tracking functions  
+extern size_t exp_rs_get_current_allocated(void);
+extern size_t exp_rs_get_allocation_count(void);
+
 // Helper to show arena usage with detailed information
 void show_arena_usage(ExprBatch *batch, const char *label) {
   if (!batch)
     return;
 
   uintptr_t arena_bytes = expr_batch_arena_bytes(batch);
-  qemu_printf("%s: arena=%d bytes, sys_mem=%d bytes, sys_count=%d\n", label,
-              (int)arena_bytes, (int)current_allocated, (int)allocation_count);
+  size_t rust_allocated = exp_rs_get_current_allocated();
+  size_t rust_count = exp_rs_get_allocation_count();
+  qemu_printf("%s: arena=%d bytes, rust_mem=%d bytes, rust_count=%d, sys_mem=%d bytes, sys_count=%d\n", label,
+              (int)arena_bytes, (int)rust_allocated, (int)rust_count, (int)current_allocated, (int)allocation_count);
 }
 #define FFI_ERROR_NULL_POINTER -1
 #define FFI_ERROR_INVALID_POINTER -5
@@ -590,16 +596,38 @@ void test_static_batch_pointer(ExprContext *ctx) {
   }
 }
 
+// Helper function to print detailed heap tracking
+void print_heap_stats(const char *label) {
+  extern size_t exp_rs_get_total_allocated(void);
+  extern size_t exp_rs_get_total_freed(void);  
+  extern size_t exp_rs_get_free_count(void);
+  
+  size_t rust_current = exp_rs_get_current_allocated();
+  size_t rust_total_alloc = exp_rs_get_total_allocated();
+  size_t rust_total_freed = exp_rs_get_total_freed();
+  size_t rust_alloc_count = exp_rs_get_allocation_count();
+  size_t rust_free_count = exp_rs_get_free_count();
+  
+  qemu_printf("%s:\n", label);
+  qemu_printf("  Total allocated:     %d bytes\n", (int)rust_total_alloc);
+  qemu_printf("  Total freed:         %d bytes\n", (int)rust_total_freed);
+  qemu_printf("  Current allocated:   %d bytes\n", (int)rust_current);
+  qemu_printf("  Allocation count:    %d\n", (int)rust_alloc_count);
+  qemu_printf("  Free count:          %d\n", (int)rust_free_count);
+  qemu_printf("  Net leaked:          %d bytes\n", (int)(rust_total_alloc - rust_total_freed));
+  qemu_printf("  Count difference:    %d\n", (int)(rust_alloc_count - rust_free_count));
+}
+
 // Test 6: Memory stress test
 void test_memory_stress(ExprContext *ctx) {
   qemu_printf("\n=== Test 6: Memory Stress Test ===\n");
 
   size_t start_allocated = current_allocated;
-  const int iterations = 20;
 
-  qemu_printf("Running %d allocation/free cycles...\n", iterations);
+  qemu_printf("Running 20 allocation/free cycles...\n");
+  print_heap_stats("Initial heap state");
 
-  for (int i = 0; i < iterations; i++) {
+  for (int i = 0; i < 20; i++) {
     // Vary the size to stress different allocation patterns
     size_t size = 1024 * (1 + (i % 8)); // 1KB to 8KB
 
@@ -620,20 +648,53 @@ void test_memory_stress(ExprContext *ctx) {
     expr_batch_free(batch);
 
     if (i % 5 == 0) {
-      qemu_printf("  Iteration %d: current memory = %d bytes\n", i,
-                  (int)current_allocated);
+      size_t rust_current = exp_rs_get_current_allocated();
+      qemu_printf("  Iteration %d: sys_mem = %d bytes, rust_mem = %d bytes\n", i,
+                  (int)current_allocated, (int)rust_current);
     }
   }
 
-  qemu_printf("\nStress test complete\n");
-  qemu_printf("Final memory: %d bytes\n", (int)current_allocated);
+  qemu_printf("\nAfter first 20 iterations:\n");
+  print_heap_stats("Heap state after 20 iterations");
+
+  qemu_printf("\nRunning 80 more allocation/free cycles...\n");
+
+  for (int i = 20; i < 100; i++) {
+    // Vary the size to stress different allocation patterns
+    size_t size = 1024 * (1 + (i % 8)); // 1KB to 8KB
+
+    ExprBatch *batch = expr_batch_new(size);
+    if (!batch) {
+      qemu_printf("ERROR: Failed to create batch %d with size %d\n", i,
+                  (int)size);
+      break;
+    }
+
+    // Add some data using simple helper function (less memory intensive)
+    int populate_result = populate_batch_simple(batch, ctx);
+    if (!populate_result) {
+      qemu_printf("ERROR: Failed to populate batch %d with test data\n", i);
+    }
+
+    // Free immediately
+    expr_batch_free(batch);
+
+    if (i % 10 == 0) {
+      size_t rust_current = exp_rs_get_current_allocated();
+      qemu_printf("  Iteration %d: sys_mem = %d bytes, rust_mem = %d bytes\n", i,
+                  (int)current_allocated, (int)rust_current);
+    }
+  }
+
+  qemu_printf("\nAfter all 100 iterations:\n");
+  print_heap_stats("Final heap state after 100 iterations");
 
   size_t leaked = current_allocated - start_allocated;
   if (leaked > 0) {
     int avg_leak =
-        (leaked > 0 && iterations > 0) ? (int)(leaked / iterations) : 0;
+        (leaked > 0 && 100 > 0) ? (int)(leaked / 100) : 0;
     qemu_printf("WARNING: %d bytes leaked over %d cycles\n", (int)leaked,
-                iterations);
+                100);
     qemu_printf("Average leak per cycle: %d bytes\n", avg_leak);
   } else {
     qemu_printf("SUCCESS: No memory leak detected\n");
@@ -689,15 +750,41 @@ int main(void) {
   qemu_printf("========================================\n");
   qemu_printf("           MEMORY SUMMARY\n");
   qemu_printf("========================================\n");
-  qemu_printf("Total allocated:     %d bytes\n", (int)total_allocated);
-  qemu_printf("Total freed (est):   %d bytes\n", (int)total_freed);
-  qemu_printf("Peak allocated:      %d bytes\n", (int)peak_allocated);
-  qemu_printf("Allocation count:    %d\n", (int)allocation_count);
-  qemu_printf("Free count:          %d\n", (int)free_count);
-  qemu_printf("Current allocated:   %d bytes\n", (int)current_allocated);
+  
+  // System malloc/free tracking (should be 0 with TlsfHeap)
+  qemu_printf("System malloc tracking:\n");
+  qemu_printf("  Total allocated:     %d bytes\n", (int)total_allocated);
+  qemu_printf("  Total freed (est):   %d bytes\n", (int)total_freed);
+  qemu_printf("  Peak allocated:      %d bytes\n", (int)peak_allocated);
+  qemu_printf("  Allocation count:    %d\n", (int)allocation_count);
+  qemu_printf("  Free count:          %d\n", (int)free_count);
+  qemu_printf("  Current allocated:   %d bytes\n", (int)current_allocated);
+  
+  // Rust TlsfHeap tracking (should show real allocations)
+  extern size_t exp_rs_get_total_allocated(void);
+  extern size_t exp_rs_get_total_freed(void);  
+  extern size_t exp_rs_get_free_count(void);
+  
+  size_t rust_current = exp_rs_get_current_allocated();
+  size_t rust_total_alloc = exp_rs_get_total_allocated();
+  size_t rust_total_freed = exp_rs_get_total_freed();
+  size_t rust_alloc_count = exp_rs_get_allocation_count();
+  size_t rust_free_count = exp_rs_get_free_count();
+  
+  qemu_printf("\nRust TlsfHeap tracking:\n");
+  qemu_printf("  Total allocated:     %d bytes\n", (int)rust_total_alloc);
+  qemu_printf("  Total freed:         %d bytes\n", (int)rust_total_freed);
+  qemu_printf("  Current allocated:   %d bytes\n", (int)rust_current);
+  qemu_printf("  Allocation count:    %d\n", (int)rust_alloc_count);
+  qemu_printf("  Free count:          %d\n", (int)rust_free_count);
 
-  if (current_allocated > 0) {
-    qemu_printf("\n*** MEMORY LEAK DETECTED: %d bytes ***\n",
+  // Check for leaks using Rust heap tracking (more accurate)
+  if (rust_current > 0) {
+    qemu_printf("\n*** MEMORY LEAK DETECTED: %d bytes in Rust heap ***\n",
+                (int)rust_current);
+    qemu_exit(1); // Exit with failure
+  } else if (current_allocated > 0) {
+    qemu_printf("\n*** MEMORY LEAK DETECTED: %d bytes in system malloc ***\n",
                 (int)current_allocated);
     qemu_exit(1); // Exit with failure
   } else {

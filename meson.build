@@ -43,16 +43,16 @@ if get_option('test_native')
       cargo_profile_flag,
       '--features', ','.join(rust_features),
       '--no-default-features',
-      '--target-dir', meson.current_build_dir(),
+      # '--target-dir', meson.current_build_dir(),
       '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
       '--lib', '&&',
       'cp',
-      meson.current_source_dir() + '/include/exp_rs.h',
+      meson.current_source_dir() + '/target/' + cargo_profile + '/exp_rs.h',
       meson.current_build_dir(),
       '&&',
       'cp',
       meson.current_source_dir()
-      + '/target/meson/'
+      + '/target/'
       + cargo_profile
       + '/libexp_rs.a',
       meson.current_build_dir() + '/libexp_rs.a',

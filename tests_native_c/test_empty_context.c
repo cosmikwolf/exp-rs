@@ -55,13 +55,13 @@ size_t get_context_memory_usage(ExprContext *ctx) {
   total_allocated = 0;
 
   // This is a rough estimate since we can't hook into Rust's allocator
-  // We'll use the number of functions as a proxy for memory usage
+  // We'll use the number of native functions as a proxy for memory usage
+  // (expression functions are no longer stored in context)
   size_t native_count = expr_context_native_function_count(ctx);
-  size_t expr_count = expr_context_expression_function_count(ctx);
 
-  // Estimate: each function takes about 64 bytes (name + metadata)
+  // Estimate: each native function takes about 64 bytes (name + metadata)
   // Plus base context overhead of ~256 bytes
-  return 256 + (native_count + expr_count) * 64;
+  return 256 + native_count * 64;
 }
 
 int main() {
@@ -75,33 +75,29 @@ int main() {
   ExprContext *normal_ctx = expr_context_new();
   assert(normal_ctx != NULL);
 
-  // Count functions in each context
+  // Count native functions in each context
+  // (expression functions are no longer stored in context)
   size_t empty_native = expr_context_native_function_count(empty_ctx);
-  size_t empty_expr = expr_context_expression_function_count(empty_ctx);
-  size_t empty_total = empty_native + empty_expr;
-
   size_t normal_native = expr_context_native_function_count(normal_ctx);
-  size_t normal_expr = expr_context_expression_function_count(normal_ctx);
-  size_t normal_total = normal_native + normal_expr;
 
   // Print results
   printf("Empty Context:\n");
   printf("  Native functions:     %zu\n", empty_native);
-  printf("  Expression functions: %zu\n", empty_expr);
-  printf("  Total functions:      %zu\n", empty_total);
+  printf("  Expression functions: N/A (stored in batches now)\n");
+  printf("  Total functions:      %zu\n", empty_native);
   printf("  Estimated memory:     ~%zu bytes\n",
          get_context_memory_usage(empty_ctx));
 
   printf("\nNormal Context:\n");
   printf("  Native functions:     %zu\n", normal_native);
-  printf("  Expression functions: %zu\n", normal_expr);
-  printf("  Total functions:      %zu\n", normal_total);
+  printf("  Expression functions: N/A (stored in batches now)\n");
+  printf("  Total functions:      %zu\n", normal_native);
   printf("  Estimated memory:     ~%zu bytes\n",
          get_context_memory_usage(normal_ctx));
 
   printf("\nDifference:\n");
-  printf("  Functions saved:      %zu\n", normal_total - empty_total);
-  printf("  Memory saved:         ~%zu bytes\n",
+  printf("  Native functions saved: %zu\n", normal_native - empty_native);
+  printf("  Memory saved:           ~%zu bytes\n",
          get_context_memory_usage(normal_ctx) -
              get_context_memory_usage(empty_ctx));
 
