@@ -8,9 +8,9 @@ VERBOSE=0
 TEST_NAME=""
 FLOAT_MODE="f64" # Default to f64 mode
 LIST_TESTS=0
-TEST_TARGET="native" # Default to native tests
+TEST_TARGET="native"    # Default to native tests
 ALLOCATOR_MODE="system" # Default to system allocator for native tests
-ALLOC_TRACKING=0 # Default to no detailed allocation tracking
+ALLOC_TRACKING=0        # Default to no detailed allocation tracking
 
 show_help() {
 	echo "Usage: $0 [options]"
@@ -325,12 +325,12 @@ if [ "$ALLOC_TRACKING" -eq 1 ]; then
 	fi
 fi
 
-if [ -n "$RUST_FEATURES" ]; then
-	echo "Building with features: $RUST_FEATURES"
-	cargo build --release --features="$RUST_FEATURES"
-else
-	cargo build --release
-fi
+# if [ -n "$RUST_FEATURES" ]; then
+# 	echo "Building with features: $RUST_FEATURES"
+# 	cargo build --release --features="$RUST_FEATURES"
+# else
+# 	cargo build --release
+# fi
 
 # Compile the tests
 if [ "$TEST_TARGET" = "native" ]; then

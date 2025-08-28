@@ -33,33 +33,32 @@ endif
 # endif
 cargo_profile = 'release'
 cargo_profile_flag = ['--release']
-
+exprs_target_dir = '/'.join([meson.current_build_dir(), 'exp_rs'])
 # Build Rust static library using cargo build
 if get_option('test_native')
-  message('Building for native tests in ' + meson.current_source_dir())
+  message(
+    'Building for native tests in ' + exprs_target_dir,
+  )
   # Native build for host tests
   exp_rs_build = custom_target(
     'cargo_build',
     output: ['libexp_rs.a', 'exp_rs.h'],
     command: [
+      'mkdir',
+      '-p', exprs_target_dir,
+      '&&',
       'cargo',
       'build',
       cargo_profile_flag,
       '--features', ','.join(rust_features),
       '--no-default-features',
-      # '--target-dir', meson.current_build_dir(),
+      '--target-dir', exprs_target_dir,
       '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
       '--lib', '&&',
       'cp',
-      meson.current_source_dir() + '/target/' + cargo_profile + '/exp_rs.h',
+      '/'.join([exprs_target_dir, cargo_profile, 'exp_rs.h']),
+      '/'.join([exprs_target_dir, cargo_profile, 'libexp_rs.a']),
       meson.current_build_dir(),
-      '&&',
-      'cp',
-      meson.current_source_dir()
-      + '/target/'
-      + cargo_profile
-      + '/libexp_rs.a',
-      meson.current_build_dir() + '/libexp_rs.a',
     ],
     build_always_stale: false,
     build_by_default: false,
@@ -75,6 +74,7 @@ else
     '--features', ','.join(rust_features),
   )
 
+  exprs_target_dir = '/'.join([meson.current_build_dir(), 'exp_rs'])
   # Cross-compilation build for QEMU tests
   exp_rs_build = custom_target(
     'cargo_build',
@@ -87,22 +87,13 @@ else
       cargo_profile_flag,
       '--no-default-features',
       '--features', ','.join(rust_features),
-      # '--target-dir', meson.current_build_dir(),
+      '--target-dir', exprs_target_dir,
       '--manifest-path', meson.current_source_dir() + '/Cargo.toml',
       '--lib', '&&',
       'cp',
-      meson.current_source_dir()
-      + '/target/cortex-m7-strict/'
-      + cargo_profile
-      + '/exp_rs.h',
-      meson.current_build_dir() + '/exp_rs.h',
-      '&&',
-      'cp',
-      meson.current_source_dir()
-      + '/target/cortex-m7-strict/'
-      + cargo_profile
-      + '/libexp_rs.a',
-      meson.current_build_dir() + '/libexp_rs.a',
+      '/'.join([exprs_target_dir, 'cortex-m7-strict', cargo_profile, 'exp_rs.h']),
+      '/'.join([exprs_target_dir, 'cortex-m7-strict', cargo_profile, 'libexp_rs.a']),
+      meson.current_build_dir(),
     ],
     # depend_files: files(meson.current_source_dir()),
     build_always_stale: false,
