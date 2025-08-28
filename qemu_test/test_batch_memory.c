@@ -66,7 +66,7 @@ void show_arena_usage(ExprBatch *batch, const char *label) {
 #define FFI_ERROR_INVALID_POINTER -5
 
 // Custom allocation functions for tracking
-// Must match the exact Rust FFI signatures and use standard calling convention
+// These now use standard malloc/free and are used only for memory tracking
 void *exp_rs_malloc(size_t size) {
   void *ptr = malloc(size);
 
@@ -641,11 +641,18 @@ void test_memory_stress(ExprContext *ctx) {
 }
 
 // Main test runner
+// Initialize the Rust heap allocator
+extern void exp_rs_heap_init(void);
+
 int main(void) {
   qemu_printf("\n");
   qemu_printf("========================================\n");
   qemu_printf("   exp-rs Batch Memory Test (QEMU)\n");
   qemu_printf("========================================\n");
+
+  // Initialize the Rust heap allocator BEFORE any Rust code runs
+  exp_rs_heap_init();
+  qemu_printf("Rust heap initialized\n");
 
   // Reset tracking FIRST before any allocations
   total_allocated = 0;

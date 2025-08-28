@@ -75,7 +75,9 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::ffi::{CStr, c_char, c_void};
+use core::mem::MaybeUninit;
 use core::ptr;
+use embedded_alloc::TlsfHeap;
 
 // Re-export for external visibility
 pub use crate::expression::ArenaBatchBuilder as ArenaBatchBuilderExport;
@@ -121,126 +123,74 @@ impl Drop for BatchWithArena {
 }
 
 // ============================================================================
-// Global Allocator for no_std ARM
+// Global Allocator using embedded-alloc TlsfHeap
 // ============================================================================
 
-mod allocator {
-    use core::alloc::{GlobalAlloc, Layout};
+// Global heap allocator using TLSF (Two-Level Segregated Fit) algorithm
+// This provides O(1) allocation/deallocation with good fragmentation resistance
+#[global_allocator]
+static HEAP: TlsfHeap = TlsfHeap::empty();
 
-    // Choose between standard and custom allocator based on feature
-    #[cfg(feature = "custom_cbindgen_alloc")]
-    struct CustomAllocator;
+// Static heap memory - 128KB to handle multiple large arenas
+// This includes space for bumpalo arenas and other allocations
+const HEAP_SIZE: usize = 131072;
+static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
 
-    #[cfg(not(feature = "custom_cbindgen_alloc"))]
-    struct StandardAllocator;
+// For non-custom allocator builds, initialize during static initialization
+#[cfg(not(feature = "custom_cbindgen_alloc"))]
+fn init_heap_once() {
+    use core::sync::atomic::{AtomicBool, Ordering};
+    static HEAP_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-    // External function declarations
-    #[cfg(feature = "custom_cbindgen_alloc")]
-    unsafe extern "C" {
-        fn exp_rs_malloc(size: usize) -> *mut core::ffi::c_void;
-        fn exp_rs_free(ptr: *mut core::ffi::c_void);
-    }
-
-    #[cfg(not(feature = "custom_cbindgen_alloc"))]
-    unsafe extern "C" {
-        fn malloc(size: usize) -> *mut core::ffi::c_void;
-        fn free(ptr: *mut core::ffi::c_void);
-    }
-
-    // Implementation for custom allocator (using exp_rs_malloc/exp_rs_free)
-    #[cfg(feature = "custom_cbindgen_alloc")]
-    unsafe impl GlobalAlloc for CustomAllocator {
-        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-            let size = layout.size();
-            let align = layout.align();
-
-            if size == 0 {
-                return align as *mut u8;
-            }
-
-            // For alignment requirements greater than what exp_rs_malloc guarantees (8 bytes),
-            // we need to allocate extra space and manually align
-            if align > 8 {
-                // Allocate extra space for alignment
-                let total_size = size + align;
-                // SAFETY: exp_rs_malloc is a custom allocator function provided by the C side
-                let ptr = (unsafe { exp_rs_malloc(total_size) }) as *mut u8;
-                if ptr.is_null() {
-                    return ptr;
-                }
-
-                // Calculate aligned address
-                let addr = ptr as usize;
-                let aligned_addr = (addr + align - 1) & !(align - 1);
-                aligned_addr as *mut u8
-            } else {
-                // exp_rs_malloc already guarantees 8-byte alignment
-                // SAFETY: exp_rs_malloc is a custom allocator function provided by the C side
-                (unsafe { exp_rs_malloc(size) }) as *mut u8
-            }
+    if !HEAP_INITIALIZED.load(Ordering::Acquire) {
+        unsafe {
+            let heap_ptr = core::ptr::addr_of_mut!(HEAP_MEM);
+            HEAP.init(heap_ptr as usize, HEAP_SIZE);
         }
+        HEAP_INITIALIZED.store(true, Ordering::Release);
+    }
+}
 
-        unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-            if !ptr.is_null() {
-                // For over-aligned allocations, we can't easily find the original pointer
-                // This is a limitation - for now just free the given pointer
-                // In production code, you'd want to store the original pointer somewhere
-                // SAFETY: exp_rs_free is a custom deallocator function provided by the C side
-                unsafe { exp_rs_free(ptr as *mut core::ffi::c_void) };
-            }
+// Ensure heap is initialized before any allocations
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_heap_init() {
+    #[cfg(feature = "custom_cbindgen_alloc")]
+    {
+        unsafe {
+            let heap_ptr = core::ptr::addr_of_mut!(HEAP_MEM);
+            HEAP.init(heap_ptr as usize, HEAP_SIZE);
         }
     }
-
-    // Implementation for standard allocator (using malloc/free)
     #[cfg(not(feature = "custom_cbindgen_alloc"))]
-    unsafe impl GlobalAlloc for StandardAllocator {
-        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-            let size = layout.size();
-            let align = layout.align();
+    {
+        init_heap_once();
+    }
+}
 
-            if size == 0 {
-                return align as *mut u8;
-            }
+// Critical section implementation for single-core ARM targets
+#[cfg(all(target_arch = "arm", not(test)))]
+#[unsafe(no_mangle)]
+fn _critical_section_1_0_acquire() -> critical_section::RawRestoreState {
+    // Read current PRIMASK state and disable interrupts
+    let primask: u32;
+    unsafe {
+        core::arch::asm!("mrs {}, primask", out(reg) primask);
+        core::arch::asm!("cpsid i");
+    }
+    primask
+}
 
-            // Standard malloc typically provides 8-byte alignment on 32-bit systems
-            // For higher alignment requirements, we need to handle it manually
-            if align > 8 {
-                // Allocate extra space for alignment
-                let total_size = size + align;
-                let ptr = (unsafe { malloc(total_size) }) as *mut u8;
-                if ptr.is_null() {
-                    return ptr;
-                }
-
-                // Calculate aligned address
-                let addr = ptr as usize;
-                let aligned_addr = (addr + align - 1) & !(align - 1);
-                aligned_addr as *mut u8
-            } else {
-                // Standard malloc should provide adequate alignment
-                (unsafe { malloc(size) }) as *mut u8
-            }
-        }
-
-        unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-            if !ptr.is_null() {
-                // For over-aligned allocations, we can't easily find the original pointer
-                // This is a limitation - for now just free the given pointer
-                unsafe {
-                    free(ptr as *mut core::ffi::c_void);
-                }
-            }
+#[cfg(all(target_arch = "arm", not(test)))]
+#[unsafe(no_mangle)]
+unsafe fn _critical_section_1_0_release(restore_state: critical_section::RawRestoreState) {
+    // Restore previous interrupt state
+    if restore_state & 1 == 0 {
+        // Interrupts were enabled before, re-enable them
+        unsafe {
+            core::arch::asm!("cpsie i");
         }
     }
-
-    // Choose the appropriate allocator
-    #[cfg(feature = "custom_cbindgen_alloc")]
-    #[global_allocator]
-    static ALLOCATOR: CustomAllocator = CustomAllocator;
-
-    #[cfg(not(feature = "custom_cbindgen_alloc"))]
-    #[global_allocator]
-    static ALLOCATOR: StandardAllocator = StandardAllocator;
+    // If bit 0 was set, interrupts were already disabled, so leave them disabled
 }
 
 // ============================================================================
