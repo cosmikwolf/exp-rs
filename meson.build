@@ -16,6 +16,10 @@ if get_option('custom_cbindgen_alloc')
   rust_features += 'custom_cbindgen_alloc'
 endif
 
+if get_option('alloc_tracking')
+  rust_features += 'alloc_tracking'
+endif
+
 # Determine build profile based on build type
 # build_type = get_option('buildtype')
 # if build_type == 'debug' or build_type == 'debugoptimized'

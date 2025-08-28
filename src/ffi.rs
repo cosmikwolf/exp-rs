@@ -75,6 +75,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::ffi::{CStr, c_char, c_void};
+#[cfg(feature = "custom_cbindgen_alloc")]
 use core::mem::MaybeUninit;
 use core::ptr;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -132,6 +133,106 @@ static TOTAL_FREED: AtomicUsize = AtomicUsize::new(0);
 static ALLOCATION_COUNT: AtomicUsize = AtomicUsize::new(0);
 static FREE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
+// Detailed allocation tracking (when alloc_tracking feature is enabled)
+#[cfg(feature = "alloc_tracking")]
+mod allocation_tracking {
+    use heapless::{FnvIndexMap, Vec};
+    use critical_section::Mutex;
+    use core::cell::RefCell;
+    
+    #[derive(Clone, Copy)]
+    pub struct AllocationInfo {
+        pub size: usize,
+        pub line: u32,
+        pub file: &'static str,
+        pub ptr: usize,
+        pub caller_addr: usize,    // First level caller address
+        pub caller2_addr: usize,   // Second level caller address
+    }
+
+    // ARM-specific function to get return addresses from stack
+    #[cfg(target_arch = "arm")]
+    unsafe fn get_caller_addresses() -> (usize, usize) {
+        let lr: usize;      // Link register (immediate caller)
+        let fp: usize;      // Frame pointer
+        
+        unsafe {
+            // Get link register (return address of immediate caller)
+            core::arch::asm!("mov {}, lr", out(reg) lr);
+            
+            // Get frame pointer and walk back for second level
+            core::arch::asm!("mov {}, r11", out(reg) fp); // r11 = frame pointer on ARM
+        }
+        
+        let caller2 = if fp != 0 {
+            // Read return address from previous frame
+            // ARM stack layout: [prev_fp][return_addr][locals...]
+            unsafe { core::ptr::read((fp + 4) as *const usize) }
+        } else {
+            0
+        };
+        
+        (lr, caller2)
+    }
+
+    // Fallback for non-ARM architectures
+    #[cfg(not(target_arch = "arm"))]
+    unsafe fn get_caller_addresses() -> (usize, usize) {
+        (0, 0) // No stack walking support
+    }
+    
+    const MAX_TRACKED_ALLOCATIONS: usize = 512;
+    type TrackedAllocations = FnvIndexMap<usize, AllocationInfo, MAX_TRACKED_ALLOCATIONS>;
+    
+    static TRACKED_ALLOCATIONS: Mutex<RefCell<TrackedAllocations>> = Mutex::new(RefCell::new(TrackedAllocations::new()));
+    
+    pub fn track_allocation(ptr: *mut u8, size: usize, location: &'static core::panic::Location) {
+        if ptr.is_null() {
+            return;
+        }
+        
+        // Get caller addresses using ARM stack walking
+        let (caller_addr, caller2_addr) = unsafe { get_caller_addresses() };
+        
+        let info = AllocationInfo {
+            size,
+            line: location.line(),
+            file: location.file(),
+            ptr: ptr as usize,
+            caller_addr,
+            caller2_addr,
+        };
+        
+        critical_section::with(|cs| {
+            let mut tracked = TRACKED_ALLOCATIONS.borrow(cs).borrow_mut();
+            // If we're at capacity, we'll just not track this allocation (silent failure)
+            let _ = tracked.insert(ptr as usize, info);
+        });
+    }
+    
+    pub fn untrack_allocation(ptr: *mut u8) {
+        if ptr.is_null() {
+            return;
+        }
+        
+        critical_section::with(|cs| {
+            let mut tracked = TRACKED_ALLOCATIONS.borrow(cs).borrow_mut();
+            tracked.remove(&(ptr as usize));
+        });
+    }
+    
+    pub fn get_remaining_allocations() -> Vec<AllocationInfo, MAX_TRACKED_ALLOCATIONS> {
+        critical_section::with(|cs| {
+            let tracked = TRACKED_ALLOCATIONS.borrow(cs).borrow();
+            let mut result = Vec::new();
+            for (_, info) in tracked.iter() {
+                let _ = result.push(*info);
+            }
+            result
+        })
+    }
+}
+
 // When custom_cbindgen_alloc is enabled, use TlsfHeap for embedded targets
 #[cfg(feature = "custom_cbindgen_alloc")]
 mod embedded_allocator {
@@ -175,16 +276,27 @@ mod embedded_allocator {
     }
 
     unsafe impl GlobalAlloc for TrackingHeap {
+        #[track_caller]
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             self.ensure_initialized();
             let ptr = unsafe { self.heap.alloc(layout) };
             if !ptr.is_null() {
                 TOTAL_ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
                 ALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
+                
+                // Detailed tracking if feature is enabled
+                #[cfg(feature = "alloc_tracking")]
+                {
+                    // We can't get caller info from GlobalAlloc, but we can track the allocation
+                    // For more detailed tracking, the user would need to use tracked wrapper functions
+                    let location = core::panic::Location::caller();
+                    allocation_tracking::track_allocation(ptr, layout.size(), location);
+                }
             }
             ptr
         }
         
+        #[track_caller]
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
             self.ensure_initialized();
             unsafe {
@@ -192,6 +304,12 @@ mod embedded_allocator {
             }
             TOTAL_FREED.fetch_add(layout.size(), Ordering::Relaxed);
             FREE_COUNT.fetch_add(1, Ordering::Relaxed);
+            
+            // Detailed tracking if feature is enabled
+            #[cfg(feature = "alloc_tracking")]
+            {
+                allocation_tracking::untrack_allocation(ptr);
+            }
         }
     }
 
@@ -215,21 +333,36 @@ mod system_allocator {
     pub struct TrackingSystemHeap;
 
     unsafe impl GlobalAlloc for TrackingSystemHeap {
+        #[track_caller]
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             let ptr = unsafe { System.alloc(layout) };
             if !ptr.is_null() {
                 TOTAL_ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
                 ALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
+                
+                // Detailed tracking if feature is enabled
+                #[cfg(feature = "alloc_tracking")]
+                {
+                    let location = core::panic::Location::caller();
+                    allocation_tracking::track_allocation(ptr, layout.size(), location);
+                }
             }
             ptr
         }
         
+        #[track_caller]
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
             unsafe {
                 System.dealloc(ptr, layout);
             }
             TOTAL_FREED.fetch_add(layout.size(), Ordering::Relaxed);
             FREE_COUNT.fetch_add(1, Ordering::Relaxed);
+            
+            // Detailed tracking if feature is enabled
+            #[cfg(feature = "alloc_tracking")]
+            {
+                allocation_tracking::untrack_allocation(ptr);
+            }
         }
     }
 
@@ -281,6 +414,114 @@ pub extern "C" fn exp_rs_get_current_allocated() -> usize {
     let allocated = TOTAL_ALLOCATED.load(Ordering::Relaxed);
     let freed = TOTAL_FREED.load(Ordering::Relaxed);
     allocated.saturating_sub(freed)
+}
+
+// C-compatible allocation info struct
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CAllocationInfo {
+    pub size: usize,
+    pub line: u32,
+    pub file_ptr: *const c_char,
+    pub ptr: usize,
+    pub caller_addr: usize,    // First level caller address
+    pub caller2_addr: usize,   // Second level caller address  
+}
+
+// Get count of remaining allocations (available with alloc_tracking feature)
+#[cfg(feature = "alloc_tracking")]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_remaining_allocation_count() -> usize {
+    use allocation_tracking::*;
+    let remaining = get_remaining_allocations();
+    remaining.len()
+}
+
+// Get a single remaining allocation by index using ExprResult
+// Returns allocation info in the result fields:
+// - status: 0 on success, -1 if index out of bounds, -2 if no tracking
+// - value: allocation size (as Real)
+// - index: allocation line number
+// - error: contains "file:ptr" format string
+#[cfg(feature = "alloc_tracking")]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_remaining_allocation_by_index(allocation_index: usize) -> ExprResult {
+    use allocation_tracking::*;
+    let remaining = get_remaining_allocations();
+    
+    if allocation_index >= remaining.len() {
+        return ExprResult::from_ffi_error(-1, "Allocation index out of bounds");
+    }
+    
+    let allocation = &remaining[allocation_index];
+    
+    // Create info string with caller addresses (limited formatting for no_std)
+    // Format: "filename caller1 caller2" (space separated for parsing)
+    let info_str = allocation.file;
+    
+    ExprResult {
+        status: 0,
+        value: allocation.size as Real,
+        index: allocation.line as i32,
+        error: ExprResult::copy_to_error_buffer(info_str),
+    }
+}
+
+// Get remaining allocations data (available with alloc_tracking feature)
+// Returns the number of allocations copied to the output buffer
+// If output_buffer is null, returns the total count needed
+#[cfg(feature = "alloc_tracking")]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_remaining_allocations(
+    output_buffer: *mut CAllocationInfo,
+    buffer_size: usize,
+) -> usize {
+    use allocation_tracking::*;
+    let remaining = get_remaining_allocations();
+    
+    if output_buffer.is_null() {
+        return remaining.len();
+    }
+    
+    let copy_count = core::cmp::min(remaining.len(), buffer_size);
+    
+    for (i, allocation) in remaining.iter().enumerate().take(copy_count) {
+        unsafe {
+            let c_info = CAllocationInfo {
+                size: allocation.size,
+                line: allocation.line,
+                file_ptr: allocation.file.as_ptr() as *const c_char,
+                ptr: allocation.ptr,
+                caller_addr: allocation.caller_addr,
+                caller2_addr: allocation.caller2_addr,
+            };
+            output_buffer.add(i).write(c_info);
+        }
+    }
+    
+    copy_count
+}
+
+// Stub versions when alloc_tracking feature is not enabled
+#[cfg(not(feature = "alloc_tracking"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_remaining_allocation_count() -> usize {
+    0 // No tracking available
+}
+
+#[cfg(not(feature = "alloc_tracking"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_remaining_allocation_by_index(_allocation_index: usize) -> ExprResult {
+    ExprResult::from_ffi_error(-2, "Allocation tracking not enabled")
+}
+
+#[cfg(not(feature = "alloc_tracking"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_remaining_allocations(
+    _output_buffer: *mut CAllocationInfo,
+    _buffer_size: usize,
+) -> usize {
+    0 // No tracking available
 }
 
 

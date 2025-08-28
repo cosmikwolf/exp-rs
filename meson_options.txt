@@ -25,3 +25,10 @@ option(
   value: false,
   description: 'Enable building and running native C tests',
 )
+
+option(
+  'alloc_tracking',
+  type: 'boolean',
+  value: false,
+  description: 'Enable detailed allocation tracking with caller information',
+)

@@ -10,6 +10,7 @@ FLOAT_MODE="f64" # Default to f64 mode
 LIST_TESTS=0
 TEST_TARGET="native" # Default to native tests
 ALLOCATOR_MODE="system" # Default to system allocator for native tests
+ALLOC_TRACKING=0 # Default to no detailed allocation tracking
 
 show_help() {
 	echo "Usage: $0 [options]"
@@ -25,6 +26,8 @@ show_help() {
 	echo "  -a, --allocator MODE  Allocator mode for native tests: system or custom (default: system)"
 	echo "                        system = uses standard malloc with Rust tracking"
 	echo "                        custom = uses TlsfHeap with C-side tracking"
+	echo "  --track-allocs        Enable detailed allocation tracking with caller information"
+	echo "                        (useful for debugging memory leaks)"
 	echo "  -l, --list        List all available tests for the selected target"
 	echo "  -h, --help        Show this help message"
 }
@@ -85,6 +88,10 @@ while [ "$#" -gt 0 ]; do
 			exit 1
 		fi
 		;;
+	--track-allocs)
+		ALLOC_TRACKING=1
+		shift
+		;;
 	-l | --list)
 		LIST_TESTS=1
 		shift
@@ -107,10 +114,12 @@ check_reconfigure() {
 	local current_test_native
 	local current_qemu_tests
 	local current_custom_alloc
+	local current_alloc_tracking
 	local expected_use_f32
 	local expected_test_native
 	local expected_qemu_tests
 	local expected_custom_alloc
+	local expected_alloc_tracking
 	local needs_reconfigure=0
 
 	# Get current configuration - meson configure shows values in the second column
@@ -124,11 +133,12 @@ check_reconfigure() {
 	current_test_native=$(meson configure 2>/dev/null | grep -E "^\s*test_native\s" | awk '{print $2}' | head -1)
 	current_qemu_tests=$(meson configure 2>/dev/null | grep -E "^\s*enable_exprs_qemu_tests\s" | awk '{print $2}' | head -1)
 	current_custom_alloc=$(meson configure 2>/dev/null | grep -E "^\s*custom_cbindgen_alloc\s" | awk '{print $2}' | head -1)
+	current_alloc_tracking=$(meson configure 2>/dev/null | grep -E "^\s*alloc_tracking\s" | awk '{print $2}' | head -1)
 
 	cd - >/dev/null
 
 	# If any values are empty, force reconfiguration
-	if [ -z "$current_use_f32" ] || [ -z "$current_test_native" ] || [ -z "$current_qemu_tests" ] || [ -z "$current_custom_alloc" ]; then
+	if [ -z "$current_use_f32" ] || [ -z "$current_test_native" ] || [ -z "$current_qemu_tests" ] || [ -z "$current_custom_alloc" ] || [ -z "$current_alloc_tracking" ]; then
 		echo "Warning: Could not read current meson configuration. Forcing reconfigure."
 		return 0 # Force reconfigure
 	fi
@@ -156,12 +166,20 @@ check_reconfigure() {
 		expected_custom_alloc="true"
 	fi
 
+	# Set expected alloc_tracking value
+	if [ "$ALLOC_TRACKING" -eq 1 ]; then
+		expected_alloc_tracking="true"
+	else
+		expected_alloc_tracking="false"
+	fi
+
 	# Debug output for troubleshooting
 	if [ "$VERBOSE" -eq 1 ]; then
 		echo "DEBUG: current_use_f32='$current_use_f32' expected_use_f32='$expected_use_f32'"
 		echo "DEBUG: current_test_native='$current_test_native' expected_test_native='$expected_test_native'"
 		echo "DEBUG: current_qemu_tests='$current_qemu_tests' expected_qemu_tests='$expected_qemu_tests'"
 		echo "DEBUG: current_custom_alloc='$current_custom_alloc' expected_custom_alloc='$expected_custom_alloc'"
+		echo "DEBUG: current_alloc_tracking='$current_alloc_tracking' expected_alloc_tracking='$expected_alloc_tracking'"
 		echo "DEBUG: allocator_mode='$ALLOCATOR_MODE'"
 	fi
 
@@ -183,6 +201,11 @@ check_reconfigure() {
 
 	if [ "$current_custom_alloc" != "$expected_custom_alloc" ]; then
 		echo "Allocator mode changed: current='$current_custom_alloc', expected='$expected_custom_alloc'"
+		needs_reconfigure=1
+	fi
+
+	if [ "$current_alloc_tracking" != "$expected_alloc_tracking" ]; then
+		echo "Allocation tracking changed: current='$current_alloc_tracking', expected='$expected_alloc_tracking'"
 		needs_reconfigure=1
 	fi
 
@@ -238,6 +261,13 @@ setup_meson() {
 		meson_args+=("-D" "enable_exprs_qemu_tests=true")
 	fi
 
+	# Add allocation tracking option for both native and QEMU builds
+	if [ "$ALLOC_TRACKING" -eq 1 ]; then
+		meson_args+=("-D" "alloc_tracking=true")
+	else
+		meson_args+=("-D" "alloc_tracking=false")
+	fi
+
 	if [ "$reconfigure" = true ]; then
 		meson setup --reconfigure "$BUILD_DIR" "${meson_args[@]}"
 	else
@@ -262,9 +292,17 @@ fi
 # If list tests is requested, show available tests and exit
 if [ "$LIST_TESTS" -eq 1 ]; then
 	if [ "$TEST_TARGET" = "native" ]; then
-		echo "Available tests for $TEST_TARGET target in $FLOAT_MODE mode with $ALLOCATOR_MODE allocator:"
+		if [ "$ALLOC_TRACKING" -eq 1 ]; then
+			echo "Available tests for $TEST_TARGET target in $FLOAT_MODE mode with $ALLOCATOR_MODE allocator (alloc tracking enabled):"
+		else
+			echo "Available tests for $TEST_TARGET target in $FLOAT_MODE mode with $ALLOCATOR_MODE allocator:"
+		fi
 	else
-		echo "Available tests for $TEST_TARGET target in $FLOAT_MODE mode:"
+		if [ "$ALLOC_TRACKING" -eq 1 ]; then
+			echo "Available tests for $TEST_TARGET target in $FLOAT_MODE mode (alloc tracking enabled):"
+		else
+			echo "Available tests for $TEST_TARGET target in $FLOAT_MODE mode:"
+		fi
 	fi
 	echo "================================================="
 	meson test -C "$BUILD_DIR" --list | while read -r test; do
@@ -274,26 +312,55 @@ if [ "$LIST_TESTS" -eq 1 ]; then
 fi
 
 # Build the Rust library first
-# echo "Building Rust library..."
-# if [ "$FLOAT_MODE" = "f32" ]; then
-# 	cargo build --release --no-default-features --features="f32"
-# else
-# 	cargo build --release # f64 mode (default)
-# fi
+echo "Building Rust library..."
+RUST_FEATURES=""
+if [ "$FLOAT_MODE" = "f32" ]; then
+	RUST_FEATURES="f32"
+fi
+if [ "$ALLOC_TRACKING" -eq 1 ]; then
+	if [ -n "$RUST_FEATURES" ]; then
+		RUST_FEATURES="$RUST_FEATURES,alloc_tracking"
+	else
+		RUST_FEATURES="alloc_tracking"
+	fi
+fi
+
+if [ -n "$RUST_FEATURES" ]; then
+	echo "Building with features: $RUST_FEATURES"
+	cargo build --release --features="$RUST_FEATURES"
+else
+	cargo build --release
+fi
 
 # Compile the tests
 if [ "$TEST_TARGET" = "native" ]; then
-	echo "Compiling $TEST_TARGET tests with $ALLOCATOR_MODE allocator..."
+	if [ "$ALLOC_TRACKING" -eq 1 ]; then
+		echo "Compiling $TEST_TARGET tests with $ALLOCATOR_MODE allocator (alloc tracking enabled)..."
+	else
+		echo "Compiling $TEST_TARGET tests with $ALLOCATOR_MODE allocator..."
+	fi
 else
-	echo "Compiling $TEST_TARGET tests..."
+	if [ "$ALLOC_TRACKING" -eq 1 ]; then
+		echo "Compiling $TEST_TARGET tests (alloc tracking enabled)..."
+	else
+		echo "Compiling $TEST_TARGET tests..."
+	fi
 fi
 meson compile -C "$BUILD_DIR"
 
 # Run the tests
 if [ "$TEST_TARGET" = "native" ]; then
-	echo "Running $TEST_TARGET tests in $FLOAT_MODE mode with $ALLOCATOR_MODE allocator..."
+	if [ "$ALLOC_TRACKING" -eq 1 ]; then
+		echo "Running $TEST_TARGET tests in $FLOAT_MODE mode with $ALLOCATOR_MODE allocator (alloc tracking enabled)..."
+	else
+		echo "Running $TEST_TARGET tests in $FLOAT_MODE mode with $ALLOCATOR_MODE allocator..."
+	fi
 else
-	echo "Running $TEST_TARGET tests in $FLOAT_MODE mode..."
+	if [ "$ALLOC_TRACKING" -eq 1 ]; then
+		echo "Running $TEST_TARGET tests in $FLOAT_MODE mode (alloc tracking enabled)..."
+	else
+		echo "Running $TEST_TARGET tests in $FLOAT_MODE mode..."
+	fi
 fi
 if [ -n "$TEST_NAME" ]; then
 	# Run specific test if name provided
@@ -313,7 +380,15 @@ else
 fi
 
 if [ "$TEST_TARGET" = "native" ]; then
-	echo "Tests completed ($TEST_TARGET target, $FLOAT_MODE mode, $ALLOCATOR_MODE allocator)"
+	if [ "$ALLOC_TRACKING" -eq 1 ]; then
+		echo "Tests completed ($TEST_TARGET target, $FLOAT_MODE mode, $ALLOCATOR_MODE allocator, alloc tracking enabled)"
+	else
+		echo "Tests completed ($TEST_TARGET target, $FLOAT_MODE mode, $ALLOCATOR_MODE allocator)"
+	fi
 else
-	echo "Tests completed ($TEST_TARGET target, $FLOAT_MODE mode)"
+	if [ "$ALLOC_TRACKING" -eq 1 ]; then
+		echo "Tests completed ($TEST_TARGET target, $FLOAT_MODE mode, alloc tracking enabled)"
+	else
+		echo "Tests completed ($TEST_TARGET target, $FLOAT_MODE mode)"
+	fi
 fi

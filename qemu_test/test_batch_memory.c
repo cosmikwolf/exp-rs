@@ -782,6 +782,37 @@ int main(void) {
   if (rust_current > 0) {
     qemu_printf("\n*** MEMORY LEAK DETECTED: %d bytes in Rust heap ***\n",
                 (int)rust_current);
+    
+    // Use new detailed allocation tracking functions to identify leaks
+    extern size_t exp_rs_get_remaining_allocation_count(void);
+    extern size_t exp_rs_get_remaining_allocations(struct CAllocationInfo* buffer, size_t buffer_size);
+    
+    size_t remaining_count = exp_rs_get_remaining_allocation_count();
+    qemu_printf("Detailed allocation tracking found %d remaining allocations:\n", 
+                (int)remaining_count);
+    
+    if (remaining_count > 0) {
+      // Allocate buffer for allocation info (limit to reasonable number)  
+      const size_t max_allocs = remaining_count < 100 ? remaining_count : 100;
+      struct CAllocationInfo alloc_buffer[100];
+      
+      size_t copied = exp_rs_get_remaining_allocations(alloc_buffer, max_allocs);
+      
+      qemu_printf("\n=== DETAILED LEAK ANALYSIS ===\n");
+      for (size_t i = 0; i < copied; i++) {
+        qemu_printf("%d. %d bytes at line %d in %s (caller: 0x%08x, caller2: 0x%08x)\n",
+                    (int)(i + 1),
+                    (int)alloc_buffer[i].size,
+                    alloc_buffer[i].line,
+                    alloc_buffer[i].file_ptr ? alloc_buffer[i].file_ptr : "unknown",
+                    (unsigned int)alloc_buffer[i].caller_addr,
+                    (unsigned int)alloc_buffer[i].caller2_addr);
+      }
+      qemu_printf("=== END LEAK ANALYSIS ===\n\n");
+    } else {
+      qemu_printf("(No detailed allocation tracking available - build with --features alloc_tracking)\n");
+    }
+    
     qemu_exit(1); // Exit with failure
   } else if (current_allocated > 0) {
     qemu_printf("\n*** MEMORY LEAK DETECTED: %d bytes in system malloc ***\n",
