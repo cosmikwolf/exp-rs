@@ -24,9 +24,6 @@
 
 #define FFI_ERROR_INVALID_POINTER -5
 
-#if defined(EXP_RS_CUSTOM_ALLOC)
-#define HEAP_SIZE 1048576
-#endif
 
 #define EXP_RS_MAX_VARIABLES 16
 
@@ -118,7 +115,7 @@ typedef struct ExprResult {
 extern "C" {
 #endif // __cplusplus
 
-__attribute__((aligned(8))) void exp_rs_heap_init(void);
+__attribute__((aligned(8))) int32_t exp_rs_heap_init(uintptr_t heap_size);
 
 __attribute__((aligned(8))) uintptr_t exp_rs_get_total_allocated(void);
 

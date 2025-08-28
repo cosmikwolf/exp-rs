@@ -37,8 +37,7 @@ void mark_rust_allocation_end(void);
 bool using_custom_allocator(void);
 
 // Heap initialization (when custom allocator is enabled)
-void exp_rs_heap_init(void);
-int exp_rs_heap_init_with_size(size_t heap_size);
+int exp_rs_heap_init(size_t heap_size);
 size_t exp_rs_get_heap_size(void);
 size_t exp_rs_get_max_heap_size(void);
 

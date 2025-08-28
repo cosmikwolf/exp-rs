@@ -57,7 +57,8 @@ void init_memory_tracking() {
     if (!tracking_initialized) {
         // Initialize the TlsfHeap if custom allocator will be used
         // We do this early since any malloc call might trigger Rust allocations
-        exp_rs_heap_init();
+        // Use 1MB heap size for native tests
+        exp_rs_heap_init(1024 * 1024);
         
         // Use dlsym to get the real malloc/free functions
         // This bypasses any potential symbol conflicts

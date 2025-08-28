@@ -7,6 +7,7 @@
 #include <math.h>
 #include <assert.h>
 #include "exp_rs.h"
+#include "common_allocator.h"
 
 // Native function implementations
 Real native_sin(const Real* args, uintptr_t nargs) { (void)nargs; return sin(args[0]); }
@@ -337,6 +338,7 @@ void benchmark_arena_reuse(ExprContext* ctx, uint64_t now_max) {
 }
 
 int main() {
+    init_memory_tracking();
     printf("=== Expression Evaluation Performance Benchmark ===\n");
     
     // Initialize nanotime

@@ -5,6 +5,7 @@
 #include <time.h>
 #include <math.h>
 #include "exp_rs.h"
+#include "common_allocator.h"
 
 // Configuration for embedded system
 #define NUM_EXPRESSIONS 7
@@ -242,6 +243,7 @@ void embedded_pool_cleanup(void) {
 
 // Example usage simulating 1000Hz operation
 int main() {
+    init_memory_tracking();
     printf("=== Embedded Memory Pool Test ===\n");
     printf("Expressions: %d, Parameters: %d, Rate: %d Hz\n\n",
            NUM_EXPRESSIONS, NUM_PARAMETERS, UPDATE_RATE_HZ);

@@ -268,17 +268,11 @@ mod embedded_allocator {
             self.initialized.store(true, Ordering::Release);
         }
         
-        // Auto-initialize if not already done (uses default size)
+        // Ensure heap is initialized - panics if not explicitly initialized
         fn ensure_initialized(&self) {
             if !self.initialized.load(Ordering::Acquire) {
-                unsafe {
-                    let heap_ptr = core::ptr::addr_of_mut!(HEAP_MEM);
-                    let heap_size = CURRENT_HEAP_SIZE.load(Ordering::Acquire);
-                    let size = if heap_size == 0 { DEFAULT_HEAP_SIZE } else { heap_size };
-                    self.heap.init(heap_ptr as usize, size);
-                    CURRENT_HEAP_SIZE.store(size, Ordering::Release);
-                }
-                self.initialized.store(true, Ordering::Release);
+                // Heap was never explicitly initialized - this is an error
+                panic!("Heap not initialized! Call exp_rs_heap_init() before any allocations");
             }
         }
     }
@@ -327,7 +321,6 @@ mod embedded_allocator {
 
     // Maximum heap size (2MB for embedded, allows runtime configuration up to this limit)
     pub const MAX_HEAP_SIZE: usize = 2 * 1024 * 1024; // 2MB maximum
-    pub const DEFAULT_HEAP_SIZE: usize = 1048576; // 1MB default
     pub static mut HEAP_MEM: [MaybeUninit<u8>; MAX_HEAP_SIZE] = [MaybeUninit::uninit(); MAX_HEAP_SIZE];
     
     // Current configured heap size (initialized to 0, set by exp_rs_heap_init_with_size)
@@ -383,21 +376,20 @@ mod system_allocator {
     pub static HEAP: TrackingSystemHeap = TrackingSystemHeap;
 }
 
-// Initialize heap with default size (backward compatibility)
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_heap_init() {
-    exp_rs_heap_init_with_size(0); // Use default size
-}
-
 // Initialize heap with specified size
 // Returns 0 on success, negative error code on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_heap_init_with_size(heap_size: usize) -> i32 {
+pub extern "C" fn exp_rs_heap_init(heap_size: usize) -> i32 {
     #[cfg(feature = "custom_cbindgen_alloc")]
     {
         use embedded_allocator::*;
         
-        let size = if heap_size == 0 { DEFAULT_HEAP_SIZE } else { heap_size };
+        // Require explicit non-zero heap size
+        if heap_size == 0 {
+            return -3; // Invalid heap size (must be non-zero)
+        }
+        
+        let size = heap_size;
         
         // Validate size doesn't exceed maximum
         if size > MAX_HEAP_SIZE {
@@ -418,9 +410,11 @@ pub extern "C" fn exp_rs_heap_init_with_size(heap_size: usize) -> i32 {
     }
     #[cfg(not(feature = "custom_cbindgen_alloc"))]
     {
-        // For system allocator, no initialization needed
-        let _size = if heap_size == 0 { 1048576 } else { heap_size }; // Default 1MB
-        // No actual initialization needed for system allocator
+        // For system allocator, still validate non-zero size for consistency
+        if heap_size == 0 {
+            return -3; // Invalid heap size (must be non-zero)
+        }
+        // System allocator doesn't need actual initialization, but we validate the size
         0
     }
 }

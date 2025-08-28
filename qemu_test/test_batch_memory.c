@@ -703,8 +703,7 @@ void test_memory_stress(ExprContext *ctx) {
 
 // Main test runner
 // Initialize the Rust heap allocator
-extern void exp_rs_heap_init(void);
-extern int32_t exp_rs_heap_init_with_size(uintptr_t heap_size);
+extern int32_t exp_rs_heap_init(uintptr_t heap_size);
 extern uintptr_t exp_rs_get_heap_size(void);
 extern uintptr_t exp_rs_get_max_heap_size(void);
 
@@ -717,7 +716,7 @@ int main(void) {
   // Initialize the Rust heap allocator BEFORE any Rust code runs
   // Test with a specific heap size (2MB for testing)
   uintptr_t test_heap_size = 2 * 1024 * 1024; // 2MB
-  int32_t init_result = exp_rs_heap_init_with_size(test_heap_size);
+  int32_t init_result = exp_rs_heap_init(test_heap_size);
   if (init_result != 0) {
     qemu_printf("ERROR: Heap initialization failed with code %d\n", (int)init_result);
     qemu_printf("Max heap size: %d bytes\n", (int)exp_rs_get_max_heap_size());

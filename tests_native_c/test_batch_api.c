@@ -2,8 +2,10 @@
 #include <stdlib.h>
 #include <math.h>
 #include "exp_rs.h"
+#include "common_allocator.h"
 
 int main() {
+    init_memory_tracking();
     // Create context
     struct ExprContext* ctx = expr_context_new();
     if (!ctx) {
