@@ -408,26 +408,31 @@ pub extern "C" fn exp_rs_get_heap_size() -> usize {
 
 
 // Get allocation statistics for C code
+#[cfg(feature = "alloc_tracking")]
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_get_total_allocated() -> usize {
     TOTAL_ALLOCATED.load(Ordering::Relaxed)
 }
 
+#[cfg(feature = "alloc_tracking")]
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_get_total_freed() -> usize {
     TOTAL_FREED.load(Ordering::Relaxed)
 }
 
+#[cfg(feature = "alloc_tracking")]
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_get_allocation_count() -> usize {
     ALLOCATION_COUNT.load(Ordering::Relaxed)
 }
 
+#[cfg(feature = "alloc_tracking")]
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_get_free_count() -> usize {
     FREE_COUNT.load(Ordering::Relaxed)
 }
 
+#[cfg(feature = "alloc_tracking")]
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_get_current_allocated() -> usize {
     let allocated = TOTAL_ALLOCATED.load(Ordering::Relaxed);
@@ -436,6 +441,7 @@ pub extern "C" fn exp_rs_get_current_allocated() -> usize {
 }
 
 // C-compatible allocation info struct
+#[cfg(feature = "alloc_tracking")]
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CAllocationInfo {
@@ -532,6 +538,50 @@ pub extern "C" fn exp_rs_get_remaining_allocation_count() -> usize {
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_get_remaining_allocation_by_index(_allocation_index: usize) -> ExprResult {
     ExprResult::from_ffi_error(-2, "Allocation tracking not enabled")
+}
+
+// Also need to provide stub for CAllocationInfo when alloc_tracking is disabled
+#[cfg(not(feature = "alloc_tracking"))]
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CAllocationInfo {
+    pub size: usize,
+    pub line: u32,
+    pub file_ptr: *const c_char,
+    pub ptr: usize,
+    pub caller_addr: usize,
+    pub caller2_addr: usize,
+}
+
+// Fallback implementations when alloc_tracking is disabled
+#[cfg(not(feature = "alloc_tracking"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_total_allocated() -> usize {
+    0
+}
+
+#[cfg(not(feature = "alloc_tracking"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_total_freed() -> usize {
+    0
+}
+
+#[cfg(not(feature = "alloc_tracking"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_allocation_count() -> usize {
+    0
+}
+
+#[cfg(not(feature = "alloc_tracking"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_free_count() -> usize {
+    0
+}
+
+#[cfg(not(feature = "alloc_tracking"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn exp_rs_get_current_allocated() -> usize {
+    0
 }
 
 #[cfg(not(feature = "alloc_tracking"))]

@@ -49,6 +49,10 @@ fn main() {
         after_includes_string.push("#define EXP_RS_CUSTOM_ALLOC".to_string());
     }
 
+    if std::env::var("CARGO_FEATURE_ALLOC_TRACKING").is_ok() {
+        after_includes_string.push("#define EXP_RS_ALLOC_TRACKING".to_string());
+    }
+
     let _ = config
         .after_includes
         .insert(after_includes_string.join("\n"));
