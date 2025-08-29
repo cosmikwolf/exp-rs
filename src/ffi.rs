@@ -126,9 +126,13 @@ impl Drop for BatchWithArena {
 // ============================================================================
 
 // Allocation tracking
+#[cfg(feature = "alloc_tracking")]
 static TOTAL_ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+#[cfg(feature = "alloc_tracking")]
 static TOTAL_FREED: AtomicUsize = AtomicUsize::new(0);
+#[cfg(feature = "alloc_tracking")]
 static ALLOCATION_COUNT: AtomicUsize = AtomicUsize::new(0);
+#[cfg(feature = "alloc_tracking")]
 static FREE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 // Detailed allocation tracking (when alloc_tracking feature is enabled)
@@ -281,12 +285,10 @@ mod embedded_allocator {
             self.ensure_initialized();
             let ptr = unsafe { self.heap.alloc(layout) };
             if !ptr.is_null() {
-                TOTAL_ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
-                ALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
-                
-                // Detailed tracking if feature is enabled
                 #[cfg(feature = "alloc_tracking")]
                 {
+                    TOTAL_ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
+                    ALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
                     // We can't get caller info from GlobalAlloc, but we can track the allocation
                     // For more detailed tracking, the user would need to use tracked wrapper functions
                     let location = core::panic::Location::caller();
@@ -302,8 +304,11 @@ mod embedded_allocator {
             unsafe {
                 self.heap.dealloc(ptr, layout);
             }
-            TOTAL_FREED.fetch_add(layout.size(), Ordering::Relaxed);
-            FREE_COUNT.fetch_add(1, Ordering::Relaxed);
+            #[cfg(feature = "alloc_tracking")]
+            {
+                TOTAL_FREED.fetch_add(layout.size(), Ordering::Relaxed);
+                FREE_COUNT.fetch_add(1, Ordering::Relaxed);
+            }
             
             // Detailed tracking if feature is enabled
             #[cfg(feature = "alloc_tracking")]
@@ -337,16 +342,12 @@ mod system_allocator {
         #[track_caller]
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             let ptr = unsafe { System.alloc(layout) };
+            #[cfg(feature = "alloc_tracking")]
             if !ptr.is_null() {
                 TOTAL_ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
                 ALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
-                
-                // Detailed tracking if feature is enabled
-                #[cfg(feature = "alloc_tracking")]
-                {
-                    let location = core::panic::Location::caller();
-                    allocation_tracking::track_allocation(ptr, layout.size(), location);
-                }
+                let location = core::panic::Location::caller();
+                allocation_tracking::track_allocation(ptr, layout.size(), location);
             }
             ptr
         }
@@ -356,12 +357,10 @@ mod system_allocator {
             unsafe {
                 System.dealloc(ptr, layout);
             }
-            TOTAL_FREED.fetch_add(layout.size(), Ordering::Relaxed);
-            FREE_COUNT.fetch_add(1, Ordering::Relaxed);
-            
-            // Detailed tracking if feature is enabled
             #[cfg(feature = "alloc_tracking")]
             {
+                TOTAL_FREED.fetch_add(layout.size(), Ordering::Relaxed);
+                FREE_COUNT.fetch_add(1, Ordering::Relaxed);
                 allocation_tracking::untrack_allocation(ptr);
             }
         }
@@ -525,72 +524,6 @@ pub extern "C" fn exp_rs_get_remaining_allocations(
     }
     
     copy_count
-}
-
-// Stub versions when alloc_tracking feature is not enabled
-#[cfg(not(feature = "alloc_tracking"))]
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_get_remaining_allocation_count() -> usize {
-    0 // No tracking available
-}
-
-#[cfg(not(feature = "alloc_tracking"))]
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_get_remaining_allocation_by_index(_allocation_index: usize) -> ExprResult {
-    ExprResult::from_ffi_error(-2, "Allocation tracking not enabled")
-}
-
-// Also need to provide stub for CAllocationInfo when alloc_tracking is disabled
-#[cfg(not(feature = "alloc_tracking"))]
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct CAllocationInfo {
-    pub size: usize,
-    pub line: u32,
-    pub file_ptr: *const c_char,
-    pub ptr: usize,
-    pub caller_addr: usize,
-    pub caller2_addr: usize,
-}
-
-// Fallback implementations when alloc_tracking is disabled
-#[cfg(not(feature = "alloc_tracking"))]
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_get_total_allocated() -> usize {
-    0
-}
-
-#[cfg(not(feature = "alloc_tracking"))]
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_get_total_freed() -> usize {
-    0
-}
-
-#[cfg(not(feature = "alloc_tracking"))]
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_get_allocation_count() -> usize {
-    0
-}
-
-#[cfg(not(feature = "alloc_tracking"))]
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_get_free_count() -> usize {
-    0
-}
-
-#[cfg(not(feature = "alloc_tracking"))]
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_get_current_allocated() -> usize {
-    0
-}
-
-#[cfg(not(feature = "alloc_tracking"))]
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_get_remaining_allocations(
-    _output_buffer: *mut CAllocationInfo,
-    _buffer_size: usize,
-) -> usize {
-    0 // No tracking available
 }
 
 
