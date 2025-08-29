@@ -6,7 +6,7 @@
 #include <string.h>
 
 // Include the generated header
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 #include "register_test_functions.h"
 
 // Define common types and utilities for our tests

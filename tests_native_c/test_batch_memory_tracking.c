@@ -1,4 +1,4 @@
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 #include "common_allocator.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,9 +38,8 @@ void mark_rust_allocation_end(void);
 bool using_custom_allocator(void);
 
 // Heap initialization (when custom allocator is enabled)
-int exp_rs_heap_init(size_t heap_size);
-size_t exp_rs_get_heap_size(void);
-size_t exp_rs_get_max_heap_size(void);
+int32_t exp_rs_heap_init(uint8_t* heap_ptr, uintptr_t heap_size);
+uintptr_t exp_rs_get_heap_size(void);
 
 #ifdef __cplusplus
 }

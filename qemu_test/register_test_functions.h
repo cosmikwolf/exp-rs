@@ -1,7 +1,7 @@
 #ifndef REGISTER_TEST_FUNCTIONS_H
 #define REGISTER_TEST_FUNCTIONS_H
 
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 #include <math.h>
 
 // Function prototypes for registering math functions

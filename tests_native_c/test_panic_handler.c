@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 #include "common_allocator.h"
 
 // Global panic flag

@@ -1,4 +1,4 @@
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 #include "qemu_test_harness.h"
 #include "register_test_functions.h"
 #include <math.h>

@@ -75,8 +75,6 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::ffi::{CStr, c_char, c_void};
-#[cfg(feature = "custom_cbindgen_alloc")]
-use core::mem::MaybeUninit;
 use core::ptr;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -319,11 +317,9 @@ mod embedded_allocator {
     #[global_allocator]
     pub static HEAP: TrackingHeap = TrackingHeap::new();
 
-    // Maximum heap size (2MB for embedded, allows runtime configuration up to this limit)
-    pub const MAX_HEAP_SIZE: usize = 2 * 1024 * 1024; // 2MB maximum
-    pub static mut HEAP_MEM: [MaybeUninit<u8>; MAX_HEAP_SIZE] = [MaybeUninit::uninit(); MAX_HEAP_SIZE];
+    // No static heap allocation - memory provided by caller
     
-    // Current configured heap size (initialized to 0, set by exp_rs_heap_init_with_size)
+    // Current configured heap size (initialized to 0, set by exp_rs_heap_init)
     pub static CURRENT_HEAP_SIZE: AtomicUsize = AtomicUsize::new(0);
 }
 
@@ -376,24 +372,20 @@ mod system_allocator {
     pub static HEAP: TrackingSystemHeap = TrackingSystemHeap;
 }
 
-// Initialize heap with specified size
+// Initialize heap with provided memory buffer
 // Returns 0 on success, negative error code on failure
 #[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_heap_init(heap_size: usize) -> i32 {
+pub extern "C" fn exp_rs_heap_init(heap_ptr: *mut u8, heap_size: usize) -> i32 {
     #[cfg(feature = "custom_cbindgen_alloc")]
     {
         use embedded_allocator::*;
         
-        // Require explicit non-zero heap size
+        // Validate parameters
+        if heap_ptr.is_null() {
+            return -1; // Null pointer
+        }
         if heap_size == 0 {
             return -3; // Invalid heap size (must be non-zero)
-        }
-        
-        let size = heap_size;
-        
-        // Validate size doesn't exceed maximum
-        if size > MAX_HEAP_SIZE {
-            return -1; // Size too large
         }
         
         // Check if already initialized
@@ -402,19 +394,21 @@ pub extern "C" fn exp_rs_heap_init(heap_size: usize) -> i32 {
         }
         
         unsafe {
-            let heap_ptr = core::ptr::addr_of_mut!(HEAP_MEM);
-            HEAP.init(heap_ptr as usize, size);
-            CURRENT_HEAP_SIZE.store(size, core::sync::atomic::Ordering::Release);
+            HEAP.init(heap_ptr as usize, heap_size);
+            CURRENT_HEAP_SIZE.store(heap_size, core::sync::atomic::Ordering::Release);
         }
         0
     }
     #[cfg(not(feature = "custom_cbindgen_alloc"))]
     {
-        // For system allocator, still validate non-zero size for consistency
+        // For system allocator, validate parameters for consistency but don't use them
+        if heap_ptr.is_null() {
+            return -1; // Null pointer
+        }
         if heap_size == 0 {
             return -3; // Invalid heap size (must be non-zero)
         }
-        // System allocator doesn't need actual initialization, but we validate the size
+        // System allocator doesn't need actual initialization
         0
     }
 }
@@ -432,18 +426,6 @@ pub extern "C" fn exp_rs_get_heap_size() -> usize {
     }
 }
 
-// Get maximum heap size
-#[unsafe(no_mangle)]
-pub extern "C" fn exp_rs_get_max_heap_size() -> usize {
-    #[cfg(feature = "custom_cbindgen_alloc")]
-    {
-        embedded_allocator::MAX_HEAP_SIZE
-    }
-    #[cfg(not(feature = "custom_cbindgen_alloc"))]
-    {
-        0 // System allocator doesn't have a maximum
-    }
-}
 
 // Get allocation statistics for C code
 #[unsafe(no_mangle)]

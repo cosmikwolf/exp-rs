@@ -31,6 +31,10 @@ static void* (*original_malloc)(size_t) = NULL;
 static void (*original_free)(void*) = NULL;
 static bool tracking_initialized = false;
 
+// Heap memory for Rust allocator (allocated once, reused)
+static void* rust_heap_memory = NULL;
+static size_t rust_heap_size = 1024 * 1024; // 1MB
+
 // Forward declarations for Rust allocator tracking functions
 // These are always available regardless of custom_cbindgen_alloc feature
 extern size_t exp_rs_get_total_allocated(void);
@@ -55,10 +59,18 @@ bool using_custom_allocator() {
 // Initialize memory tracking
 void init_memory_tracking() {
     if (!tracking_initialized) {
+        // Allocate heap memory for Rust allocator if not already allocated
+        if (rust_heap_memory == NULL) {
+            rust_heap_memory = malloc(rust_heap_size);
+            if (rust_heap_memory == NULL) {
+                // Failed to allocate heap memory
+                return;
+            }
+        }
+        
         // Initialize the TlsfHeap if custom allocator will be used
         // We do this early since any malloc call might trigger Rust allocations
-        // Use 1MB heap size for native tests
-        exp_rs_heap_init(1024 * 1024);
+        exp_rs_heap_init(rust_heap_memory, rust_heap_size);
         
         // Use dlsym to get the real malloc/free functions
         // This bypasses any potential symbol conflicts

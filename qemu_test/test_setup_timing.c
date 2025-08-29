@@ -7,7 +7,7 @@
 #include "register_test_functions.h"
 
 // Include the generated header
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 // Number of iterations for setup timing
 #define SETUP_ITERATIONS 100

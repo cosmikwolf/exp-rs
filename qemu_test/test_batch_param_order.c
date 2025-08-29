@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "qemu_test_harness.h"
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 test_result_t test_batch_param_order(void) {
     qemu_printf("\n=== Testing Batch Parameter Order ===\n");

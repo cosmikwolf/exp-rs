@@ -6,7 +6,7 @@
 #include "qemu_test_harness.h"
 
 // Include the generated header
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 // Define common types and utilities for our tests
 #if defined(DEF_USE_F32) || (defined(USE_F32) && !defined(USE_F64))

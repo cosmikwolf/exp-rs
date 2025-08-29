@@ -213,8 +213,7 @@ check_reconfigure() {
 		echo ""
 		echo "Meson configuration needs to be updated for your selected options."
 		echo "This requires a clean reconfiguration."
-		echo "Press Enter to proceed, or Ctrl-C to exit."
-		read -r </dev/tty
+		echo ""
 		return 0
 	else
 		return 1

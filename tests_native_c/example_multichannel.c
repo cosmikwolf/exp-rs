@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 
 #define NUM_CHANNELS 4
 #define MAX_PATTERNS_PER_CHANNEL 10

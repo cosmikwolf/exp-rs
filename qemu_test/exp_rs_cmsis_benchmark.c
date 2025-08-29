@@ -7,7 +7,7 @@
 #include <string.h>
 
 // Include the generated header
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 #include "register_test_functions.h"
 
 // Access the timer state from the harness

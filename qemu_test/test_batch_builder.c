@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "qemu_test_harness.h"
-#include "../include/exp_rs.h"
+#include "exp_rs.h"
 #include "register_test_functions.h"
 
 test_result_t test_batch_builder_basic(void) {
