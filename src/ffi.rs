@@ -372,58 +372,38 @@ mod system_allocator {
     pub static HEAP: TrackingSystemHeap = TrackingSystemHeap;
 }
 
-// Initialize heap with provided memory buffer
+// Initialize heap with provided memory buffer (only available with custom allocator)
 // Returns 0 on success, negative error code on failure
+#[cfg(feature = "custom_cbindgen_alloc")]
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_heap_init(heap_ptr: *mut u8, heap_size: usize) -> i32 {
-    #[cfg(feature = "custom_cbindgen_alloc")]
-    {
-        use embedded_allocator::*;
-        
-        // Validate parameters
-        if heap_ptr.is_null() {
-            return -1; // Null pointer
-        }
-        if heap_size == 0 {
-            return -3; // Invalid heap size (must be non-zero)
-        }
-        
-        // Check if already initialized
-        if HEAP.is_initialized() {
-            return -2; // Already initialized
-        }
-        
-        unsafe {
-            HEAP.init(heap_ptr as usize, heap_size);
-            CURRENT_HEAP_SIZE.store(heap_size, core::sync::atomic::Ordering::Release);
-        }
-        0
+    use embedded_allocator::*;
+    
+    // Validate parameters
+    if heap_ptr.is_null() {
+        return -1; // Null pointer
     }
-    #[cfg(not(feature = "custom_cbindgen_alloc"))]
-    {
-        // For system allocator, validate parameters for consistency but don't use them
-        if heap_ptr.is_null() {
-            return -1; // Null pointer
-        }
-        if heap_size == 0 {
-            return -3; // Invalid heap size (must be non-zero)
-        }
-        // System allocator doesn't need actual initialization
-        0
+    if heap_size == 0 {
+        return -3; // Invalid heap size (must be non-zero)
     }
+    
+    // Check if already initialized
+    if HEAP.is_initialized() {
+        return -2; // Already initialized
+    }
+    
+    unsafe {
+        HEAP.init(heap_ptr as usize, heap_size);
+        CURRENT_HEAP_SIZE.store(heap_size, core::sync::atomic::Ordering::Release);
+    }
+    0
 }
 
-// Get current configured heap size
+// Get current configured heap size (only available with custom allocator)
+#[cfg(feature = "custom_cbindgen_alloc")]
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_get_heap_size() -> usize {
-    #[cfg(feature = "custom_cbindgen_alloc")]
-    {
-        embedded_allocator::CURRENT_HEAP_SIZE.load(core::sync::atomic::Ordering::Acquire)
-    }
-    #[cfg(not(feature = "custom_cbindgen_alloc"))]
-    {
-        0 // System allocator doesn't have a fixed heap size
-    }
+    embedded_allocator::CURRENT_HEAP_SIZE.load(core::sync::atomic::Ordering::Acquire)
 }
 
 

@@ -9,6 +9,7 @@ common_allocator_lib = static_library(
   'common_allocator',
   'common_allocator.c',
   include_directories: inc,
+  dependencies: exp_rs_dep,  # This provides the include path for exp_rs.h
   install: false,
 )
 

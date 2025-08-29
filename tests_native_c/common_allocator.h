@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "exp_rs.h"  // Need this for EXP_RS_CUSTOM_ALLOC definition
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,9 +38,11 @@ void mark_rust_allocation_start(void);
 void mark_rust_allocation_end(void);
 bool using_custom_allocator(void);
 
-// Heap initialization (when custom allocator is enabled)
+// Heap initialization (only available when custom allocator is enabled)
+#ifdef EXP_RS_CUSTOM_ALLOC
 int32_t exp_rs_heap_init(uint8_t* heap_ptr, uintptr_t heap_size);
 uintptr_t exp_rs_get_heap_size(void);
+#endif
 
 #ifdef __cplusplus
 }
