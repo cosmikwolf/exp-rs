@@ -169,7 +169,8 @@ mod allocation_tracking {
         let caller2 = if fp != 0 {
             // Read return address from previous frame
             // ARM stack layout: [prev_fp][return_addr][locals...]
-            unsafe { core::ptr::read((fp + 4) as *const usize) }
+            // Use read_unaligned to handle unaligned frame pointers safely
+            unsafe { core::ptr::read_unaligned((fp + 4) as *const usize) }
         } else {
             0
         };
@@ -525,7 +526,6 @@ pub extern "C" fn exp_rs_get_remaining_allocations(
     
     copy_count
 }
-
 
 // Critical section implementation for single-core ARM targets
 #[cfg(all(target_arch = "arm", not(test)))]
