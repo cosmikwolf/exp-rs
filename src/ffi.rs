@@ -156,26 +156,14 @@ mod allocation_tracking {
     #[cfg(target_arch = "arm")]
     unsafe fn get_caller_addresses() -> (usize, usize) {
         let lr: usize;      // Link register (immediate caller)
-        let fp: usize;      // Frame pointer
         
         unsafe {
             // Get link register (return address of immediate caller)
             core::arch::asm!("mov {}, lr", out(reg) lr);
-            
-            // Get frame pointer and walk back for second level
-            core::arch::asm!("mov {}, r11", out(reg) fp); // r11 = frame pointer on ARM
         }
         
-        let caller2 = if fp != 0 {
-            // Read return address from previous frame
-            // ARM stack layout: [prev_fp][return_addr][locals...]
-            // Use read_unaligned to handle unaligned frame pointers safely
-            unsafe { core::ptr::read_unaligned((fp + 4) as *const usize) }
-        } else {
-            0
-        };
-        
-        (lr, caller2)
+        // Skip stack walking to avoid memory faults - just use link register
+        (lr, 0)
     }
 
     // Fallback for non-ARM architectures
