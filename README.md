@@ -1,20 +1,5 @@
 # exp-rs
 
-## Build Optimization
-
-For reducing binary size when using this library in embedded systems, you can exclude the libm dependency by building without the default features:
-
-```bash
-cargo build --release --no-default-features
-```
-
-This reduces the flash memory usage by removing the libm mathematical library dependency. When using this configuration in your application, you have two options:
-
-1. Use `ctx.register_default_math_functions()` - This will register all standard math functions using the Rust standard library implementations
-2. Register only the specific math functions you need for further binary size optimization
-
-Note that option 1 is only suitable for environments where the Rust standard library is available, and not for `no_std` environments.
-
 [![Crates.io](https://img.shields.io/crates/v/exp-rs.svg)](https://crates.io/crates/exp-rs)
 [![Documentation](https://docs.rs/exp-rs/badge.svg)](https://docs.rs/exp-rs)
 [![CI](https://github.com/cosmikwolf/exp-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/cosmikwolf/exp-rs/actions/workflows/rust.yml)

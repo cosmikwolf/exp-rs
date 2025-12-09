@@ -4,5 +4,7 @@
 /target
 /build*/
 /.docs-cache
+/temp
+/.claude
 CLAUDE.md
 CONVENTIONS.md
