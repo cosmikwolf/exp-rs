@@ -1,2 +1,0 @@
-window.ALL_CRATES = ["bitflags","bumpalo","byteorder","exp_rs","hash32","heapless","libm","proc_macro2","quote","serde","serde_derive","stable_deref_trait","syn","unicode_ident"];
-//{"start":21,"fragment_lengths":[10,10,12,9,9,11,7,14,8,8,15,21,6,16]}

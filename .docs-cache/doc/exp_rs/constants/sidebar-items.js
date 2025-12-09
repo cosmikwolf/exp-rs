@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["E","PI","TEST_PRECISION"]};

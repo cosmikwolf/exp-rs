@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["abs","acos","add","asin","atan","atan2","ceil","comma","cos","cosh","div","dummy","e","exp","floor","fmod","ln","log","log10","max","min","mul","neg","pi","pow","sign","sin","sinh","sqrt","sub","tan","tanh"]};
