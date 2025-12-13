@@ -13,8 +13,8 @@ A C header is generated automatically for FFI usage via `cbindgen`.
 
 This project was inspired by [tinyexpr-rs](https://github.com/kondrak/tinyexpr-rs) by Krzysztof Kondrak, which is itself a port of [TinyExpr](https://github.com/codeplea/tinyexpr) by codeplea. This project has some key fundamental differences and improvements over the original TinyExpr and tinyexpr-rs:
 
-- Utilizes a Pratt parser for better performance
-- Utilizes Arena allocation for zero-allocation evaluation after parsing, and greater ease of memory management, suitable for embedded environments
+- Pratt parser for minimal stack depth—handles deep nesting on embedded stacks
+- Arena allocation for bounded memory and zero-allocation evaluation after setup
 
 The function grammar of [tinyexpr-plusplus](https://github.com/Blake-Madden/tinyexpr-plusplus) was used to make it a compatible replacement.
 
