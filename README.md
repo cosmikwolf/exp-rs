@@ -7,11 +7,14 @@
 ![](https://img.shields.io/crates/l/json.svg)
 [![no_std](https://img.shields.io/badge/no__std-yes-success)](https://docs.rust-embedded.org/book/intro/no-std.html)
 
-exp-rs ([github.com/cosmikwolf/exp-rs](https://github.com/cosmikwolf/exp-rs)) is a tiny recursive descent expression parser, compiler, and evaluation engine for math expressions.
+exp-rs ([github.com/cosmikwolf/exp-rs](https://github.com/cosmikwolf/exp-rs)) is a tiny top-down operator precedence (Pratt) expression parser, compiler, and evaluation engine for math expressions.
 
 A C header is generated automatically for FFI usage via `cbindgen`.
 
-This project was inspired by [tinyexpr-rs](https://github.com/kondrak/tinyexpr-rs) by Krzysztof Kondrak, which is itself a port of [TinyExpr](https://github.com/codeplea/tinyexpr) by codeplea.
+This project was inspired by [tinyexpr-rs](https://github.com/kondrak/tinyexpr-rs) by Krzysztof Kondrak, which is itself a port of [TinyExpr](https://github.com/codeplea/tinyexpr) by codeplea. This project has some key fundamental differences and improvements over the original TinyExpr and tinyexpr-rs:
+
+- Utilizes a Pratt parser for better performance
+- Utilizes Arena allocation for zero-allocation evaluation after parsing, and greater ease of memory management, suitable for embedded environments
 
 The function grammar of [tinyexpr-plusplus](https://github.com/Blake-Madden/tinyexpr-plusplus) was used to make it a compatible replacement.
 
