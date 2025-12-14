@@ -96,7 +96,6 @@ pub struct EvalContext {
     pub parent: Option<Rc<EvalContext>>,
 }
 
-
 impl EvalContext {
     /// Creates a new empty evaluation context.
     ///
@@ -275,16 +274,13 @@ impl EvalContext {
             description: None,
         };
 
-        match Rc::make_mut(&mut self.native_functions)
-            .insert(key, function)
-        {
+        match Rc::make_mut(&mut self.native_functions).insert(key, function) {
             Ok(_) => Ok(()),
             Err(_) => Err(crate::error::ExprError::CapacityExceeded(
                 "native_functions",
             )),
         }
     }
-
 
     /// Enables AST caching for this context to improve performance.
     ///
@@ -631,7 +627,6 @@ impl EvalContext {
         }
     }
 
-
     /// Get a list of all native function names in this context (including parent contexts)
     pub fn list_native_functions(&self) -> Vec<String> {
         let mut functions = Vec::new();
@@ -887,10 +882,11 @@ mod tests {
     fn test_get_variable_function_parameter_precedence() {
         let mut ctx = EvalContext::new();
         let arena = bumpalo::Bump::new();
-        let mut batch = crate::expression::ArenaBatchBuilder::new(&arena);
+        let mut batch = crate::expression::Expression::new(&arena);
 
         // Register a function that uses parameter 'x' in arena batch
-        batch.register_expression_function("f", &["x"], "x * 2")
+        batch
+            .register_expression_function("f", &["x"], "x * 2")
             .unwrap();
 
         // Set a global 'x'
@@ -961,14 +957,6 @@ mod tests {
         let val = engine::interp("add_all(1, 2, 3)", Some(Rc::new(ctx))).unwrap();
         assert_eq!(val, 6.0);
     }
-
-
-
-
-
-
-
-
 
     #[test]
     fn test_array_access() {

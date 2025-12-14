@@ -2,7 +2,7 @@
 //! This test closely matches what the FFI C test does
 
 use bumpalo::Bump;
-use exp_rs::{EvalContext, Real, expression::ArenaBatchBuilder};
+use exp_rs::{EvalContext, Real, expression::Expression};
 use std::rc::Rc;
 
 #[test]
@@ -35,7 +35,7 @@ fn test_batch_zero_allocations_with_functions() {
     let ctx = Rc::new(ctx);
 
     // Create batch builder (like expr_batch_new)
-    let mut builder = ArenaBatchBuilder::new(&arena);
+    let mut builder = Expression::new(&arena);
 
     // Register expression functions in the batch for zero-allocation evaluation
     builder
@@ -112,12 +112,12 @@ fn test_batch_zero_allocations_with_functions() {
 
 #[test]
 fn test_expression_api_zero_allocations() {
-    use exp_rs::expression::ArenaBatchBuilder;
+    use exp_rs::expression::Expression;
 
     // Test the higher-level Expression API too
     let arena = Bump::with_capacity(128 * 1024);
 
-    let mut expr = ArenaBatchBuilder::new(&arena);
+    let mut expr = Expression::new(&arena);
 
     // Add parameters
     expr.add_parameter("x", 0.0).unwrap();

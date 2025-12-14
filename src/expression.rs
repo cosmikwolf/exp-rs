@@ -5,7 +5,7 @@
 
 use crate::error::ExprError;
 use crate::eval::iterative::{EvalEngine, eval_with_engine};
-use crate::types::{TryIntoHeaplessString, BatchParamMap};
+use crate::types::{BatchParamMap, TryIntoHeaplessString};
 use crate::{AstExpr, EvalContext, Real};
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
@@ -20,12 +20,11 @@ pub struct Param {
     pub value: Real,
 }
 
-
 /// Arena-aware batch builder for zero-allocation expression evaluation
 ///
 /// This structure is similar to BatchBuilder but uses an arena for all
 /// AST allocations, eliminating dynamic memory allocation during evaluation.
-pub struct ArenaBatchBuilder<'arena> {
+pub struct Expression<'arena> {
     /// The arena for all allocations
     arena: &'arena Bump,
 
@@ -45,10 +44,14 @@ pub struct ArenaBatchBuilder<'arena> {
     local_functions: Option<&'arena RefCell<crate::types::ExpressionFunctionMap>>,
 }
 
-impl<'arena> ArenaBatchBuilder<'arena> {
+/// Deprecated: Use `Expression` instead
+#[deprecated(since = "0.2.0", note = "renamed to Expression")]
+pub type ArenaBatchBuilder<'arena> = Expression<'arena>;
+
+impl<'arena> Expression<'arena> {
     /// Create a new empty batch builder with arena
     pub fn new(arena: &'arena Bump) -> Self {
-        ArenaBatchBuilder {
+        Expression {
             arena,
             expressions: Vec::new(),
             params: Vec::new(),
@@ -199,15 +202,15 @@ impl<'arena> ArenaBatchBuilder<'arena> {
             None
         } else {
             // Pre-allocate parameter slice in arena
-            let slice: &mut [(crate::types::HString, crate::Real)] = 
+            let slice: &mut [(crate::types::HString, crate::Real)] =
                 self.arena.alloc_slice_fill_default(params.len());
-            
+
             // Pre-fill parameter names (they never change)
             for (i, param_name) in params.iter().enumerate() {
                 slice[i].0 = param_name.try_into_heapless()?;
                 slice[i].1 = 0.0; // Default value
             }
-            
+
             Some(slice as *mut _)
         };
 
@@ -264,13 +267,13 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     /// # Example
     /// ```
     /// use bumpalo::Bump;
-    /// use exp_rs::expression::ArenaBatchBuilder;
+    /// use exp_rs::expression::Expression;
     ///
     /// let arena = Bump::new();
-    /// let mut batch = ArenaBatchBuilder::new(&arena);
+    /// let mut batch = Expression::new(&arena);
     /// batch.add_expression("x + 1").unwrap();
     /// batch.add_parameter("x", 5.0).unwrap();
-    /// 
+    ///
     /// // Clear and reuse
     /// batch.clear();
     /// assert_eq!(batch.expression_count(), 0);
@@ -280,7 +283,7 @@ impl<'arena> ArenaBatchBuilder<'arena> {
         self.expressions.clear();
         self.params.clear();
         self.results.clear();
-        
+
         // Clear local functions if they exist
         if let Some(funcs) = self.local_functions {
             funcs.borrow_mut().clear();
@@ -296,10 +299,10 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     /// # Example
     /// ```
     /// use bumpalo::Bump;
-    /// use exp_rs::expression::ArenaBatchBuilder;
+    /// use exp_rs::expression::Expression;
     ///
     /// let arena = Bump::new();
-    /// let result = ArenaBatchBuilder::eval_simple("2 + 3 * 4", &arena).unwrap();
+    /// let result = Expression::eval_simple("2 + 3 * 4", &arena).unwrap();
     /// assert_eq!(result, 14.0);
     /// ```
     pub fn eval_simple(expr: &str, arena: &'arena Bump) -> Result<Real, ExprError> {
@@ -314,14 +317,14 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     /// # Example
     /// ```
     /// use bumpalo::Bump;
-    /// use exp_rs::{expression::ArenaBatchBuilder, EvalContext};
+    /// use exp_rs::{expression::Expression, EvalContext};
     /// use std::rc::Rc;
     ///
     /// let arena = Bump::new();
     /// let mut ctx = EvalContext::new();
     /// ctx.set_parameter("x", 5.0);
     ///
-    /// let result = ArenaBatchBuilder::eval_with_context("x * 2", &Rc::new(ctx), &arena).unwrap();
+    /// let result = Expression::eval_with_context("x * 2", &Rc::new(ctx), &arena).unwrap();
     /// assert_eq!(result, 10.0);
     /// ```
     pub fn eval_with_context(
@@ -344,14 +347,14 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     /// # Example
     /// ```
     /// use bumpalo::Bump;
-    /// use exp_rs::{expression::ArenaBatchBuilder, EvalContext};
+    /// use exp_rs::{expression::Expression, EvalContext};
     /// use std::rc::Rc;
     ///
     /// let arena = Bump::new();
     /// let params = [("x", 3.0), ("y", 4.0)];
     /// let ctx = Rc::new(EvalContext::new());
     ///
-    /// let result = ArenaBatchBuilder::eval_with_params("x^2 + y^2", &params, &ctx, &arena).unwrap();
+    /// let result = Expression::eval_with_params("x^2 + y^2", &params, &ctx, &arena).unwrap();
     /// assert_eq!(result, 25.0); // 3^2 + 4^2 = 25
     /// ```
     pub fn eval_with_params(
@@ -381,10 +384,10 @@ impl<'arena> ArenaBatchBuilder<'arena> {
     /// # Example
     /// ```
     /// use bumpalo::Bump;
-    /// use exp_rs::expression::ArenaBatchBuilder;
+    /// use exp_rs::expression::Expression;
     ///
     /// let arena = Bump::new();
-    /// let mut builder = ArenaBatchBuilder::new(&arena);
+    /// let mut builder = Expression::new(&arena);
     /// builder.add_parameter("x", 0.0).unwrap();
     /// builder.set("x", 5.0).unwrap();
     /// ```
@@ -398,25 +401,25 @@ mod tests {
     use super::*;
     use bumpalo::Bump;
 
-    // === Tests for ArenaBatchBuilder Convenience Methods ===
+    // === Tests for Expression Convenience Methods ===
 
     #[test]
     fn test_arena_batch_eval_simple() {
         let arena = Bump::new();
 
         // Test basic arithmetic
-        assert_eq!(ArenaBatchBuilder::eval_simple("2 + 3 * 4", &arena).unwrap(), 14.0);
+        assert_eq!(Expression::eval_simple("2 + 3 * 4", &arena).unwrap(), 14.0);
         assert_eq!(
-            ArenaBatchBuilder::eval_simple("(2 + 3) * 4", &arena).unwrap(),
+            Expression::eval_simple("(2 + 3) * 4", &arena).unwrap(),
             20.0
         );
-        assert_eq!(ArenaBatchBuilder::eval_simple("10 / 2 - 3", &arena).unwrap(), 2.0);
+        assert_eq!(Expression::eval_simple("10 / 2 - 3", &arena).unwrap(), 2.0);
 
         // Test with constants
         #[cfg(feature = "libm")]
         {
-            assert!(ArenaBatchBuilder::eval_simple("pi", &arena).unwrap() - std::f64::consts::PI < 0.0001);
-            assert!(ArenaBatchBuilder::eval_simple("e", &arena).unwrap() - std::f64::consts::E < 0.0001);
+            assert!(Expression::eval_simple("pi", &arena).unwrap() - std::f64::consts::PI < 0.0001);
+            assert!(Expression::eval_simple("e", &arena).unwrap() - std::f64::consts::E < 0.0001);
         }
     }
 
@@ -433,11 +436,11 @@ mod tests {
 
         // Test evaluation with context variables
         assert_eq!(
-            ArenaBatchBuilder::eval_with_context("x + y", &ctx_rc, &arena).unwrap(),
+            Expression::eval_with_context("x + y", &ctx_rc, &arena).unwrap(),
             30.0
         );
         assert_eq!(
-            ArenaBatchBuilder::eval_with_context("x * 2 + y / 2", &ctx_rc, &arena).unwrap(),
+            Expression::eval_with_context("x * 2 + y / 2", &ctx_rc, &arena).unwrap(),
             30.0
         );
 
@@ -445,11 +448,11 @@ mod tests {
         #[cfg(feature = "libm")]
         {
             assert_eq!(
-                ArenaBatchBuilder::eval_with_context("sin(0)", &ctx_rc, &arena).unwrap(),
+                Expression::eval_with_context("sin(0)", &ctx_rc, &arena).unwrap(),
                 0.0
             );
             assert_eq!(
-                ArenaBatchBuilder::eval_with_context("cos(0)", &ctx_rc, &arena).unwrap(),
+                Expression::eval_with_context("cos(0)", &ctx_rc, &arena).unwrap(),
                 1.0
             );
         }
@@ -463,20 +466,20 @@ mod tests {
         // Test with simple parameters
         let params = [("x", 3.0), ("y", 4.0)];
         assert_eq!(
-            ArenaBatchBuilder::eval_with_params("x + y", &params, &ctx, &arena).unwrap(),
+            Expression::eval_with_params("x + y", &params, &ctx, &arena).unwrap(),
             7.0
         );
 
         // Test with complex expression
         assert_eq!(
-            ArenaBatchBuilder::eval_with_params("x^2 + y^2", &params, &ctx, &arena).unwrap(),
+            Expression::eval_with_params("x^2 + y^2", &params, &ctx, &arena).unwrap(),
             25.0
         );
 
         // Test with multiple parameters
         let params3 = [("a", 2.0), ("b", 3.0), ("c", 5.0)];
         assert_eq!(
-            ArenaBatchBuilder::eval_with_params("a * b + c", &params3, &ctx, &arena).unwrap(),
+            Expression::eval_with_params("a * b + c", &params3, &ctx, &arena).unwrap(),
             11.0
         );
     }
@@ -486,7 +489,7 @@ mod tests {
         let arena = Bump::new();
         let ctx = Rc::new(EvalContext::new());
 
-        let mut builder = ArenaBatchBuilder::new(&arena);
+        let mut builder = Expression::new(&arena);
         builder.add_parameter("a", 1.0).unwrap();
         builder.add_parameter("b", 2.0).unwrap();
         builder.add_expression("a + b").unwrap();
@@ -511,12 +514,14 @@ mod tests {
     #[test]
     fn test_arena_batch_local_expression_functions() {
         let arena = Bump::new();
-        let mut builder = ArenaBatchBuilder::new(&arena);
+        let mut builder = Expression::new(&arena);
 
         // Register a local function
-        builder.register_expression_function("double", &["x"], "x * 2")
+        builder
+            .register_expression_function("double", &["x"], "x * 2")
             .unwrap();
-        builder.register_expression_function("add_one", &["x"], "x + 1")
+        builder
+            .register_expression_function("add_one", &["x"], "x + 1")
             .unwrap();
 
         // Use the functions in expressions
@@ -547,9 +552,10 @@ mod tests {
 
         // Test: Local arena function
         {
-            let mut builder = ArenaBatchBuilder::new(&arena);
+            let mut builder = Expression::new(&arena);
             // Register local function
-            builder.register_expression_function("calc", &["x"], "x * 3")
+            builder
+                .register_expression_function("calc", &["x"], "x * 3")
                 .unwrap();
             builder.add_expression("calc(5)").unwrap();
             builder.eval(&ctx).unwrap();
@@ -560,7 +566,7 @@ mod tests {
 
 // Implement Drop to manually free heap-allocated strings in ExpressionFunction objects
 // This prevents memory leaks when the batch contains expression functions
-impl<'arena> Drop for ArenaBatchBuilder<'arena> {
+impl<'arena> Drop for Expression<'arena> {
     fn drop(&mut self) {
         // Manually clear local functions to ensure String objects are dropped
         // This is important because if the arena is dropped before this builder,

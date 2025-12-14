@@ -68,7 +68,7 @@
 //! ```
 //!
 
-use crate::expression::ArenaBatchBuilder;
+use crate::expression::Expression;
 use crate::{EvalContext, Real};
 use alloc::boxed::Box;
 use alloc::string::ToString;
@@ -78,7 +78,7 @@ use core::ffi::{CStr, c_char, c_void};
 use core::ptr;
 
 // Re-export for external visibility
-pub use crate::expression::ArenaBatchBuilder as ArenaBatchBuilderExport;
+pub use crate::expression::Expression as ExpressionExport;
 
 // Magic numbers to detect valid vs freed batches
 // Using 32-bit values for compatibility with 32-bit systems
@@ -87,9 +87,9 @@ const BATCH_FREED: usize = 0x9C2E8B7D; // Random 32-bit value for freed batch
 
 // Internal wrapper that owns both the arena and the batch
 struct BatchWithArena {
-    magic: usize,                           // Magic number for validation
-    arena: *mut Bump,                       // Raw pointer to the arena we leaked
-    batch: *mut ArenaBatchBuilder<'static>, // Raw pointer to the batch
+    magic: usize,                    // Magic number for validation
+    arena: *mut Bump,                // Raw pointer to the arena we leaked
+    batch: *mut Expression<'static>, // Raw pointer to the batch
 }
 
 impl Drop for BatchWithArena {
@@ -1047,7 +1047,7 @@ pub extern "C" fn expr_batch_new(size_hint: usize) -> *mut ExprBatch {
     let arena_ref: &'static Bump = unsafe { &*arena_ptr };
 
     // Create the batch with the leaked arena reference
-    let batch = Box::new(ArenaBatchBuilder::new(arena_ref));
+    let batch = Box::new(Expression::new(arena_ref));
     let batch_ptr = Box::into_raw(batch);
 
     // Create the wrapper that tracks both pointers for cleanup

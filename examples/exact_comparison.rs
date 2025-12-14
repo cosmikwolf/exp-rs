@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use exp_rs::{EvalContext, ArenaBatchBuilder};
+use exp_rs::{EvalContext, Expression};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -10,7 +10,8 @@ fn main() {
 
     // Create context with all functions
     let mut ctx = EvalContext::new();
-    let _ = ctx.register_native_function("sin", 1, |args| args[0].sin())
+    let _ = ctx
+        .register_native_function("sin", 1, |args| args[0].sin())
         .unwrap();
     ctx.register_native_function("cos", 1, |args| args[0].cos())
         .unwrap();
@@ -38,7 +39,8 @@ fn main() {
         }
     })
     .unwrap();
-    let _ = ctx.register_native_function("min", 2, |args| args[0].min(args[1]))
+    let _ = ctx
+        .register_native_function("min", 2, |args| args[0].min(args[1]))
         .unwrap();
     ctx.register_native_function("max", 2, |args| args[0].max(args[1]))
         .unwrap();
@@ -47,7 +49,7 @@ fn main() {
 
     let ctx = Rc::new(ctx);
     let arena = Bump::new();
-    let mut builder = ArenaBatchBuilder::new(&arena);
+    let mut builder = Expression::new(&arena);
 
     // Add the same 7 expressions
     let expressions = vec![

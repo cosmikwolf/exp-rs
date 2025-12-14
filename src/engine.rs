@@ -1004,9 +1004,9 @@ pub fn interp<'a>(expression: &str, ctx: Option<Rc<EvalContext>>) -> crate::erro
         }
     };
 
-    // Use ArenaBatchBuilder for consistent implementation
+    // Use Expression for consistent implementation
     let arena = Bump::new();
-    crate::expression::ArenaBatchBuilder::eval_with_context(expression, &eval_ctx, &arena)
+    crate::expression::Expression::eval_with_context(expression, &eval_ctx, &arena)
 }
 
 #[cfg(test)]

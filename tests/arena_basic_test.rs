@@ -3,7 +3,7 @@ use exp_rs::{
     EvalContext,
     engine::parse_expression,
     eval::iterative::{EvalEngine, eval_with_engine},
-    expression::ArenaBatchBuilder,
+    expression::Expression,
 };
 use std::rc::Rc;
 
@@ -73,7 +73,7 @@ fn test_batch_builder_arena() {
     let arena = Bump::with_capacity(64 * 1024);
 
     // Create batch builder
-    let mut builder = ArenaBatchBuilder::new(&arena);
+    let mut builder = Expression::new(&arena);
 
     // Add parameters
     builder.add_parameter("x", 0.0).unwrap();

@@ -1,6 +1,6 @@
 use bumpalo::Bump;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use exp_rs::{EvalContext, ArenaBatchBuilder, interp};
+use exp_rs::{EvalContext, Expression, interp};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -119,7 +119,7 @@ fn bench_comparison(c: &mut Criterion) {
     group.bench_function("arena_batch_evaluation", |b| {
         // Create arena and builder outside the iteration
         let arena = Bump::with_capacity(256 * 1024);
-        let mut builder = ArenaBatchBuilder::new(&arena);
+        let mut builder = Expression::new(&arena);
 
         // Add parameters
         for name in &param_names {
@@ -227,7 +227,7 @@ fn run_cpu_utilization_test() {
     println!("\nTest 2: Arena BatchBuilder (zero allocations)");
 
     let arena = Bump::with_capacity(256 * 1024); // Larger arena for 30k iterations
-    let mut builder = ArenaBatchBuilder::new(&arena);
+    let mut builder = Expression::new(&arena);
 
     // Add parameters
     for name in &param_names {

@@ -1,11 +1,11 @@
-use exp_rs::{EvalContext, expression::ArenaBatchBuilder};
-use std::rc::Rc;
 use bumpalo::Bump;
+use exp_rs::{EvalContext, expression::Expression};
+use std::rc::Rc;
 
 #[test]
 fn temp_test_simple_expression_function() {
     let arena = Bump::new();
-    let mut builder = ArenaBatchBuilder::new(&arena);
+    let mut builder = Expression::new(&arena);
     let ctx = EvalContext::new();
 
     // Register basic math operators
@@ -16,7 +16,9 @@ fn temp_test_simple_expression_function() {
     }
 
     // Register expression function in the batch instead of context
-    builder.register_expression_function("double", &["x"], "x * 2").unwrap();
+    builder
+        .register_expression_function("double", &["x"], "x * 2")
+        .unwrap();
 
     let ctx_rc = Rc::new(ctx);
 
@@ -39,7 +41,7 @@ fn temp_test_simple_expression_function() {
 #[test]
 fn temp_test_expression_function_with_direct_arg() {
     let arena = Bump::new();
-    let mut builder = ArenaBatchBuilder::new(&arena);
+    let mut builder = Expression::new(&arena);
     let ctx = EvalContext::new();
 
     // Register basic math operators
@@ -50,7 +52,9 @@ fn temp_test_expression_function_with_direct_arg() {
     }
 
     // Register expression function in the batch instead of context
-    builder.register_expression_function("double", &["x"], "x * 2").unwrap();
+    builder
+        .register_expression_function("double", &["x"], "x * 2")
+        .unwrap();
 
     let ctx_rc = Rc::new(ctx);
 
@@ -68,3 +72,4 @@ fn temp_test_expression_function_with_direct_arg() {
         }
     }
 }
+
