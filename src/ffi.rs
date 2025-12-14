@@ -68,7 +68,7 @@
 //! ```
 //!
 
-use crate::expression::ArenaBatchBuilder;
+use crate::expression::Expression;
 use crate::{EvalContext, Real};
 use alloc::boxed::Box;
 use alloc::string::ToString;
@@ -79,7 +79,7 @@ use core::ptr;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 // Re-export for external visibility
-pub use crate::expression::ArenaBatchBuilder as ArenaBatchBuilderExport;
+pub use crate::expression::Expression as ExpressionExport;
 
 // Magic numbers to detect valid vs freed batches
 // Using 32-bit values for compatibility with 32-bit systems
@@ -88,9 +88,9 @@ const BATCH_FREED: usize = 0x9C2E8B7D; // Random 32-bit value for freed batch
 
 // Internal wrapper that owns both the arena and the batch
 struct BatchWithArena {
-    magic: usize,                           // Magic number for validation
-    arena: *mut Bump,                       // Raw pointer to the arena we leaked
-    batch: *mut ArenaBatchBuilder<'static>, // Raw pointer to the batch
+    magic: usize,                    // Magic number for validation
+    arena: *mut Bump,                // Raw pointer to the arena we leaked
+    batch: *mut Expression<'static>, // Raw pointer to the batch
 }
 
 impl Drop for BatchWithArena {
@@ -138,30 +138,30 @@ static FREE_COUNT: AtomicUsize = AtomicUsize::new(0);
 // Detailed allocation tracking (when alloc_tracking feature is enabled)
 #[cfg(feature = "alloc_tracking")]
 mod allocation_tracking {
-    use heapless::{FnvIndexMap, Vec};
-    use critical_section::Mutex;
     use core::cell::RefCell;
-    
+    use critical_section::Mutex;
+    use heapless::{FnvIndexMap, Vec};
+
     #[derive(Clone, Copy)]
     pub struct AllocationInfo {
         pub size: usize,
         pub line: u32,
         pub file: &'static str,
         pub ptr: usize,
-        pub caller_addr: usize,    // First level caller address
-        pub caller2_addr: usize,   // Second level caller address
+        pub caller_addr: usize,  // First level caller address
+        pub caller2_addr: usize, // Second level caller address
     }
 
     // ARM-specific function to get return addresses from stack
     #[cfg(target_arch = "arm")]
     unsafe fn get_caller_addresses() -> (usize, usize) {
-        let lr: usize;      // Link register (immediate caller)
-        
+        let lr: usize; // Link register (immediate caller)
+
         unsafe {
             // Get link register (return address of immediate caller)
             core::arch::asm!("mov {}, lr", out(reg) lr);
         }
-        
+
         // Skip stack walking to avoid memory faults - just use link register
         (lr, 0)
     }
@@ -171,20 +171,21 @@ mod allocation_tracking {
     unsafe fn get_caller_addresses() -> (usize, usize) {
         (0, 0) // No stack walking support
     }
-    
+
     const MAX_TRACKED_ALLOCATIONS: usize = 512;
     type TrackedAllocations = FnvIndexMap<usize, AllocationInfo, MAX_TRACKED_ALLOCATIONS>;
-    
-    static TRACKED_ALLOCATIONS: Mutex<RefCell<TrackedAllocations>> = Mutex::new(RefCell::new(TrackedAllocations::new()));
-    
+
+    static TRACKED_ALLOCATIONS: Mutex<RefCell<TrackedAllocations>> =
+        Mutex::new(RefCell::new(TrackedAllocations::new()));
+
     pub fn track_allocation(ptr: *mut u8, size: usize, location: &'static core::panic::Location) {
         if ptr.is_null() {
             return;
         }
-        
+
         // Get caller addresses using ARM stack walking
         let (caller_addr, caller2_addr) = unsafe { get_caller_addresses() };
-        
+
         let info = AllocationInfo {
             size,
             line: location.line(),
@@ -193,25 +194,25 @@ mod allocation_tracking {
             caller_addr,
             caller2_addr,
         };
-        
+
         critical_section::with(|cs| {
             let mut tracked = TRACKED_ALLOCATIONS.borrow(cs).borrow_mut();
             // If we're at capacity, we'll just not track this allocation (silent failure)
             let _ = tracked.insert(ptr as usize, info);
         });
     }
-    
+
     pub fn untrack_allocation(ptr: *mut u8) {
         if ptr.is_null() {
             return;
         }
-        
+
         critical_section::with(|cs| {
             let mut tracked = TRACKED_ALLOCATIONS.borrow(cs).borrow_mut();
             tracked.remove(&(ptr as usize));
         });
     }
-    
+
     pub fn get_remaining_allocations() -> Vec<AllocationInfo, MAX_TRACKED_ALLOCATIONS> {
         critical_section::with(|cs| {
             let tracked = TRACKED_ALLOCATIONS.borrow(cs).borrow();
@@ -228,12 +229,12 @@ mod allocation_tracking {
 #[cfg(feature = "custom_cbindgen_alloc")]
 mod embedded_allocator {
     use super::*;
-    use embedded_alloc::TlsfHeap;
     use core::alloc::{GlobalAlloc, Layout};
     use core::sync::atomic::{AtomicUsize, Ordering};
+    use embedded_alloc::TlsfHeap;
 
     use core::sync::atomic::AtomicBool;
-    
+
     // Wrapper around TlsfHeap to track allocations
     pub struct TrackingHeap {
         heap: TlsfHeap,
@@ -247,18 +248,18 @@ mod embedded_allocator {
                 initialized: AtomicBool::new(false),
             }
         }
-        
+
         pub fn is_initialized(&self) -> bool {
             self.initialized.load(Ordering::Acquire)
         }
-        
+
         pub unsafe fn init(&self, start_addr: usize, size: usize) {
             unsafe {
                 self.heap.init(start_addr, size);
             }
             self.initialized.store(true, Ordering::Release);
         }
-        
+
         // Ensure heap is initialized - panics if not explicitly initialized
         fn ensure_initialized(&self) {
             if !self.initialized.load(Ordering::Acquire) {
@@ -286,7 +287,7 @@ mod embedded_allocator {
             }
             ptr
         }
-        
+
         #[track_caller]
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
             self.ensure_initialized();
@@ -298,7 +299,7 @@ mod embedded_allocator {
                 TOTAL_FREED.fetch_add(layout.size(), Ordering::Relaxed);
                 FREE_COUNT.fetch_add(1, Ordering::Relaxed);
             }
-            
+
             // Detailed tracking if feature is enabled
             #[cfg(feature = "alloc_tracking")]
             {
@@ -312,7 +313,7 @@ mod embedded_allocator {
     pub static HEAP: TrackingHeap = TrackingHeap::new();
 
     // No static heap allocation - memory provided by caller
-    
+
     // Current configured heap size (initialized to 0, set by exp_rs_heap_init)
     pub static CURRENT_HEAP_SIZE: AtomicUsize = AtomicUsize::new(0);
 }
@@ -340,7 +341,7 @@ mod system_allocator {
             }
             ptr
         }
-        
+
         #[track_caller]
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
             unsafe {
@@ -366,7 +367,7 @@ mod system_allocator {
 #[unsafe(no_mangle)]
 pub extern "C" fn exp_rs_heap_init(heap_ptr: *mut u8, heap_size: usize) -> i32 {
     use embedded_allocator::*;
-    
+
     // Validate parameters
     if heap_ptr.is_null() {
         return -1; // Null pointer
@@ -374,12 +375,12 @@ pub extern "C" fn exp_rs_heap_init(heap_ptr: *mut u8, heap_size: usize) -> i32 {
     if heap_size == 0 {
         return -3; // Invalid heap size (must be non-zero)
     }
-    
+
     // Check if already initialized
     if HEAP.is_initialized() {
         return -2; // Already initialized
     }
-    
+
     unsafe {
         HEAP.init(heap_ptr as usize, heap_size);
         CURRENT_HEAP_SIZE.store(heap_size, core::sync::atomic::Ordering::Release);
@@ -393,7 +394,6 @@ pub extern "C" fn exp_rs_heap_init(heap_ptr: *mut u8, heap_size: usize) -> i32 {
 pub extern "C" fn exp_rs_get_heap_size() -> usize {
     embedded_allocator::CURRENT_HEAP_SIZE.load(core::sync::atomic::Ordering::Acquire)
 }
-
 
 // Get allocation statistics for C code
 #[cfg(feature = "alloc_tracking")]
@@ -437,8 +437,8 @@ pub struct CAllocationInfo {
     pub line: u32,
     pub file_ptr: *const c_char,
     pub ptr: usize,
-    pub caller_addr: usize,    // First level caller address
-    pub caller2_addr: usize,   // Second level caller address  
+    pub caller_addr: usize,  // First level caller address
+    pub caller2_addr: usize, // Second level caller address
 }
 
 // Get count of remaining allocations (available with alloc_tracking feature)
@@ -461,17 +461,17 @@ pub extern "C" fn exp_rs_get_remaining_allocation_count() -> usize {
 pub extern "C" fn exp_rs_get_remaining_allocation_by_index(allocation_index: usize) -> ExprResult {
     use allocation_tracking::*;
     let remaining = get_remaining_allocations();
-    
+
     if allocation_index >= remaining.len() {
         return ExprResult::from_ffi_error(-1, "Allocation index out of bounds");
     }
-    
+
     let allocation = &remaining[allocation_index];
-    
+
     // Create info string with caller addresses (limited formatting for no_std)
     // Format: "filename caller1 caller2" (space separated for parsing)
     let info_str = allocation.file;
-    
+
     ExprResult {
         status: 0,
         value: allocation.size as Real,
@@ -491,13 +491,13 @@ pub extern "C" fn exp_rs_get_remaining_allocations(
 ) -> usize {
     use allocation_tracking::*;
     let remaining = get_remaining_allocations();
-    
+
     if output_buffer.is_null() {
         return remaining.len();
     }
-    
+
     let copy_count = core::cmp::min(remaining.len(), buffer_size);
-    
+
     for (i, allocation) in remaining.iter().enumerate().take(copy_count) {
         unsafe {
             let c_info = CAllocationInfo {
@@ -511,7 +511,7 @@ pub extern "C" fn exp_rs_get_remaining_allocations(
             output_buffer.add(i).write(c_info);
         }
     }
-    
+
     copy_count
 }
 
@@ -782,7 +782,6 @@ pub extern "C" fn expr_context_native_function_count(ctx: *const ExprContext) ->
     }
 }
 
-
 /// Get a native function name by index
 /// Returns the length of the name, or 0 if index is out of bounds
 /// If buffer is NULL, just returns the length needed
@@ -818,7 +817,6 @@ pub extern "C" fn expr_context_get_native_function_name(
         name_bytes.len()
     }
 }
-
 
 /// Add a native function to the context
 ///
@@ -1051,7 +1049,7 @@ pub extern "C" fn expr_batch_new(size_hint: usize) -> *mut ExprBatch {
     let arena_ref: &'static Bump = unsafe { &*arena_ptr };
 
     // Create the batch with the leaked arena reference
-    let batch = Box::new(ArenaBatchBuilder::new(arena_ref));
+    let batch = Box::new(Expression::new(arena_ref));
     let batch_ptr = Box::into_raw(batch);
 
     // Create the wrapper that tracks both pointers for cleanup

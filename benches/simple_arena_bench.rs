@@ -1,6 +1,6 @@
 use bumpalo::Bump;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use exp_rs::{EvalContext, ArenaBatchBuilder};
+use exp_rs::{EvalContext, Expression};
 use std::rc::Rc;
 
 fn bench_arena_performance(c: &mut Criterion) {
@@ -22,7 +22,7 @@ fn bench_arena_performance(c: &mut Criterion) {
     group.bench_function("arena_batch_1000hz", |b| {
         // Setup once per benchmark iteration
         let arena = Bump::with_capacity(128 * 1024); // 128KB arena
-        let mut builder = ArenaBatchBuilder::new(&arena);
+        let mut builder = Expression::new(&arena);
 
         // Add parameters
         for name in &param_names {
@@ -60,7 +60,7 @@ fn bench_arena_performance(c: &mut Criterion) {
             let mut parsed = Vec::new();
 
             for expr in &expressions {
-                let mut expr_builder = ArenaBatchBuilder::new(&arena);
+                let mut expr_builder = Expression::new(&arena);
                 expr_builder.add_expression(expr).unwrap();
                 parsed.push(expr_builder);
             }

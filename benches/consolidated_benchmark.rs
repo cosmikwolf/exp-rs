@@ -1,7 +1,7 @@
 use bumpalo::Bump;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use exp_rs::{
-    AstExpr, EvalContext, EvalEngine, ArenaBatchBuilder, eval_with_engine, interp, parse_expression,
+    AstExpr, EvalContext, EvalEngine, Expression, eval_with_engine, interp, parse_expression,
 };
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::RefCell;
@@ -248,7 +248,7 @@ fn bench_comparison(c: &mut Criterion) {
     group.bench_function("batch_builder_evaluation", |b| {
         let ctx = create_test_context();
         let arena = Bump::new();
-        let mut builder = ArenaBatchBuilder::new(&arena);
+        let mut builder = Expression::new(&arena);
 
         // Add parameters
         let mut param_indices = Vec::new();
@@ -333,7 +333,7 @@ fn bench_expression_complexity(c: &mut Criterion) {
         // Batch evaluation
         group.bench_function(format!("{}_batch", name), |b| {
             let arena = Bump::new();
-            let mut builder = ArenaBatchBuilder::new(&arena);
+            let mut builder = Expression::new(&arena);
 
             // Add parameters
             for i in 0..10 {
@@ -434,7 +434,7 @@ fn run_memory_analysis() {
     // Stage 5: Batch builder setup
     let arena = Bump::new();
     let (mut builder, _) = measure_stage("Setting up BatchBuilder", || {
-        let mut builder = ArenaBatchBuilder::new(&arena);
+        let mut builder = Expression::new(&arena);
 
         // Add parameters
         for name in &param_names {
@@ -649,7 +649,7 @@ fn run_cpu_utilization_test() {
     println!("\nTest 2: BatchBuilder (with parameter overrides)");
 
     let batch_arena = Bump::new();
-    let mut builder = ArenaBatchBuilder::new(&batch_arena);
+    let mut builder = Expression::new(&batch_arena);
 
     // Add parameters
     for name in &param_names {
