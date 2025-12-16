@@ -21,13 +21,30 @@ A tiny, `no_std` Pratt expression parser and evaluator for embedded systems.
 
 ```toml
 [dependencies]
-exp-rs = "0.1"
+exp-rs = "0.2"
+```
 
-# Or with f32 precision
-exp-rs = { version = "0.1", features = ["f32"] }
+### Floating-Point Precision
 
-# Or without libm (provide your own math functions)
-exp-rs = { version = "0.1", default-features = false }
+By default, `exp-rs` uses 64-bit floating point (double precision) for calculations. You can configure the precision using feature flags:
+
+```toml
+# Use default 64-bit precision (double)
+exp-rs = "0.2"
+
+# Use 32-bit precision (float)
+exp-rs = { version = "0.2", features = ["f32"] }
+```
+
+The f64 mode is the default when f32 is not specified.
+
+### Custom Math Implementations
+
+For embedded systems, you can disable the libm dependency to reduce binary size and provide your own math function implementations:
+
+```toml
+# Disable libm dependency
+exp-rs = { version = "0.2", default-features = false }
 ```
 
 ## Quick Example

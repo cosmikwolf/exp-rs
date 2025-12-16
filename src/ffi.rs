@@ -76,7 +76,6 @@ use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::ffi::{CStr, c_char, c_void};
 use core::ptr;
-use core::sync::atomic::{AtomicUsize, Ordering};
 
 // Re-export for external visibility
 pub use crate::expression::Expression as ExpressionExport;
@@ -321,7 +320,6 @@ mod embedded_allocator {
 // When custom_cbindgen_alloc is NOT enabled, use standard system allocator
 #[cfg(not(feature = "custom_cbindgen_alloc"))]
 mod system_allocator {
-    use super::*;
     extern crate std;
     use std::alloc::{GlobalAlloc, Layout, System};
 
