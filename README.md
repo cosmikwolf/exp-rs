@@ -127,7 +127,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-exp-rs = "0.1"
+exp-rs = "0.2"
 ```
 
 ### Floating-Point Precision
@@ -136,10 +136,10 @@ By default, `exp-rs` uses 64-bit floating point (double precision) for calculati
 
 ```toml
 # Use default 64-bit precision (double)
-exp-rs = "0.1"
+exp-rs = "0.2"
 
 # Use 32-bit precision (float)
-exp-rs = { version = "0.1", features = ["f32"] }
+exp-rs = { version = "0.2", features = ["f32"] }
 ```
 
 The f64 mode is the default when f32 is not specified.
@@ -150,7 +150,7 @@ For embedded systems, you can disable the libm dependency to reduce binary size 
 
 ```toml
 # Disable libm dependency
-exp-rs = { version = "0.1", default-features = false }
+exp-rs = { version = "0.2", default-features = false }
 ```
 
 When using exp-rs without libm, you have three options:
