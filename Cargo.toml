@@ -65,14 +65,6 @@ criterion = "0.5"
 proptest = "1.7"
 
 [[bench]]
-name = "consolidated_benchmark"
-harness = false
-
-[[bench]]
-name = "simple_arena_bench"
-harness = false
-
-[[bench]]
 name = "arena_memory_bench"
 harness = false
 
