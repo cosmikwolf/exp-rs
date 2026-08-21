@@ -321,6 +321,12 @@ mod embedded_allocator {
 // When custom_cbindgen_alloc is NOT enabled, use standard system allocator
 #[cfg(not(feature = "custom_cbindgen_alloc"))]
 mod system_allocator {
+    // Needed for the alloc_tracking counters and the allocation_tracking module.
+    // Only used under that feature, hence the cfg - without it this glob is dead
+    // and was removed once already, which broke the alloc_tracking build.
+    #[cfg(feature = "alloc_tracking")]
+    use super::*;
+
     extern crate std;
     use std::alloc::{GlobalAlloc, Layout, System};
 
