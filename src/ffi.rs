@@ -138,8 +138,8 @@ static FREE_COUNT: AtomicUsize = AtomicUsize::new(0);
 // Detailed allocation tracking (when alloc_tracking feature is enabled)
 #[cfg(feature = "alloc_tracking")]
 mod allocation_tracking {
+    #[cfg(target_arch = "arm")]
     use core::cell::RefCell;
-    use critical_section::Mutex;
     use heapless::{FnvIndexMap, Vec};
 
     #[derive(Clone, Copy)]
@@ -175,8 +175,101 @@ mod allocation_tracking {
     const MAX_TRACKED_ALLOCATIONS: usize = 512;
     type TrackedAllocations = FnvIndexMap<usize, AllocationInfo, MAX_TRACKED_ALLOCATIONS>;
 
-    static TRACKED_ALLOCATIONS: Mutex<RefCell<TrackedAllocations>> =
-        Mutex::new(RefCell::new(TrackedAllocations::new()));
+    // The map needs real mutual exclusion, and the two targets get it differently.
+    //
+    // On ARM, critical_section::with disables interrupts on a single core, so the
+    // CriticalSection token really does prove exclusive access and a RefCell inside
+    // it is sound. That path is unchanged.
+    //
+    // Off ARM there is no such guarantee. This crate's own non-ARM
+    // critical_section impl is a no-op (see _critical_section_1_0_acquire below),
+    // so the token proves nothing and two threads can enter at once. RefCell's
+    // borrow flag is a plain Cell rather than an atomic, so that is a data race;
+    // the "already borrowed" panic is only its most visible symptom.
+    //
+    // The lock this code runs under must not allocate, because it is reached from
+    // GlobalAlloc::alloc. That rules out std::sync::Mutex, whose lock() does
+    // allocate on some platforms - using it here recursed until the stack guard
+    // page was hit. A spin lock over an AtomicBool cannot allocate, so use that.
+    #[cfg(target_arch = "arm")]
+    static TRACKED_ALLOCATIONS: critical_section::Mutex<RefCell<TrackedAllocations>> =
+        critical_section::Mutex::new(RefCell::new(TrackedAllocations::new()));
+
+    #[cfg(not(target_arch = "arm"))]
+    static TRACKED_ALLOCATIONS: SpinLock<TrackedAllocations> =
+        SpinLock::new(TrackedAllocations::new());
+
+    /// Allocation-free mutual exclusion for the tracking map off ARM.
+    #[cfg(not(target_arch = "arm"))]
+    struct SpinLock<T> {
+        locked: core::sync::atomic::AtomicBool,
+        data: core::cell::UnsafeCell<T>,
+    }
+
+    // SAFETY: `data` is only ever reached through try_with(), which hands out one
+    // &mut at a time and only while `locked` is held.
+    #[cfg(not(target_arch = "arm"))]
+    unsafe impl<T: Send> Sync for SpinLock<T> {}
+
+    #[cfg(not(target_arch = "arm"))]
+    impl<T> SpinLock<T> {
+        const fn new(value: T) -> Self {
+            Self {
+                locked: core::sync::atomic::AtomicBool::new(false),
+                data: core::cell::UnsafeCell::new(value),
+            }
+        }
+
+        /// Run `f` under the lock, or return None if it could not be taken.
+        ///
+        /// Bounded rather than unbounded so that a caller which somehow does
+        /// allocate under the lock degrades to a dropped tracking entry instead of
+        /// hanging inside the allocator. Dropping entries is already this map's
+        /// behaviour once it passes MAX_TRACKED_ALLOCATIONS, so off-ARM tracking is
+        /// best-effort either way.
+        fn try_with<R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
+            use core::sync::atomic::Ordering as AtomicOrdering;
+
+            let mut spins = 0u32;
+            while self
+                .locked
+                .compare_exchange_weak(
+                    false,
+                    true,
+                    AtomicOrdering::Acquire,
+                    AtomicOrdering::Relaxed,
+                )
+                .is_err()
+            {
+                if spins >= 4096 {
+                    return None;
+                }
+                spins += 1;
+                core::hint::spin_loop();
+            }
+
+            // SAFETY: we hold the lock, so no other reference to `data` exists.
+            let result = f(unsafe { &mut *self.data.get() });
+            self.locked.store(false, AtomicOrdering::Release);
+            Some(result)
+        }
+    }
+
+    /// Run `f` with exclusive access to the tracking map.
+    /// Returns None if the map could not be reached; see SpinLock::try_with.
+    #[cfg(target_arch = "arm")]
+    fn with_map<R>(f: impl FnOnce(&mut TrackedAllocations) -> R) -> Option<R> {
+        Some(critical_section::with(|cs| {
+            f(&mut TRACKED_ALLOCATIONS.borrow(cs).borrow_mut())
+        }))
+    }
+
+    /// Run `f` with exclusive access to the tracking map.
+    /// Returns None if the map could not be reached; see SpinLock::try_with.
+    #[cfg(not(target_arch = "arm"))]
+    fn with_map<R>(f: impl FnOnce(&mut TrackedAllocations) -> R) -> Option<R> {
+        TRACKED_ALLOCATIONS.try_with(f)
+    }
 
     pub fn track_allocation(ptr: *mut u8, size: usize, location: &'static core::panic::Location) {
         if ptr.is_null() {
@@ -195,9 +288,9 @@ mod allocation_tracking {
             caller2_addr,
         };
 
-        critical_section::with(|cs| {
-            let mut tracked = TRACKED_ALLOCATIONS.borrow(cs).borrow_mut();
-            // If we're at capacity, we'll just not track this allocation (silent failure)
+        // If we're at capacity, or the map is busy, we just don't track this
+        // allocation (silent failure)
+        let _ = with_map(|tracked| {
             let _ = tracked.insert(ptr as usize, info);
         });
     }
@@ -207,21 +300,20 @@ mod allocation_tracking {
             return;
         }
 
-        critical_section::with(|cs| {
-            let mut tracked = TRACKED_ALLOCATIONS.borrow(cs).borrow_mut();
+        let _ = with_map(|tracked| {
             tracked.remove(&(ptr as usize));
         });
     }
 
     pub fn get_remaining_allocations() -> Vec<AllocationInfo, MAX_TRACKED_ALLOCATIONS> {
-        critical_section::with(|cs| {
-            let tracked = TRACKED_ALLOCATIONS.borrow(cs).borrow();
+        with_map(|tracked| {
             let mut result = Vec::new();
             for (_, info) in tracked.iter() {
                 let _ = result.push(*info);
             }
             result
         })
+        .unwrap_or_else(Vec::new)
     }
 }
 
@@ -321,6 +413,12 @@ mod embedded_allocator {
 // When custom_cbindgen_alloc is NOT enabled, use standard system allocator
 #[cfg(not(feature = "custom_cbindgen_alloc"))]
 mod system_allocator {
+    // Needed for the alloc_tracking counters and the allocation_tracking module.
+    // Only used under that feature, hence the cfg - without it this glob is dead
+    // and was removed once already, which broke the alloc_tracking build.
+    #[cfg(feature = "alloc_tracking")]
+    use super::*;
+
     extern crate std;
     use std::alloc::{GlobalAlloc, Layout, System};
 
