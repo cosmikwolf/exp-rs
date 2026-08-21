@@ -9,7 +9,7 @@ use crate::context::EvalContext;
 use crate::error::ExprError;
 use crate::eval::context_stack::ContextStack;
 use crate::eval::stack_ops::EvalOp;
-use crate::eval::types::{FunctionCacheEntry, OwnedNativeFunction};
+use crate::eval::types::FunctionCacheEntry;
 use crate::types::{AstExpr, FunctionName, HString};
 use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
 
@@ -558,10 +558,19 @@ impl<'arena> EvalEngine<'arena> {
                 });
             }
 
-            // Get args slice from value stack
+            // Clone only the Rc to the implementation. That is a refcount bump,
+            // not a heap allocation, and it ends the borrow of `ctx` so the value
+            // stack can be mutated below.
+            //
+            // This used to build an OwnedNativeFunction, whose `name` field copies
+            // the function name into a fresh String. Neither `name` nor
+            // `description` was ever read, so that allocation existed only to end
+            // the borrow. The parser represents every operator as a function call
+            // (see AstExpr::Function below), so it cost one malloc and one free per
+            // operator node - 26 of each for a four-expression table-driven pattern.
+            let implementation = func.implementation.clone();
             let args = &self.value_stack[args_start..];
-            let owned_fn = OwnedNativeFunction::from(func);
-            let result = (owned_fn.implementation)(args);
+            let result = implementation(args);
 
             // Pop arguments from stack
             self.value_stack.truncate(args_start);
