@@ -196,6 +196,13 @@ void test_batch_clear_with_iterations() {
            final_stats.current_bytes == 0 ? "✓ NO MEMORY LEAKS" : "✗ MEMORY LEAK DETECTED");
     
     disable_allocation_tracking();
+
+    // Regression guard for the arena growth that expr_batch_clear used to leave behind.
+    // This condition was computed and printed, then discarded — main() returned 0 either
+    // way, so the test reported the growth and passed anyway for as long as the bug
+    // existed. Assert on it; do not warn.
+    assert(memory_stable
+           && "expr_batch_clear must not grow the arena across iterations");
 }
 
 int main() {
