@@ -1245,11 +1245,21 @@ pub extern "C" fn expr_batch_free(batch: *mut ExprBatch) {
     }
 }
 
-/// Clear all expressions, parameters, and results from a batch
+/// Clear all expressions, parameters, and results from a batch, and reset its arena
 ///
-/// This allows the batch to be reused without recreating it. The arena memory
-/// used by previous expressions remains allocated but unused until the arena
-/// is reset. This is safer than freeing and recreating the batch.
+/// The batch is returned to the state it had immediately after `expr_batch_new()`: no
+/// expressions, no parameters, no results, and an arena holding nothing.
+///
+/// The arena reset is the point of this call. `Expression::clear()` on its own cannot do
+/// it — `Expression` holds the arena as a shared `&Bump`, and `Bump::reset` takes `&mut`.
+/// Only this wrapper owns both pointers, so only this wrapper can reset. Without the
+/// reset, every reload re-parses into fresh arena space and the arena grows without
+/// bound.
+///
+/// The reset also drops `EvalEngine`, which is what clears `expr_func_cache`. That cache
+/// holds arena references to parsed expression-function bodies, keyed by function name,
+/// so a batch cleared without a reset keeps evaluating the *previous* content's function
+/// bodies under the new content's names.
 ///
 /// # Parameters
 /// - `batch`: The batch to clear
@@ -1258,7 +1268,9 @@ pub extern "C" fn expr_batch_free(batch: *mut ExprBatch) {
 /// 0 on success, negative error code on failure
 ///
 /// # Safety
-/// The pointer must have been created by expr_batch_new()
+/// - The pointer must have been created by expr_batch_new()
+/// - Every index returned by `expr_batch_add_expression` or `expr_batch_add_variable`
+///   is invalid after this call, as is anything the caller derived from the arena.
 #[unsafe(no_mangle)]
 pub extern "C" fn expr_batch_clear(batch: *mut ExprBatch) -> i32 {
     if batch.is_null() {
@@ -1280,7 +1292,32 @@ pub extern "C" fn expr_batch_clear(batch: *mut ExprBatch) -> i32 {
             return FFI_ERROR_INVALID_POINTER; // Return error in release mode
         }
 
-        (*wrapper.batch).clear();
+        if wrapper.batch.is_null() || wrapper.arena.is_null() {
+            return FFI_ERROR_INVALID_POINTER;
+        }
+
+        // The order of the next three steps is not negotiable.
+        //
+        // 1. Drop the Expression first. It holds `&'arena Bump`, and every AST, expression
+        //    string, and cached function body it owns is a reference into the arena.
+        //    `Bump::reset` takes `&mut self` precisely so that no such borrow can be live
+        //    across it. Resetting before this drop is undefined behaviour.
+        //
+        //    drop_in_place rather than Box::from_raw: the Expression's own allocation is
+        //    reused in step 3, so there is no reason to hand it back to the allocator and
+        //    immediately ask for it again.
+        ptr::drop_in_place(wrapper.batch);
+
+        // 2. No borrow of the arena is live now, so the reset is sound. bumpalo keeps the
+        //    current (largest) chunk and returns the rest, so a batch settles at its high
+        //    water mark instead of re-growing from the size hint on every reload.
+        (*wrapper.arena).reset();
+
+        // 3. Reconstruct in the same allocation. `Expression::new` builds empty Vecs and an
+        //    `EvalEngine` whose bumpalo Vecs come from `new_in()`, which does not allocate.
+        //    So this cannot fail, and cannot leave the slot uninitialised.
+        let arena_ref: &'static Bump = &*wrapper.arena;
+        ptr::write(wrapper.batch, Expression::new(arena_ref));
     }
 
     0

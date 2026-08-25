@@ -260,9 +260,21 @@ impl<'arena> Expression<'arena> {
 
     /// Clear all expressions, parameters, results, and local functions from this batch
     ///
-    /// This allows the batch to be reused without recreating it. The arena memory
-    /// used by previous expressions remains allocated but unused until the arena
-    /// is reset. The evaluation engine is retained for reuse.
+    /// **This resets bookkeeping, not storage, and it is almost never what you want on
+    /// its own.** Two things survive it:
+    ///
+    /// 1. Every AST, expression string, and parameter buffer stays in the arena. This
+    ///    method holds the arena as a shared `&Bump` and `Bump::reset` takes `&mut`, so it
+    ///    cannot reclaim any of it. Add the same expressions again after a clear and the
+    ///    arena grows by their full size, every time, without bound.
+    /// 2. The evaluation engine is retained, including `expr_func_cache` — which holds
+    ///    arena references to parsed expression-function bodies keyed by *name*. Load new
+    ///    content that defines a function of the same name and evaluation keeps using the
+    ///    old body.
+    ///
+    /// To reuse a batch safely, reset the arena as well. Over the FFI, `expr_batch_clear`
+    /// does exactly that. From Rust, drop this `Expression`, reset the `Bump`, and build a
+    /// new one — in that order, so no borrow is live across the reset.
     ///
     /// # Example
     /// ```
