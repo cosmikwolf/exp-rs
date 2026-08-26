@@ -96,6 +96,14 @@ test_programs = {
     'deps': [exp_rs_dep, m_dep, common_allocator_dep],
   },
 
+  # Batch clear must leave the arena identically sized across reloads.
+  # Reads bumpalo's chunk capacity directly, so it catches growth on the second
+  # reload rather than at the first chunk boundary like the allocator-traffic test.
+  'test_batch_clear_arena_stable': {
+    'sources': ['test_batch_clear_arena_stable.c'],
+    'deps': [exp_rs_dep, m_dep],
+  },
+
   # Double-free protection tests
   'test_double_free': {
     'sources': ['test_double_free.c'],
@@ -144,6 +152,7 @@ memory_tests = [
   'test_memory_analysis',
   'test_batch_memory_tracking',
   'test_batch_clear_iterations',
+  'test_batch_clear_arena_stable',
 ]
 
 run_target(
