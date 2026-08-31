@@ -202,7 +202,7 @@ Goal: resolve names one time per expression, not one time per evaluation.
 This is the parse-once vs resolve-once distinction: parse-once exists today;
 resolve-once does not.
 
-- [ ] B1. New module `src/compile.rs`:
+- [x] B1. New module `src/compile.rs`:
       - `Instr` enum: `PushConst`, `LoadSlot(u16)`, direct opcodes
         (`Add`, `Sub`, `Mul`, `Div`, `Mod`, `Pow`, comparisons, `Neg`),
         `CallNative { table_idx, argc }`, jump ops for `?:`, `&&`, `||`.
@@ -215,7 +215,7 @@ resolve-once does not.
         batch — O(unique names), not O(occurrences). Context variables cannot
         become fixed snapshots; the caller can change them between calls.
       - Fold constant subtrees at compile time.
-- [ ] B2. Compile-time function resolution:
+- [x] B2. Compile-time function resolution:
       - Add `builtin: bool` to `NativeFunction`, set only by
         `register_default_math_functions`. Operators resolve to direct opcodes
         when builtin and not shadowed; otherwise to `CallNative`.
@@ -228,7 +228,7 @@ resolve-once does not.
         program table holds cloned `Rc`s, so nothing dangles.
       - Note: external code that builds `NativeFunction` as a struct literal
         needs a one-line update. `register_native_function` does not change.
-- [ ] B3. Expression functions: inline bodies at compile time. Track the
+- [x] B3. Expression functions: inline bodies at compile time. Track the
       expansion chain; a repeated name = cycle → do not compile, fall back to
       the iterative evaluator for that expression. This preserves current
       behavior exactly: base-case recursion works (ternary evaluates one
@@ -239,13 +239,53 @@ resolve-once does not.
       with per-function programs and a runtime depth cap.
       (`src/eval/recursion.rs` — the global atomic counter — is dead code; the
       op-stack cap is the live mechanism.)
-- [ ] B4. Wire in: `Expression::eval` runs programs. `interp()` and `eval_ast`
+- [x] B4. Wire in: `Expression::eval` runs programs. `interp()` and `eval_ast`
       keep the iterative path. FFI surface and `exp_rs.h` unchanged.
-- [ ] B5. Verify: differential proptest — compiled result must equal iterative
+- [x] B5. Verify: differential proptest — compiled result must equal iterative
       result on generated expressions. Full test suite, both float features.
       Run all benchmarks; record results below.
 
-Results after Phase B: _(fill in)_
+All done 2026-08-31, commit `4cbc0cc`. Implementation notes and deviations:
+
+- Compilation is lazy (first `eval` against a context), not at
+  `add_expression` time — the context is not known earlier. Invalidation key
+  is the (id, fn_generation) pair of every context in the parent chain, plus
+  a batch shape generation (params/expressions/local functions).
+- The plan said "programs allocated in the arena". Instructions and slot
+  bindings are; the native-function table is a heap `Vec` instead, because
+  it holds cloned `Rc`s and the arena never runs `Drop` — arena-allocated
+  refcounts would leak the implementations.
+- Per-expression fallback to the iterative engine (not in the plan
+  explicitly, but required for exact behavior): unknown functions and wrong
+  arities must stay lazy runtime errors (they may sit in never-taken
+  branches), arrays/attributes are not compiled, recursive expression
+  functions cannot inline, nesting past the iterative depth envelope keeps
+  the iterative limit semantics. The differential proptest pins all of this.
+- Constant folding covers direct-opcode operators, logical ops, and
+  conditionals only; native calls never fold. Folding uses the same operator
+  implementations the VM executes, so folded results are bit-identical.
+- `expr_context_add_function` after an evaluate now actually registers (the
+  Phase A fix), and the compiled path picks the new function up through the
+  generation bump — covered by a targeted test.
+
+Results after Phase B (full tables in `bench_results/2026-08-31_phaseB/`):
+
+| Metric | Phase 0 | Phase A | Phase B | Total |
+|---|---|---|---|---|
+| Rust `a+5` per eval (f64) | 150.7 ns | 90.7 ns | 23.7 ns | 6.4x |
+| Rust `a*a + 2*a + 1` | 317.5 ns | 227.4 ns | 38.3 ns | 8.3x |
+| Rust `sin(a)*cos(a) + sqrt(a+1)` | 406.5 ns | 316.3 ns | 62.8 ns | 6.5x |
+| Rust batch update10+eval7 (heavy) | 4.94 µs | 4.76 µs | 0.95 µs | 5.2x |
+| Native C batch eval 7 exprs (f64) | 1.776 µs | 1.41 µs | 0.269 µs | 6.6x |
+| Native C per expression | 0.254 µs | 0.203 µs | 0.038 µs | 6.6x |
+| Native C param update 10x | 0.041 µs | 0.13 µs | 0.042 µs | — |
+| Native C full update+eval cycle (f64) | 1.894 µs | 1.53 µs | 0.309 µs | 6.1x |
+| Native C full cycle (f32) | 1.784 µs | 1.60 µs | 0.308 µs | 5.8x |
+| QEMU full cycle (ticks, coarse) | 65 | 65 | 22 | — |
+
+Target check: "simple expressions in tens of nanoseconds on the host" —
+achieved (23.7–62.8 ns). Engine-to-native ratio fell from ~56–165x to
+~9–23x.
 
 ---
 
@@ -253,6 +293,18 @@ Results after Phase B: _(fill in)_
 
 Re-measure `interp()` and the fallback path after Phase B. Apply the deferred
 iterative-evaluator fixes only if that path still matters:
+
+Measured 2026-08-31 (`arena_consolidated_benchmark`, f64):
+`individual_evaluation` (interp per call) 3.48 ms → 3.02 ms across the whole
+effort — the iterative per-node machinery is untouched, as expected. After
+Phase B the iterative evaluator runs only for: `interp()`/`eval_ast` calls,
+expressions with arrays or attributes, and recursive expression functions.
+The consumer firmware's per-tick path uses none of these.
+
+Recommendation: skip C1–C3. The path they optimize is no longer on the hot
+path for the consumer, and each carries risk in exchange for speeding up a
+cold path. C4 (deprecation marker on `src/eval/recursion.rs`) is optional
+cleanup. Awaiting owner decision.
 
 - [ ] C1. Shrink `EvalOp` from ~96 to ~32 bytes: store `&'arena str` instead of
       inline `HString`/`FunctionName`. Constraint: heapless 0.8 `String` has no
