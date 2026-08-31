@@ -3,6 +3,15 @@
 //! This module implements an iterative (non-recursive) AST evaluator using
 //! an explicit stack. This approach eliminates stack overflow issues and
 //! provides better performance for deeply nested expressions.
+//!
+//! This is one of two evaluation engines, and that is deliberate: the slot
+//! compiler (`src/compile.rs`) is the fast path, and this evaluator is the
+//! reference implementation, the fallback for what the compiler does not
+//! express (recursion, arrays, attributes, lazy unknown-name errors), and
+//! the engine behind `interp()`/`eval_ast`. **Any change to evaluation
+//! semantics here must be mirrored in the compiler, and
+//! `tests/compile_differential_test.rs` must stay green.** See the
+//! `compile` module docs for the full rationale.
 
 use crate::Real;
 use crate::context::EvalContext;
