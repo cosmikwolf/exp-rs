@@ -120,32 +120,79 @@ consumer project. Plan: one on-hardware check per phase from the consumer side.
 Goal: remove the per-expression engine overhead. Targets the ~1,638 cycles the
 consumer project measured.
 
-- [ ] A1. Delete dead code:
+- [x] A1. Delete dead code:
       `func_cache` (`src/eval/iterative.rs:55`, cleared per eval, never read),
       `FunctionCacheEntry` and `OwnedNativeFunction` (`src/eval/types.rs`),
       the `visited_contexts` Vec in `ContextStack::lookup_variable`
       (`src/eval/context_stack.rs:142`, heap alloc per lookup, never read),
       unused imports in `src/ffi.rs:79`.
       Note: `src/eval/recursion.rs` is also dead but public API. It stays.
-- [ ] A2. Split the engine: `begin_batch(ctx)` / `eval_one(ast)` / `end_batch()`.
+      (Done 2026-08-31, `356a070`. `src/eval/types.rs` removed entirely; the
+      ffi imports are feature-gated, not deleted — they are live under
+      `alloc_tracking`.)
+- [x] A2. Split the engine: `begin_batch(ctx)` / `eval_one(ast)` / `end_batch()`.
       `begin_batch` pushes the context and sets overrides one time per batch.
       `eval_one` clears only the op and value stacks.
       This removes the per-expression `ctx_stack.clear()` (writes all 128
       `parent_map` slots), the context push, and the `Rc` churn.
       `EvalEngine::eval` and `eval_with_engine` stay as wrappers; no API change.
-- [ ] A3. The engine owns the parameter override map permanently.
+      (Done 2026-08-31, `356a070`.)
+- [x] A3. The engine owns the parameter override map permanently.
       `add_parameter` / `set_param` write through to it. This removes the per-eval
       rebuild and the ~3 KB map move in `Expression::eval` (`src/expression.rs:125`).
       (A borrowed map is not possible: `Expression` owns the engine; that would
       self-borrow.)
-- [ ] A4. FFI: `expr_batch_evaluate` with a NULL context builds a full
+      (Done 2026-08-31, `356a070`. Cost shift: `set_param` now does one hash
+      lookup per update — native C param update 10x went 0.041 → 0.13 µs —
+      but the update+eval cycle still nets −19%. Phase B slots make
+      `set_param` a plain array write again. A full override map now errors
+      at `add_parameter` time instead of at eval time.)
+- [x] A4. FFI: `expr_batch_evaluate` with a NULL context builds a full
       `EvalContext::new()` per call, which registers ~30 functions
       (`src/ffi.rs:1450`, `src/context.rs:126`). Fix: one lazy default context
       per batch, built on first use.
-- [ ] A5. Verify and measure: `cargo test` + `cargo clippy`, default and `f32`
+      (Done 2026-08-31, `356a070`. Applied to `expr_batch_evaluate_ex` too.)
+- [x] A5. Verify and measure: `cargo test` + `cargo clippy`, default and `f32`
       features; run all Phase 0 benchmarks; record results below.
+      (Done 2026-08-31. cargo test 14/14 suites, native C 17/17, QEMU 4/4,
+      both float modes. clippy warnings 33 → 21, all pre-existing.
+      `exp_rs.h` byte-identical.)
 
-Results after Phase A: _(fill in)_
+Found during Phase A (fixed in `356a070`):
+`expr_context_add_function` never validated a NULL function pointer. It
+"rejected" NULL only because the engine held a clone of the last-used context,
+which made `Rc::get_mut` return -4 for ANY registration after an evaluate.
+A2's `end_batch` releases the context, which exposed both problems. Now:
+registration after an evaluate works, NULL is rejected explicitly
+(`NativeFunc` is `Option<extern fn>`; cbindgen output unchanged).
+
+Results after Phase A (full tables and raw outputs in
+`bench_results/2026-08-31_phaseA/`):
+
+| Metric | Phase 0 | Phase A | Change |
+|---|---|---|---|
+| Rust `a+5` per eval (f64) | 150.7 ns | 90.7 ns | −40% |
+| Rust `(a+5)*2` | 217.2 ns | 127.1 ns | −41% |
+| Rust `1/(a+1)+2/(a+2)+3/(a+3)` | 447.4 ns | ~388 ns | −13% |
+| Rust batch update10+eval7 (controlled A/B) | 4.94 µs | 4.76 µs | −4% |
+| Native C batch eval 7 exprs (f64) | 1.776 µs | ~1.41 µs | −20% |
+| Native C full update+eval cycle (f64) | 1.894 µs | ~1.53 µs | −19% |
+| Native C full cycle (f32) | 1.784 µs | ~1.60 µs | −11% |
+
+Reading: the fixed per-eval overhead dropped by ~60 ns (context clear, push,
+Rc churn, map rebuild). Small expressions gain 40%; heavy expressions gain
+little because per-node cost dominates — exactly the Phase B/C targets
+(string-keyed function lookups per operator node, 96-byte `EvalOp` moves).
+
+Measurement notes for later phases:
+- End-of-suite criterion runs read up to 15% high on this machine
+  (thermal/scheduling). For the batch bench, compare isolated runs, ideally
+  A/B against a worktree at the reference commit.
+- The first `test_performance` run after a rebuild reads high; warm up once
+  and use the second run.
+- meson does not track Rust sources: after editing `src/`, delete
+  `target/meson/libexp_rs.a` (and `exp_rs.h`) or the C suites link the stale
+  library.
 
 ---
 

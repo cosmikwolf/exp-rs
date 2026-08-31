@@ -1,0 +1,30 @@
+=== Batch Processing Performance Test ===
+
+=== Batch Evaluation Performance (expr_batch API) ===
+Parameters: 10, Expressions: 6, Real size: 8 bytes
+
+Test 1: Batch setup (new + 10 vars + 6 exprs), 100 rounds
+  Total: 34752 ticks, per setup: 347 ticks
+
+Test 2: Pure evaluation, 2000 iterations
+  Total: 49579 ticks, per batch: 24 ticks, per expression: 4 ticks
+
+Test 3: Parameter update only (10 params), 2000 iterations
+  Total: 65335 ticks, per update cycle: 32 ticks, per parameter: 3 ticks
+
+Test 4: Full cycle (update 10 params + evaluate), 1000 iterations
+  Total: 65335 ticks, per cycle: 65 ticks
+
+Verifying results against C reference...
+  PASS: all 18 checks match
+
+=== Summary (ticks) ===
+Setup per batch:        347
+Eval per batch:         24
+Eval per expression:    4
+Param update per cycle: 32
+Full cycle:             65
+
+(Optimization prevention: 542778)
+
+Test PASSED

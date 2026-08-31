@@ -23,9 +23,13 @@ Per `Expression::eval` call (set_param + eval + get_result), criterion medians:
 | `1/(a+1)+2/(a+2)+3/(a+3)` | 447.4 ns | 433.7 ns | 3.7 ns |
 | batch: update 10 params + eval 7 exprs | 5.00 µs | 4.81 µs | — |
 
-Note: the Rust batch path (5.0 µs) is ~2.8x slower than the same shape through
-the C FFI (1.78 µs below). `Expression::eval` rebuilds the ~3 KB BatchParamMap
-per call (root cause 4 in the plan); `expr_batch_evaluate` does not.
+Note (corrected during Phase A): an earlier version of this file claimed the
+Rust batch row and the native C batch row below measure "the same shape" and
+attributed the 5.0 vs 1.78 µs gap to the per-call BatchParamMap rebuild. That
+was wrong — the C benchmark's 7 expressions are much smaller (2–3 operators
+each) than this bench's 7 (10–15 operator nodes each), so the two rows are
+not comparable. The Phase A controlled A/B put the map rebuild at ~4–5% of
+the heavy batch; per-node cost dominates.
 
 ## Rust — `cargo bench --bench arena_consolidated_benchmark` (f64)
 
