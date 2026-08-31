@@ -53,27 +53,46 @@ Goal: honest before/after numbers on all three targets (Rust, native C, QEMU).
 
 - [x] Fix `[profile.bench] opt-level = 0` in `Cargo.toml`. Benches now inherit
       the release profile. (Done 2026-08-31.)
-- [ ] Port `qemu_test/batch_performance_test.c` from the removed FFI
+- [x] Port `qemu_test/batch_performance_test.c` from the removed FFI
       (`exp_rs_context_eval`, `exp_rs_batch_eval`) to the current
-      `expr_batch_*` API. Re-enable its meson target.
-- [ ] Fix `qemu_test/test_batch_memory.c`: `struct CAllocationInfo` no longer
+      `expr_batch_*` API. Re-enable its meson target. (Done 2026-08-31,
+      `b06202b`. Measures setup / eval / param update / full cycle in CMSDK
+      ticks; verifies against C reference math in both float modes.)
+- [x] Fix `qemu_test/test_batch_memory.c`: `struct CAllocationInfo` no longer
       exists in the generated header for this configuration. It stops the whole
-      QEMU ninja build.
-- [ ] Guard the allocation-stats calls in `tests_native_c/common_allocator.c`
+      QEMU ninja build. (Done 2026-08-31, `b06202b`. Tracking code guarded by
+      `EXP_RS_ALLOC_TRACKING`; meson passes the define when the option is on.
+      Full `--qemu` build and run works now, f32 and f64.)
+- [x] Guard the allocation-stats calls in `tests_native_c/common_allocator.c`
       with `#ifdef`, so the native C suite links without `--track-allocs`.
-      (The symbols only exist with the `alloc_tracking` feature.)
-- [ ] Add a criterion bench for `Expression::eval` (the current bench files
-      import criterion but only do single-shot manual timing).
-- [ ] Capture the baseline on all three targets. Save to `bench_results/`
-      with date and commit hash.
+      (Done 2026-08-31, `b06202b`. Native suite passes 17/17 in all four
+      configurations: f32/f64 x tracking on/off.)
+- [x] Add a criterion bench for `Expression::eval`
+      (`benches/eval_benchmark.rs`: per-expression, native baseline, and the
+      10-param/7-expression batch shape). (Done 2026-08-31, `b06202b`.)
+- [x] Capture the baseline on all three targets. Saved to
+      `bench_results/2026-08-31_phase0_baseline/` (raw outputs + README with
+      summary tables), commit `b06202b`.
 
-Baseline captured so far (host, f64, commit `77847d5` + bench profile fix):
+Found during Phase 0 (fixed in `b06202b`, no behavior change):
+`cargo test --features f32` did not compile: a bad deref in `AstExpr::pow`
+cfg branches (`src/types.rs`), f64-typed assertions/casts in tests and
+examples, and missing f32 libm imports in `examples/eval_context.rs`.
+
+Baseline highlights (host, commit `b06202b`, 2026-08-31; full tables in
+`bench_results/2026-08-31_phase0_baseline/README.md`):
 
 | Suite | Result |
 |---|---|
-| Rust `arena_consolidated_benchmark` | 7 expressions: 7.8 µs/iteration, 1.1 µs/expression |
-| Native C `test_performance` | 7 expressions: 1.78 µs/batch, 0.254 µs/expression; param update 10x: 0.042 µs |
-| QEMU | harness runs; no exp-rs evaluation benchmark exists yet |
+| Rust `eval_benchmark` (f64) | `a+5`: 151 ns/eval; batch update10+eval7: 5.00 µs |
+| Rust `eval_benchmark` (f32) | `a+5`: 144 ns/eval; batch update10+eval7: 4.81 µs |
+| Native C `test_performance` (f64) | 7 exprs: 1.78 µs/batch, 0.254 µs/expr; param update 10x: 0.041 µs |
+| Native C `test_performance` (f32) | 7 exprs: 1.75 µs/batch, 0.251 µs/expr |
+| QEMU `batch_performance_test` (f64) | eval/batch of 6: 25 ticks; full cycle: 65 ticks |
+
+Note: the Rust batch path (5.0 µs) is ~2.8x slower than the same shape through
+the C FFI (1.78 µs) — that gap is the per-call `BatchParamMap` rebuild (root
+cause 4, Phase A3 target).
 
 Caveat: QEMU is not cycle-accurate. QEMU numbers compare before/after only.
 Ground truth for cycle counts is the DWT measurement on real hardware in the
@@ -81,19 +100,18 @@ consumer project. Plan: one on-hardware check per phase from the consumer side.
 
 ### How to run the benchmarks
 
-- Rust: `cargo bench --bench arena_consolidated_benchmark`
-- The per-expression table in the Problem section came from a temporary
-  microbenchmark (a loop over `set_param` + `eval` on one `Expression` with one
-  parameter, 200k iterations, against a native closure). The criterion bench
-  from Phase 0 replaces it in-repo.
-- Native C: `./run_tests.sh --native --track-allocs -t test_performance`.
-  The `--track-allocs` flag is REQUIRED until the `common_allocator.c` guard
-  lands (the default configuration fails to link). Then run the binary directly
+- Rust: `cargo bench --bench eval_benchmark` (add `--features f32` for f32).
+  This is the in-repo replacement for the temporary microbenchmark behind the
+  per-expression table in the Problem section.
+  Also: `cargo bench --bench arena_consolidated_benchmark`.
+- Native C: `./run_tests.sh --native [-m f32]`. Then run the binary directly
   for the timing output, because meson test hides it:
   `./target/meson/tests_native_c/test_performance`
-- QEMU: `./run_tests.sh --qemu -t test_cmsis_dsp_benchmark_f64` (harness check).
-  A full `--qemu` run fails until the `test_batch_memory.c` fix lands.
-  The exp-rs evaluation benchmark for QEMU does not exist yet (Phase 0 task).
+- QEMU: `./run_tests.sh --qemu [-m f32]` (full suite works now). For benchmark
+  output, run the kernel directly:
+  `qemu-system-arm -M mps2-an500 -cpu cortex-m7 -semihosting
+  -semihosting-config enable=on,target=native -nographic -monitor none
+  -serial stdio -kernel target/meson/qemu_test/batch_performance_test_f64`
 
 ---
 

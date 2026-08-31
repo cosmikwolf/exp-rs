@@ -1,0 +1,83 @@
+   Compiling exp-rs v0.2.0 (/Users/tenkai/Development/exp-rs)
+warning: unused imports: `AtomicUsize` and `Ordering`
+  --> src/ffi.rs:79:26
+   |
+79 | use core::sync::atomic::{AtomicUsize, Ordering};
+   |                          ^^^^^^^^^^^  ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `exp-rs` (lib) generated 1 warning (run `cargo fix --lib -p exp-rs` to apply 1 suggestion)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 1m 02s
+     Running benches/arena_consolidated_benchmark.rs (target/release/deps/arena_consolidated_benchmark-b3fe0508f5faa194)
+Benchmarking batch_vs_individual/individual_evaluation
+Benchmarking batch_vs_individual/individual_evaluation: Warming up for 3.0000 s
+Benchmarking batch_vs_individual/individual_evaluation: Collecting 20 samples in estimated 5.0306 s (1470 iterations)
+Benchmarking batch_vs_individual/individual_evaluation: Analyzing
+batch_vs_individual/individual_evaluation
+                        time:   [3.1491 ms 3.4768 ms 3.8403 ms]
+                        change: [+18.691% +29.761% +43.818%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high mild
+Benchmarking batch_vs_individual/arena_batch_evaluation
+Benchmarking batch_vs_individual/arena_batch_evaluation: Warming up for 3.0000 s
+Benchmarking batch_vs_individual/arena_batch_evaluation: Collecting 20 samples in estimated 5.0532 s (6090 iterations)
+Benchmarking batch_vs_individual/arena_batch_evaluation: Analyzing
+batch_vs_individual/arena_batch_evaluation
+                        time:   [514.19 µs 517.81 µs 524.93 µs]
+                        change: [-4.1776% +0.9869% +5.9784%] (p = 0.73 > 0.05)
+                        No change in performance detected.
+Found 4 outliers among 20 measurements (20.00%)
+  1 (5.00%) high mild
+  3 (15.00%) high severe
+
+Benchmarking cpu_utilization/run_test
+Benchmarking cpu_utilization/run_test: Warming up for 3.0000 s
+Benchmarking cpu_utilization/run_test: Collecting 10 samples in estimated 5.0000 s (13B iterations)
+Benchmarking cpu_utilization/run_test: Analyzing
+cpu_utilization/run_test
+                        time:   [392.40 ps 411.81 ps 430.28 ps]
+                        change: [-13.331% -2.3402% +6.8010%] (p = 0.76 > 0.05)
+                        No change in performance detected.
+
+=== CPU Utilization Test ===
+Simulating 1000Hz operation with 7 expressions and 10 parameters
+
+Test 1: Individual evaluation (context clone per evaluation)
+  Running 30000 iterations...
+  Completed: 30000 iterations in 0.90s
+  Rate: 33318 Hz
+  Time per iteration: 30.0 µs (all 7 expressions)
+  Time per expression: 4.3 µs
+  CPU efficiency: 3331.8%
+  Expressions/second: 233229
+
+Test 2: Arena BatchBuilder (zero allocations)
+  Running 30000 iterations...
+  Completed: 30000 iterations in 0.16s
+  Rate: 192405 Hz
+  Time per iteration: 5.2 µs (all 7 expressions)
+  Time per expression: 0.7 µs
+  CPU efficiency: 19240.5%
+  Expressions/second: 1346836
+
+=== Performance Summary ===
+Individual approach: 33318 Hz (3331.8% of target)
+Arena BatchBuilder: 192405 Hz (19240.5% of target)
+Arena is 5.77x faster
+
+Timing improvements:
+  Per iteration: 24.8 µs saved (82.7%)
+  Per expression: 4.3 µs → 0.7 µs
+
+At 1000Hz target:
+  Time budget per iteration: 1000 µs
+  Individual uses: 30.0 µs (3.0% of budget)
+  Arena uses: 5.2 µs (0.5% of budget)
+  Time available for other tasks: 994.8 µs
+
+Memory impact:
+  Without arena: 318.2 MB/s allocation traffic
+  With arena: 0 MB/s (all allocations eliminated)
+

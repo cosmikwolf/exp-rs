@@ -1,0 +1,136 @@
+   Compiling exp-rs v0.2.0 (/Users/tenkai/Development/exp-rs)
+warning: unused imports: `AtomicUsize` and `Ordering`
+  --> src/ffi.rs:79:26
+   |
+79 | use core::sync::atomic::{AtomicUsize, Ordering};
+   |                          ^^^^^^^^^^^  ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `exp-rs` (lib) generated 1 warning (run `cargo fix --lib -p exp-rs` to apply 1 suggestion)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 34.18s
+     Running benches/eval_benchmark.rs (target/release/deps/eval_benchmark-a5b1c34f8306c3b3)
+Benchmarking expression_eval/add_const
+Benchmarking expression_eval/add_const: Warming up for 3.0000 s
+Benchmarking expression_eval/add_const: Collecting 100 samples in estimated 5.0004 s (35M iterations)
+Benchmarking expression_eval/add_const: Analyzing
+expression_eval/add_const
+                        time:   [143.26 ns 143.57 ns 143.93 ns]
+                        change: [-4.7390% -4.4144% -4.0135%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 5 outliers among 100 measurements (5.00%)
+  1 (1.00%) high mild
+  4 (4.00%) high severe
+Benchmarking expression_eval/mul_paren
+Benchmarking expression_eval/mul_paren: Warming up for 3.0000 s
+Benchmarking expression_eval/mul_paren: Collecting 100 samples in estimated 5.0002 s (26M iterations)
+Benchmarking expression_eval/mul_paren: Analyzing
+expression_eval/mul_paren
+                        time:   [187.79 ns 188.27 ns 188.94 ns]
+                        change: [-13.472% -12.896% -11.991%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 12 outliers among 100 measurements (12.00%)
+  6 (6.00%) high mild
+  6 (6.00%) high severe
+Benchmarking expression_eval/quadratic
+Benchmarking expression_eval/quadratic: Warming up for 3.0000 s
+Benchmarking expression_eval/quadratic: Collecting 100 samples in estimated 5.0008 s (18M iterations)
+Benchmarking expression_eval/quadratic: Analyzing
+expression_eval/quadratic
+                        time:   [284.85 ns 286.89 ns 290.36 ns]
+                        change: [-10.457% -8.9476% -6.3791%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 11 outliers among 100 measurements (11.00%)
+  4 (4.00%) high mild
+  7 (7.00%) high severe
+Benchmarking expression_eval/trig_sqrt
+Benchmarking expression_eval/trig_sqrt: Warming up for 3.0000 s
+Benchmarking expression_eval/trig_sqrt: Collecting 100 samples in estimated 5.0012 s (13M iterations)
+Benchmarking expression_eval/trig_sqrt: Analyzing
+expression_eval/trig_sqrt
+                        time:   [375.90 ns 377.29 ns 378.82 ns]
+                        change: [-7.9932% -7.5127% -7.0545%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 9 outliers among 100 measurements (9.00%)
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+Benchmarking expression_eval/rational
+Benchmarking expression_eval/rational: Warming up for 3.0000 s
+Benchmarking expression_eval/rational: Collecting 100 samples in estimated 5.0014 s (12M iterations)
+Benchmarking expression_eval/rational: Analyzing
+expression_eval/rational
+                        time:   [432.88 ns 433.65 ns 434.49 ns]
+                        change: [-8.3086% -6.7160% -5.2212%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 4 outliers among 100 measurements (4.00%)
+  4 (4.00%) high mild
+
+Benchmarking native_baseline/add_const
+Benchmarking native_baseline/add_const: Warming up for 3.0000 s
+Benchmarking native_baseline/add_const: Collecting 100 samples in estimated 5.0000 s (1.9B iterations)
+Benchmarking native_baseline/add_const: Analyzing
+native_baseline/add_const
+                        time:   [2.6536 ns 2.6579 ns 2.6628 ns]
+                        change: [-1.5410% -1.0252% -0.5575%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 7 outliers among 100 measurements (7.00%)
+  1 (1.00%) low mild
+  6 (6.00%) high mild
+Benchmarking native_baseline/mul_paren
+Benchmarking native_baseline/mul_paren: Warming up for 3.0000 s
+Benchmarking native_baseline/mul_paren: Collecting 100 samples in estimated 5.0000 s (1.9B iterations)
+Benchmarking native_baseline/mul_paren: Analyzing
+native_baseline/mul_paren
+                        time:   [2.6628 ns 2.6667 ns 2.6711 ns]
+                        change: [-0.4980% -0.2474% -0.0076%] (p = 0.05 > 0.05)
+                        No change in performance detected.
+Found 6 outliers among 100 measurements (6.00%)
+  6 (6.00%) high mild
+Benchmarking native_baseline/quadratic
+Benchmarking native_baseline/quadratic: Warming up for 3.0000 s
+Benchmarking native_baseline/quadratic: Collecting 100 samples in estimated 5.0000 s (1.9B iterations)
+Benchmarking native_baseline/quadratic: Analyzing
+native_baseline/quadratic
+                        time:   [2.6833 ns 2.6904 ns 2.6987 ns]
+                        change: [-0.1428% +0.2817% +0.7160%] (p = 0.23 > 0.05)
+                        No change in performance detected.
+Found 8 outliers among 100 measurements (8.00%)
+  6 (6.00%) high mild
+  2 (2.00%) high severe
+Benchmarking native_baseline/trig_sqrt
+Benchmarking native_baseline/trig_sqrt: Warming up for 3.0000 s
+Benchmarking native_baseline/trig_sqrt: Collecting 100 samples in estimated 5.0000 s (1.3B iterations)
+Benchmarking native_baseline/trig_sqrt: Analyzing
+native_baseline/trig_sqrt
+                        time:   [3.9455 ns 3.9518 ns 3.9591 ns]
+                        change: [-48.450% -47.942% -47.545%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 7 outliers among 100 measurements (7.00%)
+  4 (4.00%) high mild
+  3 (3.00%) high severe
+Benchmarking native_baseline/rational
+Benchmarking native_baseline/rational: Warming up for 3.0000 s
+Benchmarking native_baseline/rational: Collecting 100 samples in estimated 5.0000 s (1.6B iterations)
+Benchmarking native_baseline/rational: Analyzing
+native_baseline/rational
+                        time:   [3.0207 ns 3.0252 ns 3.0306 ns]
+                        change: [-18.494% -18.065% -17.680%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 13 outliers among 100 measurements (13.00%)
+  2 (2.00%) low severe
+  5 (5.00%) low mild
+  4 (4.00%) high mild
+  2 (2.00%) high severe
+
+Benchmarking batch_eval/update10_eval7
+Benchmarking batch_eval/update10_eval7: Warming up for 3.0000 s
+Benchmarking batch_eval/update10_eval7: Collecting 100 samples in estimated 5.0153 s (1.0M iterations)
+Benchmarking batch_eval/update10_eval7: Analyzing
+batch_eval/update10_eval7
+                        time:   [4.7851 µs 4.8104 µs 4.8474 µs]
+                        change: [-4.4041% -3.7376% -3.0005%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 8 outliers among 100 measurements (8.00%)
+  4 (4.00%) high mild
+  4 (4.00%) high severe
+
