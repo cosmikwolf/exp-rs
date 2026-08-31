@@ -562,6 +562,13 @@ pub struct NativeFunction {
 
     /// Optional description of what the function does.
     pub description: Option<String>,
+
+    /// True only for the defaults registered by
+    /// `register_default_math_functions`. The expression compiler maps
+    /// builtin operators to direct opcodes; a user registration under the
+    /// same name has this false, which shadows the builtin and routes the
+    /// call through the registered implementation instead.
+    pub builtin: bool,
 }
 
 /* We can't derive Clone for NativeFunction because Box<dyn Fn> doesn't implement Clone.

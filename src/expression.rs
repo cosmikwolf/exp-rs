@@ -3,6 +3,7 @@
 //! This module provides a builder pattern for evaluating multiple expressions
 //! with a shared set of parameters, optimized for real-time use cases.
 
+use crate::compile::{CompileOutcome, CompiledProgram, Compiler};
 use crate::error::ExprError;
 use crate::eval::iterative::EvalEngine;
 use crate::types::{HString, TryIntoHeaplessString};
@@ -12,6 +13,31 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::cell::RefCell;
+
+/// Per-expression compiled state.
+enum CompiledExpr<'arena> {
+    Program(CompiledProgram<'arena>),
+    /// This expression must run on the iterative evaluator (unknown
+    /// function, arrays/attributes, recursive expression function, extreme
+    /// nesting). Behavior is identical either way; the compiled path is
+    /// just faster.
+    Fallback,
+}
+
+/// Invalidation key for compiled programs: (id, fn_generation) of every
+/// context in the parent chain. `None` means the chain is too deep to key;
+/// such contexts always evaluate iteratively.
+type CtxChainKey = heapless::Vec<(usize, u32), 8>;
+
+fn ctx_chain_key(ctx: &EvalContext) -> Option<CtxChainKey> {
+    let mut key = CtxChainKey::new();
+    let mut cur = Some(ctx);
+    while let Some(c) = cur {
+        key.push((c.id, c.fn_generation)).ok()?;
+        cur = c.parent.as_deref();
+    }
+    Some(key)
+}
 
 /// A parameter with its name and current value
 #[derive(Clone, Debug)]
@@ -47,6 +73,18 @@ pub struct Expression<'arena> {
 
     /// Optional arena-allocated expression functions (lazy-initialized)
     local_functions: Option<&'arena RefCell<crate::types::ExpressionFunctionMap>>,
+
+    /// Compiled programs, index-aligned with `expressions` once compiled.
+    compiled: Vec<CompiledExpr<'arena>>,
+    /// The context chain the programs were compiled against.
+    compiled_key: Option<CtxChainKey>,
+    /// Bumped by anything that changes what a compile would produce:
+    /// adding parameters or expressions, (un)registering local functions.
+    shape_gen: u32,
+    compiled_shape_gen: u32,
+    /// True when at least one expression runs on the iterative engine. Only
+    /// then do parameter writes go through to the engine's override map.
+    has_fallback: bool,
 }
 
 /// Deprecated: Use `Expression` instead
@@ -64,6 +102,11 @@ impl<'arena> Expression<'arena> {
             results: Vec::new(),
             engine: EvalEngine::new(arena),
             local_functions: None,
+            compiled: Vec::new(),
+            compiled_key: None,
+            shape_gen: 0,
+            compiled_shape_gen: 0,
+            has_fallback: false,
         }
     }
 
@@ -84,6 +127,7 @@ impl<'arena> Expression<'arena> {
         let idx = self.expressions.len();
         self.expressions.push((expr_str, arena_ast));
         self.results.push(0.0); // Pre-allocate result slot
+        self.shape_gen = self.shape_gen.wrapping_add(1);
         Ok(idx)
     }
 
@@ -107,6 +151,7 @@ impl<'arena> Expression<'arena> {
             name: name.to_string(),
             value: initial_value,
         });
+        self.shape_gen = self.shape_gen.wrapping_add(1);
         Ok(idx)
     }
 
@@ -116,7 +161,13 @@ impl<'arena> Expression<'arena> {
             .get_mut(idx)
             .ok_or(ExprError::InvalidParameterIndex(idx))?
             .value = value;
-        self.engine.set_param_override(&self.param_keys[idx], value)
+        // Compiled programs read values straight from `params` at slot-fill
+        // time; only the iterative fallback needs the override map.
+        if self.has_fallback {
+            self.engine.set_param_override(&self.param_keys[idx], value)
+        } else {
+            Ok(())
+        }
     }
 
     /// Update a parameter value by name (convenient but slower)
@@ -131,32 +182,93 @@ impl<'arena> Expression<'arena> {
         self.set_param(idx, value)
     }
 
-    /// Evaluate all expressions with current parameter values
+    /// Evaluate all expressions with current parameter values.
     ///
-    /// Parameter values already live in the engine's override map
-    /// (`add_parameter` and `set_param` write through to it), so no map is
-    /// built here. The context is pushed once per call, not once per
-    /// expression.
+    /// Expressions are compiled to slot programs the first time they meet a
+    /// context (and again if the context's function registry, or this
+    /// batch's shape, changes). Parameter and context-name slots are
+    /// refilled on every call — context variables never become stale
+    /// snapshots. Expressions the compiler cannot handle faithfully run on
+    /// the iterative engine, with identical behavior.
     pub fn eval(&mut self, base_ctx: &Rc<EvalContext>) -> Result<(), ExprError> {
-        // Set local functions in engine
-        self.engine.set_local_functions(self.local_functions);
+        let key = ctx_chain_key(base_ctx);
+        if self.compiled_key != key
+            || self.compiled_shape_gen != self.shape_gen
+            || self.compiled.len() != self.expressions.len()
+        {
+            self.recompile(base_ctx, key.is_some());
+            self.compiled_key = key;
+            self.compiled_shape_gen = self.shape_gen;
+        }
 
-        // Push the context once for the whole batch
-        self.engine.begin_batch(Some(base_ctx.clone()))?;
+        // Refill parameter and context slots.
+        for c in &mut self.compiled {
+            if let CompiledExpr::Program(p) = c {
+                p.fill_slots(&self.params, base_ctx);
+            }
+        }
 
-        // Evaluate each expression
-        for (i, (_, ast)) in self.expressions.iter().enumerate() {
-            match self.engine.eval_one(ast) {
+        if self.has_fallback {
+            self.engine.set_local_functions(self.local_functions);
+            self.engine.begin_batch(Some(base_ctx.clone()))?;
+        }
+
+        for i in 0..self.expressions.len() {
+            let r = match &mut self.compiled[i] {
+                CompiledExpr::Program(p) => p.run(),
+                CompiledExpr::Fallback => self.engine.eval_one(self.expressions[i].1),
+            };
+            match r {
                 Ok(value) => self.results[i] = value,
                 Err(e) => {
-                    self.engine.end_batch();
+                    if self.has_fallback {
+                        self.engine.end_batch();
+                    }
                     return Err(e);
                 }
             }
         }
 
-        self.engine.end_batch();
+        if self.has_fallback {
+            self.engine.end_batch();
+        }
         Ok(())
+    }
+
+    /// Compile every expression against `ctx`. With `can_compile` false
+    /// (context chain too deep to key), everything falls back.
+    fn recompile(&mut self, ctx: &EvalContext, can_compile: bool) {
+        self.compiled.clear();
+        self.has_fallback = false;
+
+        let locals_guard = self.local_functions.map(|rc| rc.borrow());
+        let locals = locals_guard.as_deref();
+
+        for (_, ast) in &self.expressions {
+            let outcome = if can_compile {
+                Compiler::compile(self.arena, ctx, &self.param_keys, locals, ast)
+            } else {
+                CompileOutcome::Fallback
+            };
+            match outcome {
+                CompileOutcome::Compiled(p) => self.compiled.push(CompiledExpr::Program(p)),
+                CompileOutcome::Fallback => {
+                    self.has_fallback = true;
+                    self.compiled.push(CompiledExpr::Fallback);
+                }
+            }
+        }
+        drop(locals_guard);
+
+        // The iterative fallback reads parameters from the engine's
+        // override map; bring it up to date with the current values (writes
+        // may have skipped it while no fallback existed).
+        if self.has_fallback {
+            self.engine.clear_param_overrides();
+            for (key, p) in self.param_keys.iter().zip(self.params.iter()) {
+                let _ = self.engine.set_param_override(key, p.value);
+            }
+        }
     }
 
     /// Get the result of a specific expression by index
@@ -235,6 +347,7 @@ impl<'arena> Expression<'arena> {
             .borrow_mut()
             .insert(func_name, expr_func)
             .map_err(|_| ExprError::Other("Too many expression functions".to_string()))?;
+        self.shape_gen = self.shape_gen.wrapping_add(1);
         Ok(())
     }
 
@@ -252,7 +365,11 @@ impl<'arena> Expression<'arena> {
 
         if let Some(map) = self.local_functions {
             let func_name = name.try_into_function_name()?;
-            Ok(map.borrow_mut().remove(&func_name).is_some())
+            let removed = map.borrow_mut().remove(&func_name).is_some();
+            if removed {
+                self.shape_gen = self.shape_gen.wrapping_add(1);
+            }
+            Ok(removed)
         } else {
             Ok(false)
         }
@@ -301,6 +418,12 @@ impl<'arena> Expression<'arena> {
         self.params.clear();
         self.param_keys.clear();
         self.results.clear();
+
+        // Compiled programs reference ASTs cleared above; drop them and
+        // force a recompile on the next eval.
+        self.compiled.clear();
+        self.compiled_key = None;
+        self.has_fallback = false;
 
         // The engine's override map mirrors `params`; clear it with them.
         self.engine.clear_param_overrides();

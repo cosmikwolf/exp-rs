@@ -94,6 +94,22 @@ pub struct EvalContext {
     pub native_functions: Rc<crate::types::NativeFunctionMap>,
     /// Optional parent context for variable/function inheritance
     pub parent: Option<Rc<EvalContext>>,
+    /// Unique id for compiled-program invalidation. Fresh per construction
+    /// (including clones); Rc pointer identity is not a safe key (ABA).
+    pub(crate) id: usize,
+    /// Bumped on every function-registry change; the other half of the
+    /// compiled-program invalidation key.
+    pub(crate) fn_generation: u32,
+}
+
+/// Monotonic source for `EvalContext::id`. Wrapping is harmless in
+/// combination with `fn_generation`; the counter exists to avoid reusing an
+/// id for a context that replaced another at the same address.
+static CONTEXT_ID_COUNTER: core::sync::atomic::AtomicUsize =
+    core::sync::atomic::AtomicUsize::new(1);
+
+fn next_context_id() -> usize {
+    CONTEXT_ID_COUNTER.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
 }
 
 impl EvalContext {
@@ -119,6 +135,8 @@ impl EvalContext {
             nested_arrays: crate::types::NestedArrayMap::new(),
             native_functions: Rc::new(crate::types::NativeFunctionMap::new()),
             parent: None,
+            id: next_context_id(),
+            fn_generation: 0,
         };
 
         // Always register default math functions
@@ -166,6 +184,8 @@ impl EvalContext {
             nested_arrays: crate::types::NestedArrayMap::new(),
             native_functions: Rc::new(crate::types::NativeFunctionMap::new()),
             parent: None,
+            id: next_context_id(),
+            fn_generation: 0,
         }
     }
 
@@ -266,13 +286,46 @@ impl EvalContext {
     where
         F: Fn(&[Real]) -> Real + 'static,
     {
+        self.register_function_impl(name, arity, implementation, false)
+    }
+
+    /// Register a default function. Only `register_default_math_functions`
+    /// uses this; the `builtin` flag is what lets the expression compiler
+    /// map operators to direct opcodes when they are not shadowed.
+    fn register_builtin<F>(
+        &mut self,
+        name: &str,
+        arity: usize,
+        implementation: F,
+    ) -> Result<(), crate::error::ExprError>
+    where
+        F: Fn(&[Real]) -> Real + 'static,
+    {
+        self.register_function_impl(name, arity, implementation, true)
+    }
+
+    fn register_function_impl<F>(
+        &mut self,
+        name: &str,
+        arity: usize,
+        implementation: F,
+        builtin: bool,
+    ) -> Result<(), crate::error::ExprError>
+    where
+        F: Fn(&[Real]) -> Real + 'static,
+    {
         let key = name.try_into_function_name()?;
         let function = crate::types::NativeFunction {
             arity,
             implementation: Rc::new(implementation),
             name: key.clone(),
             description: None,
+            builtin,
         };
+
+        // Any registry change invalidates compiled programs that resolved
+        // functions against this context.
+        self.fn_generation = self.fn_generation.wrapping_add(1);
 
         match Rc::make_mut(&mut self.native_functions).insert(key, function) {
             Ok(_) => Ok(()),
@@ -338,47 +391,47 @@ impl EvalContext {
     /// Registers all built-in math functions as native functions in the context.
     pub fn register_default_math_functions(&mut self) {
         // Basic operators as functions (always available)
-        let _ = self.register_native_function("+", 2, |args| args[0] + args[1]);
-        let _ = self.register_native_function("-", 2, |args| args[0] - args[1]);
-        let _ = self.register_native_function("*", 2, |args| args[0] * args[1]);
-        let _ = self.register_native_function("/", 2, |args| args[0] / args[1]);
-        let _ = self.register_native_function("%", 2, |args| args[0] % args[1]);
+        let _ = self.register_builtin("+", 2, |args| args[0] + args[1]);
+        let _ = self.register_builtin("-", 2, |args| args[0] - args[1]);
+        let _ = self.register_builtin("*", 2, |args| args[0] * args[1]);
+        let _ = self.register_builtin("/", 2, |args| args[0] / args[1]);
+        let _ = self.register_builtin("%", 2, |args| args[0] % args[1]);
 
         // Comparison operators (always available)
         let _ =
-            self.register_native_function("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
+            self.register_builtin("<", 2, |args| if args[0] < args[1] { 1.0 } else { 0.0 });
         let _ =
-            self.register_native_function(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
-        let _ = self.register_native_function(
+            self.register_builtin(">", 2, |args| if args[0] > args[1] { 1.0 } else { 0.0 });
+        let _ = self.register_builtin(
             "<=",
             2,
             |args| if args[0] <= args[1] { 1.0 } else { 0.0 },
         );
-        let _ = self.register_native_function(
+        let _ = self.register_builtin(
             ">=",
             2,
             |args| if args[0] >= args[1] { 1.0 } else { 0.0 },
         );
-        let _ = self.register_native_function(
+        let _ = self.register_builtin(
             "==",
             2,
             |args| if args[0] == args[1] { 1.0 } else { 0.0 },
         );
-        let _ = self.register_native_function(
+        let _ = self.register_builtin(
             "!=",
             2,
             |args| if args[0] != args[1] { 1.0 } else { 0.0 },
         );
 
         // Logical operators (always available)
-        let _ = self.register_native_function("&&", 2, |args| {
+        let _ = self.register_builtin("&&", 2, |args| {
             if args[0] != 0.0 && args[1] != 0.0 {
                 1.0
             } else {
                 0.0
             }
         });
-        let _ = self.register_native_function("||", 2, |args| {
+        let _ = self.register_builtin("||", 2, |args| {
             if args[0] != 0.0 || args[1] != 0.0 {
                 1.0
             } else {
@@ -387,22 +440,22 @@ impl EvalContext {
         });
 
         // Function aliases for the operators (always available)
-        let _ = self.register_native_function("add", 2, |args| args[0] + args[1]);
-        let _ = self.register_native_function("sub", 2, |args| args[0] - args[1]);
-        let _ = self.register_native_function("mul", 2, |args| args[0] * args[1]);
-        let _ = self.register_native_function("div", 2, |args| args[0] / args[1]);
-        let _ = self.register_native_function("fmod", 2, |args| args[0] % args[1]);
-        let _ = self.register_native_function("neg", 1, |args| -args[0]);
+        let _ = self.register_builtin("add", 2, |args| args[0] + args[1]);
+        let _ = self.register_builtin("sub", 2, |args| args[0] - args[1]);
+        let _ = self.register_builtin("mul", 2, |args| args[0] * args[1]);
+        let _ = self.register_builtin("div", 2, |args| args[0] / args[1]);
+        let _ = self.register_builtin("fmod", 2, |args| args[0] % args[1]);
+        let _ = self.register_builtin("neg", 1, |args| -args[0]);
 
         // Sequence operators (always available)
-        let _ = self.register_native_function(",", 2, |args| args[1]); // The actual comma operator
-        let _ = self.register_native_function("comma", 2, |args| args[1]); // Function alias for the comma operator
+        let _ = self.register_builtin(",", 2, |args| args[1]); // The actual comma operator
+        let _ = self.register_builtin("comma", 2, |args| args[1]); // Function alias for the comma operator
 
         // Core math functions that don't require libm (always available)
-        let _ = self.register_native_function("abs", 1, |args| args[0].abs());
-        let _ = self.register_native_function("max", 2, |args| args[0].max(args[1]));
-        let _ = self.register_native_function("min", 2, |args| args[0].min(args[1]));
-        let _ = self.register_native_function("sign", 1, |args| {
+        let _ = self.register_builtin("abs", 1, |args| args[0].abs());
+        let _ = self.register_builtin("max", 2, |args| args[0].max(args[1]));
+        let _ = self.register_builtin("min", 2, |args| args[0].min(args[1]));
+        let _ = self.register_builtin("sign", 1, |args| {
             if args[0] > 0.0 {
                 1.0
             } else if args[0] < 0.0 {
@@ -414,14 +467,14 @@ impl EvalContext {
 
         // Math constants (always available)
         #[cfg(feature = "f32")]
-        let _ = self.register_native_function("e", 0, |_| core::f32::consts::E);
+        let _ = self.register_builtin("e", 0, |_| core::f32::consts::E);
         #[cfg(not(feature = "f32"))]
-        let _ = self.register_native_function("e", 0, |_| core::f64::consts::E);
+        let _ = self.register_builtin("e", 0, |_| core::f64::consts::E);
 
         #[cfg(feature = "f32")]
-        let _ = self.register_native_function("pi", 0, |_| core::f32::consts::PI);
+        let _ = self.register_builtin("pi", 0, |_| core::f32::consts::PI);
         #[cfg(not(feature = "f32"))]
-        let _ = self.register_native_function("pi", 0, |_| core::f64::consts::PI);
+        let _ = self.register_builtin("pi", 0, |_| core::f64::consts::PI);
 
         // Advanced math functions with libm
         #[cfg(feature = "libm")]
@@ -432,25 +485,25 @@ impl EvalContext {
                 .register_native_function("asin", 1, |args| crate::functions::asin(args[0], 0.0));
             let _ = self
                 .register_native_function("atan", 1, |args| crate::functions::atan(args[0], 0.0));
-            let _ = self.register_native_function("atan2", 2, |args| {
+            let _ = self.register_builtin("atan2", 2, |args| {
                 crate::functions::atan2(args[0], args[1])
             });
             let _ = self
                 .register_native_function("ceil", 1, |args| crate::functions::ceil(args[0], 0.0));
             let _ =
-                self.register_native_function("cos", 1, |args| crate::functions::cos(args[0], 0.0));
+                self.register_builtin("cos", 1, |args| crate::functions::cos(args[0], 0.0));
             let _ = self
                 .register_native_function("cosh", 1, |args| crate::functions::cosh(args[0], 0.0));
             let _ =
-                self.register_native_function("exp", 1, |args| crate::functions::exp(args[0], 0.0));
+                self.register_builtin("exp", 1, |args| crate::functions::exp(args[0], 0.0));
             let _ = self
                 .register_native_function("floor", 1, |args| crate::functions::floor(args[0], 0.0));
             let _ = self
                 .register_native_function("round", 1, |args| crate::functions::round(args[0], 0.0));
             let _ =
-                self.register_native_function("ln", 1, |args| crate::functions::ln(args[0], 0.0));
+                self.register_builtin("ln", 1, |args| crate::functions::ln(args[0], 0.0));
             let _ =
-                self.register_native_function("log", 1, |args| crate::functions::log(args[0], 0.0));
+                self.register_builtin("log", 1, |args| crate::functions::log(args[0], 0.0));
             let _ = self
                 .register_native_function("log10", 1, |args| crate::functions::log10(args[0], 0.0));
             let _ = self
@@ -458,13 +511,13 @@ impl EvalContext {
             let _ = self
                 .register_native_function("^", 2, |args| crate::functions::pow(args[0], args[1]));
             let _ =
-                self.register_native_function("sin", 1, |args| crate::functions::sin(args[0], 0.0));
+                self.register_builtin("sin", 1, |args| crate::functions::sin(args[0], 0.0));
             let _ = self
                 .register_native_function("sinh", 1, |args| crate::functions::sinh(args[0], 0.0));
             let _ = self
                 .register_native_function("sqrt", 1, |args| crate::functions::sqrt(args[0], 0.0));
             let _ =
-                self.register_native_function("tan", 1, |args| crate::functions::tan(args[0], 0.0));
+                self.register_builtin("tan", 1, |args| crate::functions::tan(args[0], 0.0));
             let _ = self
                 .register_native_function("tanh", 1, |args| crate::functions::tanh(args[0], 0.0));
         }
@@ -472,26 +525,26 @@ impl EvalContext {
         // In test mode without libm, provide std library implementations
         #[cfg(all(not(feature = "libm"), test))]
         {
-            let _ = self.register_native_function("acos", 1, |args| args[0].acos());
-            let _ = self.register_native_function("asin", 1, |args| args[0].asin());
-            let _ = self.register_native_function("atan", 1, |args| args[0].atan());
-            let _ = self.register_native_function("atan2", 2, |args| args[0].atan2(args[1]));
-            let _ = self.register_native_function("ceil", 1, |args| args[0].ceil());
-            let _ = self.register_native_function("cos", 1, |args| args[0].cos());
-            let _ = self.register_native_function("cosh", 1, |args| args[0].cosh());
-            let _ = self.register_native_function("exp", 1, |args| args[0].exp());
-            let _ = self.register_native_function("floor", 1, |args| args[0].floor());
-            let _ = self.register_native_function("round", 1, |args| args[0].round());
-            let _ = self.register_native_function("ln", 1, |args| args[0].ln());
-            let _ = self.register_native_function("log", 1, |args| args[0].log10());
-            let _ = self.register_native_function("log10", 1, |args| args[0].log10());
-            let _ = self.register_native_function("pow", 2, |args| args[0].powf(args[1]));
-            let _ = self.register_native_function("^", 2, |args| args[0].powf(args[1]));
-            let _ = self.register_native_function("sin", 1, |args| args[0].sin());
-            let _ = self.register_native_function("sinh", 1, |args| args[0].sinh());
-            let _ = self.register_native_function("sqrt", 1, |args| args[0].sqrt());
-            let _ = self.register_native_function("tan", 1, |args| args[0].tan());
-            let _ = self.register_native_function("tanh", 1, |args| args[0].tanh());
+            let _ = self.register_builtin("acos", 1, |args| args[0].acos());
+            let _ = self.register_builtin("asin", 1, |args| args[0].asin());
+            let _ = self.register_builtin("atan", 1, |args| args[0].atan());
+            let _ = self.register_builtin("atan2", 2, |args| args[0].atan2(args[1]));
+            let _ = self.register_builtin("ceil", 1, |args| args[0].ceil());
+            let _ = self.register_builtin("cos", 1, |args| args[0].cos());
+            let _ = self.register_builtin("cosh", 1, |args| args[0].cosh());
+            let _ = self.register_builtin("exp", 1, |args| args[0].exp());
+            let _ = self.register_builtin("floor", 1, |args| args[0].floor());
+            let _ = self.register_builtin("round", 1, |args| args[0].round());
+            let _ = self.register_builtin("ln", 1, |args| args[0].ln());
+            let _ = self.register_builtin("log", 1, |args| args[0].log10());
+            let _ = self.register_builtin("log10", 1, |args| args[0].log10());
+            let _ = self.register_builtin("pow", 2, |args| args[0].powf(args[1]));
+            let _ = self.register_builtin("^", 2, |args| args[0].powf(args[1]));
+            let _ = self.register_builtin("sin", 1, |args| args[0].sin());
+            let _ = self.register_builtin("sinh", 1, |args| args[0].sinh());
+            let _ = self.register_builtin("sqrt", 1, |args| args[0].sqrt());
+            let _ = self.register_builtin("tan", 1, |args| args[0].tan());
+            let _ = self.register_builtin("tanh", 1, |args| args[0].tanh());
         }
 
         // In non-test no_std mode without libm, we don't register advanced math functions
@@ -685,6 +738,10 @@ impl Clone for EvalContext {
             nested_arrays: self.nested_arrays.clone(),
             native_functions: self.native_functions.clone(),
             parent: self.parent.clone(),
+            // A clone is an independently mutable context; it must not share
+            // the original's compiled-program invalidation key.
+            id: next_context_id(),
+            fn_generation: self.fn_generation,
         }
     }
 }
