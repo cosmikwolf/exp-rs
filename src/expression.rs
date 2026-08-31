@@ -430,8 +430,14 @@ mod tests {
         // Test with constants
         #[cfg(feature = "libm")]
         {
-            assert!(Expression::eval_simple("pi", &arena).unwrap() - std::f64::consts::PI < 0.0001);
-            assert!(Expression::eval_simple("e", &arena).unwrap() - std::f64::consts::E < 0.0001);
+            assert!(
+                Expression::eval_simple("pi", &arena).unwrap() - (std::f64::consts::PI as Real)
+                    < 0.0001
+            );
+            assert!(
+                Expression::eval_simple("e", &arena).unwrap() - (std::f64::consts::E as Real)
+                    < 0.0001
+            );
         }
     }
 

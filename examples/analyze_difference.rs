@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use exp_rs::{EvalContext, Expression, interp};
+use exp_rs::{EvalContext, Expression, Real, interp};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -82,7 +82,7 @@ fn main() {
         // Clone context and set parameters
         let mut ctx_clone = (*ctx).clone();
         for (p, name) in param_names.iter().enumerate() {
-            ctx_clone.set_parameter(name, (p + 1) as f64 * 1.5).unwrap();
+            ctx_clone.set_parameter(name, (p + 1) as Real * 1.5).unwrap();
         }
         let ctx_rc = Rc::new(ctx_clone);
 
@@ -125,7 +125,7 @@ fn main() {
         // Only update parameters
         for (p, &idx) in param_indices.iter().enumerate() {
             builder
-                .set_param(idx, (p + 1) as f64 * 1.5 + i as f64 * 0.001)
+                .set_param(idx, (p + 1) as Real * 1.5 + i as Real * 0.001)
                 .unwrap();
         }
         // Evaluate pre-parsed expressions

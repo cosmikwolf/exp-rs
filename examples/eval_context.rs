@@ -2,8 +2,10 @@ extern crate alloc;
 use exp_rs::EvalContext;
 
 // Import libm only when the feature is enabled
-#[cfg(feature = "libm")]
+#[cfg(all(feature = "libm", not(feature = "f32")))]
 use libm::{cos, exp, log, sin, sqrt, tan};
+#[cfg(all(feature = "libm", feature = "f32"))]
+use libm::{cosf, expf, logf, sinf, sqrtf, tanf};
 
 use std::println;
 

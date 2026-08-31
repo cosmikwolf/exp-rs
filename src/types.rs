@@ -262,7 +262,7 @@ impl<'arena> AstExpr<'arena> {
             AstExpr::Constant(val) => {
                 #[cfg(all(feature = "libm", feature = "f32"))]
                 {
-                    libm::powf(*val, *exp)
+                    libm::powf(*val, exp)
                 }
                 #[cfg(all(feature = "libm", not(feature = "f32")))]
                 {
@@ -270,7 +270,7 @@ impl<'arena> AstExpr<'arena> {
                 }
                 #[cfg(all(not(feature = "libm"), test))]
                 {
-                    val.powf(*exp)
+                    val.powf(exp)
                 } // Use std::powf when in test mode
                 #[cfg(all(not(feature = "libm"), not(test)))]
                 {
@@ -589,7 +589,7 @@ use alloc::borrow::Cow;
 /// // in the current arena-based architecture. Use native functions instead:
 /// ctx.register_native_function("circle_area", 1, |args| {
 ///     let radius = args[0];
-///     std::f64::consts::PI * radius * radius
+///     (std::f64::consts::PI as Real) * radius * radius
 /// }).unwrap();
 ///
 /// // Use the function in another expression
