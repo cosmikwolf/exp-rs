@@ -24,6 +24,27 @@
 //! expression with the iterative engine. Behavior is preserved exactly; the
 //! compiled path is only an implementation shortcut.
 //!
+//! # Why two engines (a deliberate decision, 2026-08)
+//!
+//! The iterative evaluator stays, on purpose, even though this path is
+//! ~6x faster:
+//!
+//! 1. It is the independent correctness oracle. The differential proptest
+//!    (`tests/compile_differential_test.rs`) asserts both engines agree
+//!    bit-for-bit; delete one and the test becomes self-referential.
+//! 2. It covers what this compiler cannot yet express: runtime recursion
+//!    (a `Call` instruction with a depth cap), arrays/attributes, and lazy
+//!    unknown-function errors without a fallback target.
+//! 3. It backs public API: `interp()`, `eval_ast`, `EvalEngine`,
+//!    `eval_with_engine`. Removing it is a semver-major break.
+//!
+//! The invariant that keeps this sound: **any change to expression
+//! semantics must land in both engines, and the differential proptest must
+//! stay green.** If language features start arriving regularly and the
+//! double-implementation tax bites, the exit path is to grow this compiler
+//! to full coverage first (see issue #10), then retire the iterative
+//! engine in a major version.
+//!
 //! Instructions and slot bindings are allocated in the expression arena, so
 //! programs die together with the ASTs they were compiled from
 //! (`expr_batch_clear` resets both). The function table is a heap `Vec` on
