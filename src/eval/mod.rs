@@ -9,12 +9,10 @@ pub mod context_stack;
 pub mod iterative;
 pub mod recursion;
 pub mod stack_ops;
-pub mod types;
 
 // Re-export the main evaluation functions for backward compatibility
 pub use ast::*;
 pub use recursion::*;
-pub use types::*;
 
 // Re-export recursion tracking functions
 pub use recursion::{

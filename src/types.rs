@@ -262,7 +262,7 @@ impl<'arena> AstExpr<'arena> {
             AstExpr::Constant(val) => {
                 #[cfg(all(feature = "libm", feature = "f32"))]
                 {
-                    libm::powf(*val, *exp)
+                    libm::powf(*val, exp)
                 }
                 #[cfg(all(feature = "libm", not(feature = "f32")))]
                 {
@@ -270,7 +270,7 @@ impl<'arena> AstExpr<'arena> {
                 }
                 #[cfg(all(not(feature = "libm"), test))]
                 {
-                    val.powf(*exp)
+                    val.powf(exp)
                 } // Use std::powf when in test mode
                 #[cfg(all(not(feature = "libm"), not(test)))]
                 {
@@ -562,6 +562,13 @@ pub struct NativeFunction {
 
     /// Optional description of what the function does.
     pub description: Option<String>,
+
+    /// True only for the defaults registered by
+    /// `register_default_math_functions`. The expression compiler maps
+    /// builtin operators to direct opcodes; a user registration under the
+    /// same name has this false, which shadows the builtin and routes the
+    /// call through the registered implementation instead.
+    pub builtin: bool,
 }
 
 /* We can't derive Clone for NativeFunction because Box<dyn Fn> doesn't implement Clone.
@@ -589,7 +596,7 @@ use alloc::borrow::Cow;
 /// // in the current arena-based architecture. Use native functions instead:
 /// ctx.register_native_function("circle_area", 1, |args| {
 ///     let radius = args[0];
-///     std::f64::consts::PI * radius * radius
+///     (std::f64::consts::PI as Real) * radius * radius
 /// }).unwrap();
 ///
 /// // Use the function in another expression

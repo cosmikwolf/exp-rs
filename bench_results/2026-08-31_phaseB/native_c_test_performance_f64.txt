@@ -1,0 +1,56 @@
+=== Expression Evaluation Performance Benchmark ===
+
+System info:
+  Nanotime max: 6148914691236517205
+  Real size: 8 bytes
+
+=== Setup Overhead ===
+  Context creation + 13 functions: 2.829 µs
+  Arena creation (32KB): 0.001 µs
+  Builder creation + reset: 0.356 µs
+
+=== Parsing Performance ===
+  Full setup (10 params + 7 exprs): 6.166 µs
+  Per expression parsing: ~0.881 µs
+
+=== Evaluation Performance ===
+  Batch eval (7 expressions): 0.269 µs
+  Per expression: 0.038 µs
+  Evaluations per second: 3717645
+  Parameter update (10 params): 0.042 µs
+  Per parameter: 0.004 µs
+  Full update + eval cycle: 0.309 µs
+  Update rate: 3234414 Hz
+
+  Individual Expression Timing:
+    "p0 + p1": 0.024 µs
+    "p0 * p1 + p2": 0.031 µs
+    "sqrt(p0*p0 + p1*p1)": 0.040 µs
+    "sin(p0) * cos(p1)": 0.061 µs
+    "log10(abs(p5) + 1) * p6": 0.046 µs
+    "pow(p7, 2) + pow(p8, 2) + pow(p9, 2)": 0.096 µs
+    "(exp(p0) - exp(-p0)) / 2": 0.050 µs
+
+=== Batch Size Scaling ===
+  Testing with expression: "sqrt(p0*p0 + p1*p1) + sin(p2) * p3"
+  Total operations kept constant at 100,000
+
+  Batch size    1: 0.086 µs/item, 8.58 ms total, 11654559 items/sec
+  Batch size   10: 0.086 µs/item, 8.63 ms total, 11591627 items/sec
+  Batch size  100: 0.085 µs/item, 8.54 ms total, 11705261 items/sec
+  Batch size 1000: 0.086 µs/item, 8.59 ms total, 11643534 items/sec
+
+=== Arena Reuse Performance ===
+  New arena each time: 2.165 µs/iteration
+  Arena reuse: 2.041 µs/iteration
+  Speedup: 1.1x
+
+=== Performance Summary ===
+  Typical parse + eval cycle for 7 expressions:
+    Setup (arena + builder + parse): ~20-30 µs
+    Runtime evaluation: ~2-5 µs
+    Parameter updates: ~1-2 µs
+  Arena reuse provides 2-3x speedup for repeated operations
+  Batch processing scales linearly with batch size
+
+(Optimization prevention: 83737379.000434)

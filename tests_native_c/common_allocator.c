@@ -37,13 +37,23 @@ static void* rust_heap_memory = NULL;
 static size_t rust_heap_size = 1024 * 1024; // 1MB
 #endif
 
-// Forward declarations for Rust allocator tracking functions
-// These are always available regardless of custom_cbindgen_alloc feature
+// Rust allocator tracking functions. The symbols exist only when the library
+// is built with the alloc_tracking feature (meson passes
+// -DEXP_RS_ALLOC_TRACKING in that configuration). Without the feature, the
+// stubs below report zero so the suite still links and runs.
+#ifdef EXP_RS_ALLOC_TRACKING
 extern size_t exp_rs_get_total_allocated(void);
 extern size_t exp_rs_get_total_freed(void);
 extern size_t exp_rs_get_allocation_count(void);
 extern size_t exp_rs_get_free_count(void);
 extern size_t exp_rs_get_current_allocated(void);
+#else
+static size_t exp_rs_get_total_allocated(void) { return 0; }
+static size_t exp_rs_get_total_freed(void) { return 0; }
+static size_t exp_rs_get_allocation_count(void) { return 0; }
+static size_t exp_rs_get_free_count(void) { return 0; }
+static size_t exp_rs_get_current_allocated(void) { return 0; }
+#endif
 
 // Track whether we're using custom allocator or system allocator
 // We detect this by checking if our exp_rs_malloc is being called

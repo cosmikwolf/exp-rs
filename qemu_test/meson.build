@@ -7,6 +7,12 @@ enable_f64 = not use_f32
 cmsis_dsp_proj = subproject('cmsis-dsp', default_options: ['enable_f64=' + enable_f64.to_string()])
 cmsis_dsp_dep = cmsis_dsp_proj.get_variable('cmsis_dsp_dep')
 
+# The Rust allocation-stats symbols exist only with the alloc_tracking feature.
+tracking_c_args = []
+if get_option('alloc_tracking')
+  tracking_c_args += '-DEXP_RS_ALLOC_TRACKING'
+endif
+
 common_link_args = [
   '-T', meson.current_source_dir() + '/qemu_harness/mps2_an500.ld',
   '-lc',
@@ -442,52 +448,49 @@ endif
 #   )
 # endif
 
-# TEMPORARILY DISABLED - uses old API
-# # Batch Performance test (F32 mode)
-# if use_f32
-#   batch_performance_test_f32_exe = executable(
-#     'batch_performance_test_f32',
-#     ['batch_performance_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
-#     include_directories: include_directories('.'),
-#     dependencies: [qemu_harness_dep, exp_rs_dep],
-#     link_args: common_link_args,
-#     c_args: ['-DDEF_USE_F32'],
-#     install: false,
-#   )
-# endif
-#
-# # Add a test target for the batch performance test F32
-# if use_f32
-#   test(
-#     'batch_performance_test_f32',
-#     find_program('qemu-system-arm'),
-#     args: common_test_args + ['-kernel', batch_performance_test_f32_exe.full_path()],
-#     is_parallel: false,
-#     timeout: 30,  # Longer timeout for performance test
-#   )
-# endif
-#
-# # Batch Performance test (F64 mode - only built when F64 is enabled)
-# if not use_f32
-#   batch_performance_test_f64_exe = executable(
-#     'batch_performance_test_f64',
-#     ['batch_performance_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
-#     include_directories: include_directories('.'),
-#     dependencies: [qemu_harness_dep, exp_rs_dep],
-#     link_args: common_link_args,
-#     c_args: ['-DDEF_USE_F64', '-DARM_MATH_DOUBLE'],
-#     install: false,
-#   )
-#
-#   # Add a test target for the batch performance test F64
-#   test(
-#     'batch_performance_test_f64',
-#     find_program('qemu-system-arm'),
-#     args: common_test_args + ['-kernel', batch_performance_test_f64_exe.full_path()],
-#     is_parallel: false,
-#     timeout: 30,  # Longer timeout for performance test
-#   )
-# endif
+# Batch Performance test (F32 mode)
+if use_f32
+  batch_performance_test_f32_exe = executable(
+    'batch_performance_test_f32',
+    ['batch_performance_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
+    include_directories: include_directories('.'),
+    dependencies: [qemu_harness_dep, exp_rs_dep],
+    link_args: common_link_args,
+    c_args: ['-DDEF_USE_F32'],
+    install: false,
+  )
+
+  # Add a test target for the batch performance test F32
+  test(
+    'batch_performance_test_f32',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', batch_performance_test_f32_exe.full_path()],
+    is_parallel: false,
+    timeout: 60, # Longer timeout for performance test
+  )
+endif
+
+# Batch Performance test (F64 mode - only built when F64 is enabled)
+if not use_f32
+  batch_performance_test_f64_exe = executable(
+    'batch_performance_test_f64',
+    ['batch_performance_test.c', 'register_test_functions.c', 'qemu_harness/vector_table_m7.c'],
+    include_directories: include_directories('.'),
+    dependencies: [qemu_harness_dep, exp_rs_dep],
+    link_args: common_link_args,
+    c_args: ['-DDEF_USE_F64', '-DARM_MATH_DOUBLE'],
+    install: false,
+  )
+
+  # Add a test target for the batch performance test F64
+  test(
+    'batch_performance_test_f64',
+    find_program('qemu-system-arm'),
+    args: common_test_args + ['-kernel', batch_performance_test_f64_exe.full_path()],
+    is_parallel: false,
+    timeout: 60, # Longer timeout for performance test
+  )
+endif
 
 # TEMPORARILY DISABLED - uses old API
 # # Test for batch parameter order debugging
@@ -567,7 +570,7 @@ if use_f32
     include_directories: include_directories('.'),
     dependencies: [qemu_harness_dep, exp_rs_dep],
     link_args: common_link_args,
-    c_args: ['-DDEF_USE_F32', '-DEXP_RS_CUSTOM_ALLOC'],
+    c_args: ['-DDEF_USE_F32', '-DEXP_RS_CUSTOM_ALLOC'] + tracking_c_args,
     install: false,
   )
 
@@ -592,7 +595,7 @@ if not use_f32
     include_directories: include_directories('.'),
     dependencies: [qemu_harness_dep, exp_rs_dep],
     link_args: common_link_args,
-    c_args: ['-DDEF_USE_F64', '-DARM_MATH_DOUBLE', '-DEXP_RS_CUSTOM_ALLOC'],
+    c_args: ['-DDEF_USE_F64', '-DARM_MATH_DOUBLE', '-DEXP_RS_CUSTOM_ALLOC'] + tracking_c_args,
     install: false,
   )
 

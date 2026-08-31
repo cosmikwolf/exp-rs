@@ -12,6 +12,9 @@ A tiny, `no_std` Pratt expression parser and evaluator for embedded systems.
 ## Key Features
 
 - **Pratt parser** for minimal stack depth—handles deep nesting on embedded stacks
+- **Compiled evaluation**: expressions lower to compact slot programs, so name
+  resolution happens once per expression, not on every evaluation—simple
+  expressions evaluate in tens of nanoseconds on a desktop host
 - **Arena allocation** for bounded memory and zero-allocation evaluation after setup
 - **no_std compatible** with configurable f32/f64 precision
 - Variables, constants, arrays, attributes, and custom functions
@@ -62,19 +65,31 @@ For the full API including parameters, batch evaluation, custom functions, and m
 
 ## C FFI
 
-A C header is automatically generated during build via cbindgen:
+A C header is automatically generated during build via cbindgen. The batch
+API parses once, then evaluates repeatedly with updated variables:
 
 ```c
 #include "exp_rs.h"
 
 int main() {
-    double result = exp_rs_eval("2+2*2");
-    printf("%f\n", result); // prints "6.000000"
+    ExprBatch* batch = expr_batch_new(8192); // arena size in bytes
+    ExprResult var = expr_batch_add_variable(batch, "x", 3.0);
+    ExprResult expr = expr_batch_add_expression(batch, "x * 2 + 1");
+
+    expr_batch_evaluate(batch, NULL); // NULL = default math functions
+    printf("%f\n", expr_batch_get_result(batch, expr.index)); // 7.000000
+
+    expr_batch_set_variable(batch, var.index, 10.0);
+    expr_batch_evaluate(batch, NULL);
+    printf("%f\n", expr_batch_get_result(batch, expr.index)); // 21.000000
+
+    expr_batch_free(batch);
     return 0;
 }
 ```
 
-The header is generated at `include/exp_rs.h` after running `cargo build`.
+The header is generated at `target/<profile>/exp_rs.h` after running
+`cargo build` (or next to the meson build outputs when built via meson).
 
 ## Build Instructions
 

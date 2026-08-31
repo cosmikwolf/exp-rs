@@ -533,6 +533,7 @@ pub use alloc::vec::Vec;
 
 // Ensure core::result::Result, core::result::Result::Ok, and core::result::Result::Err are in scope for no_std/serde
 
+pub mod compile;
 pub mod context;
 pub mod engine;
 pub mod error;

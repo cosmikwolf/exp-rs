@@ -1,5 +1,5 @@
 use bumpalo::Bump;
-use exp_rs::{EvalContext, Expression};
+use exp_rs::{EvalContext, Expression, Real};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -70,7 +70,7 @@ fn main() {
     let param_names = vec!["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
     let mut param_indices = Vec::new();
     for (i, name) in param_names.iter().enumerate() {
-        let idx = builder.add_parameter(name, (i + 1) as f64 * 1.5).unwrap();
+        let idx = builder.add_parameter(name, (i + 1) as Real * 1.5).unwrap();
         param_indices.push(idx);
     }
 
@@ -99,7 +99,7 @@ fn main() {
             for batch in 0..batch_size {
                 // Update parameters (matching C test pattern)
                 for p in 0..10 {
-                    let value = (p + 1) as f64 * 1.5 + (batch + 1) as f64 * 0.1;
+                    let value = (p + 1) as Real * 1.5 + (batch + 1) as Real * 0.1;
                     builder.set_param(param_indices[p], value).unwrap();
                 }
 

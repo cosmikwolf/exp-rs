@@ -4,12 +4,19 @@ dl_dep = cc.find_library('dl', required: false)
 
 inc = include_directories('.')
 
+# The Rust allocation-stats symbols exist only with the alloc_tracking feature.
+tracking_c_args = []
+if get_option('alloc_tracking')
+  tracking_c_args += '-DEXP_RS_ALLOC_TRACKING'
+endif
+
 # Common allocator object for all tests (required when custom_cbindgen_alloc is enabled)
 common_allocator_lib = static_library(
   'common_allocator',
   'common_allocator.c',
   include_directories: inc,
   dependencies: exp_rs_dep,  # This provides the include path for exp_rs.h
+  c_args: tracking_c_args,
   install: false,
 )
 

@@ -53,9 +53,23 @@ static void format_caller(void *addr, char *buffer, size_t buffer_size) {
 #endif
 }
 
-// Rust allocation tracking functions  
+// Rust allocation tracking functions. The symbols and struct CAllocationInfo
+// exist only when the library is built with the alloc_tracking feature
+// (meson passes -DEXP_RS_ALLOC_TRACKING in that configuration). Without the
+// feature, the stubs below report zero so the test still builds and runs.
+#ifdef EXP_RS_ALLOC_TRACKING
 extern size_t exp_rs_get_current_allocated(void);
 extern size_t exp_rs_get_allocation_count(void);
+extern size_t exp_rs_get_total_allocated(void);
+extern size_t exp_rs_get_total_freed(void);
+extern size_t exp_rs_get_free_count(void);
+#else
+static size_t exp_rs_get_current_allocated(void) { return 0; }
+static size_t exp_rs_get_allocation_count(void) { return 0; }
+static size_t exp_rs_get_total_allocated(void) { return 0; }
+static size_t exp_rs_get_total_freed(void) { return 0; }
+static size_t exp_rs_get_free_count(void) { return 0; }
+#endif
 
 // Helper to show arena usage with detailed information
 void show_arena_usage(ExprBatch *batch, const char *label) {
@@ -598,10 +612,6 @@ void test_static_batch_pointer(ExprContext *ctx) {
 
 // Helper function to print detailed heap tracking
 void print_heap_stats(const char *label) {
-  extern size_t exp_rs_get_total_allocated(void);
-  extern size_t exp_rs_get_total_freed(void);  
-  extern size_t exp_rs_get_free_count(void);
-  
   size_t rust_current = exp_rs_get_current_allocated();
   size_t rust_total_alloc = exp_rs_get_total_allocated();
   size_t rust_total_freed = exp_rs_get_total_freed();
@@ -777,10 +787,6 @@ int main(void) {
   qemu_printf("  Current allocated:   %d bytes\n", (int)current_allocated);
   
   // Rust TlsfHeap tracking (should show real allocations)
-  extern size_t exp_rs_get_total_allocated(void);
-  extern size_t exp_rs_get_total_freed(void);  
-  extern size_t exp_rs_get_free_count(void);
-  
   size_t rust_current = exp_rs_get_current_allocated();
   size_t rust_total_alloc = exp_rs_get_total_allocated();
   size_t rust_total_freed = exp_rs_get_total_freed();
@@ -798,22 +804,23 @@ int main(void) {
   if (rust_current > 0) {
     qemu_printf("\n*** MEMORY LEAK DETECTED: %d bytes in Rust heap ***\n",
                 (int)rust_current);
-    
+
+#ifdef EXP_RS_ALLOC_TRACKING
     // Use new detailed allocation tracking functions to identify leaks
     extern size_t exp_rs_get_remaining_allocation_count(void);
     extern size_t exp_rs_get_remaining_allocations(struct CAllocationInfo* buffer, size_t buffer_size);
-    
+
     size_t remaining_count = exp_rs_get_remaining_allocation_count();
-    qemu_printf("Detailed allocation tracking found %d remaining allocations:\n", 
+    qemu_printf("Detailed allocation tracking found %d remaining allocations:\n",
                 (int)remaining_count);
-    
+
     if (remaining_count > 0) {
-      // Allocate buffer for allocation info (limit to reasonable number)  
+      // Allocate buffer for allocation info (limit to reasonable number)
       const size_t max_allocs = remaining_count < 100 ? remaining_count : 100;
       struct CAllocationInfo alloc_buffer[100];
-      
+
       size_t copied = exp_rs_get_remaining_allocations(alloc_buffer, max_allocs);
-      
+
       qemu_printf("\n=== DETAILED LEAK ANALYSIS ===\n");
       for (size_t i = 0; i < copied; i++) {
         qemu_printf("%d. %d bytes at line %d in %s (caller: 0x%08x, caller2: 0x%08x)\n",
@@ -825,10 +832,11 @@ int main(void) {
                     (unsigned int)alloc_buffer[i].caller2_addr);
       }
       qemu_printf("=== END LEAK ANALYSIS ===\n\n");
-    } else {
-      qemu_printf("(No detailed allocation tracking available - build with --features alloc_tracking)\n");
     }
-    
+#else
+    qemu_printf("(No detailed allocation tracking available - build with --track-allocs)\n");
+#endif
+
     qemu_exit(1); // Exit with failure
   } else if (current_allocated > 0) {
     qemu_printf("\n*** MEMORY LEAK DETECTED: %d bytes in system malloc ***\n",

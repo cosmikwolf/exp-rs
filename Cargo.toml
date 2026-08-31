@@ -51,12 +51,6 @@ lto = true        # Enable link-time optimization
 codegen-units = 1 # Use single codegen unit for better optimization
 debug = true
 
-[profile.bench]
-opt-level = 0      # No optimization for debugging
-debug = true       # Keep debug symbols
-lto = false        # Disable LTO for faster builds
-codegen-units = 16 # Default codegen units
-
 [build-dependencies]
 cbindgen = "0.29"
 
@@ -70,4 +64,8 @@ harness = false
 
 [[bench]]
 name = "arena_consolidated_benchmark"
+harness = false
+
+[[bench]]
+name = "eval_benchmark"
 harness = false

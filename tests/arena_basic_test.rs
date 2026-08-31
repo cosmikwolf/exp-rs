@@ -1,6 +1,6 @@
 use bumpalo::Bump;
 use exp_rs::{
-    EvalContext,
+    EvalContext, Real,
     engine::parse_expression,
     eval::iterative::{EvalEngine, eval_with_engine},
     expression::Expression,
@@ -46,14 +46,14 @@ fn test_arena_zero_allocations() {
     for i in 1..1000 {
         // Update context for this test
         let mut ctx_clone = (*ctx).clone();
-        ctx_clone.set_parameter("x", i as f64).unwrap();
+        ctx_clone.set_parameter("x", i as Real).unwrap();
         let ctx_rc = Rc::new(ctx_clone);
 
         let result1 = eval_with_engine(&expr1, Some(ctx_rc.clone()), &mut engine).unwrap();
         let _result2 = eval_with_engine(&expr2, Some(ctx_rc), &mut engine).unwrap();
 
         // Verify results are correct
-        assert_eq!(result1, (i as f64) * 2.0 + 2.0);
+        assert_eq!(result1, (i as Real) * 2.0 + 2.0);
 
         // Verify no new arena allocations beyond the initial evaluator setup
         assert_eq!(
@@ -91,19 +91,19 @@ fn test_batch_builder_arena() {
 
     // Evaluate many times with different parameters
     for i in 0..1000 {
-        builder.set_param_by_name("x", i as f64).unwrap();
-        builder.set_param_by_name("y", (i * 2) as f64).unwrap();
+        builder.set_param_by_name("x", i as Real).unwrap();
+        builder.set_param_by_name("y", (i * 2) as Real).unwrap();
 
         builder.eval(&ctx).unwrap();
 
         // Check results
         assert_eq!(
             builder.get_result(idx1).unwrap(),
-            (i as f64) * 2.0 + (i * 2) as f64
+            (i as Real) * 2.0 + (i * 2) as Real
         );
         assert_eq!(
             builder.get_result(idx2).unwrap(),
-            (i as f64) + (i * 2) as f64 * 3.0
+            (i as Real) + (i * 2) as Real * 3.0
         );
 
         // Verify no new arena allocations
