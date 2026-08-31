@@ -4,8 +4,8 @@
 //! with a shared set of parameters, optimized for real-time use cases.
 
 use crate::error::ExprError;
-use crate::eval::iterative::{EvalEngine, eval_with_engine};
-use crate::types::{BatchParamMap, TryIntoHeaplessString};
+use crate::eval::iterative::EvalEngine;
+use crate::types::{HString, TryIntoHeaplessString};
 use crate::{AstExpr, EvalContext, Real};
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
@@ -34,6 +34,11 @@ pub struct Expression<'arena> {
     /// Parameters with names and values together
     params: Vec<Param>,
 
+    /// Heapless name keys, index-aligned with `params`. Used to write
+    /// parameter values through to the engine's override map without
+    /// rebuilding the key on every update.
+    param_keys: Vec<HString>,
+
     /// Results for each expression
     results: Vec<Real>,
 
@@ -55,6 +60,7 @@ impl<'arena> Expression<'arena> {
             arena,
             expressions: Vec::new(),
             params: Vec::new(),
+            param_keys: Vec::new(),
             results: Vec::new(),
             engine: EvalEngine::new(arena),
             local_functions: None,
@@ -90,7 +96,13 @@ impl<'arena> Expression<'arena> {
         if self.params.iter().any(|p| p.name == name) {
             return Err(ExprError::DuplicateParameter(name.to_string()));
         }
+        let hname = name.try_into_heapless()?;
+        // Write through to the engine's override map. This is also where a
+        // full map surfaces as CapacityExceeded, at add time instead of at
+        // eval time.
+        self.engine.set_param_override(&hname, initial_value)?;
         let idx = self.params.len();
+        self.param_keys.push(hname);
         self.params.push(Param {
             name: name.to_string(),
             value: initial_value,
@@ -104,53 +116,46 @@ impl<'arena> Expression<'arena> {
             .get_mut(idx)
             .ok_or(ExprError::InvalidParameterIndex(idx))?
             .value = value;
-        Ok(())
+        self.engine.set_param_override(&self.param_keys[idx], value)
     }
 
     /// Update a parameter value by name (convenient but slower)
     pub fn set_param_by_name(&mut self, name: &str, value: Real) -> Result<(), ExprError> {
-        self.params
-            .iter_mut()
-            .find(|p| p.name == name)
+        let idx = self
+            .params
+            .iter()
+            .position(|p| p.name == name)
             .ok_or_else(|| ExprError::UnknownVariable {
                 name: name.to_string(),
-            })?
-            .value = value;
-        Ok(())
+            })?;
+        self.set_param(idx, value)
     }
 
     /// Evaluate all expressions with current parameter values
+    ///
+    /// Parameter values already live in the engine's override map
+    /// (`add_parameter` and `set_param` write through to it), so no map is
+    /// built here. The context is pushed once per call, not once per
+    /// expression.
     pub fn eval(&mut self, base_ctx: &Rc<EvalContext>) -> Result<(), ExprError> {
-        // Build parameter override map
-        let mut param_map = BatchParamMap::new();
-        for param in &self.params {
-            let hname = param.name.as_str().try_into_heapless()?;
-            param_map
-                .insert(hname, param.value)
-                .map_err(|_| ExprError::CapacityExceeded("parameter overrides"))?;
-        }
-
-        // Set parameter overrides in engine
-        self.engine.set_param_overrides(param_map);
-
         // Set local functions in engine
         self.engine.set_local_functions(self.local_functions);
 
-        // Evaluate each expression with the original context
+        // Push the context once for the whole batch
+        self.engine.begin_batch(Some(base_ctx.clone()))?;
+
+        // Evaluate each expression
         for (i, (_, ast)) in self.expressions.iter().enumerate() {
-            match eval_with_engine(ast, Some(base_ctx.clone()), &mut self.engine) {
+            match self.engine.eval_one(ast) {
                 Ok(value) => self.results[i] = value,
                 Err(e) => {
-                    // Clear overrides on error
-                    self.engine.clear_param_overrides();
+                    self.engine.end_batch();
                     return Err(e);
                 }
             }
         }
 
-        // Clear parameter overrides when done
-        self.engine.clear_param_overrides();
-
+        self.engine.end_batch();
         Ok(())
     }
 
@@ -294,7 +299,11 @@ impl<'arena> Expression<'arena> {
     pub fn clear(&mut self) {
         self.expressions.clear();
         self.params.clear();
+        self.param_keys.clear();
         self.results.clear();
+
+        // The engine's override map mirrors `params`; clear it with them.
+        self.engine.clear_param_overrides();
 
         // Clear local functions if they exist
         if let Some(funcs) = self.local_functions {

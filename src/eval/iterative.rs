@@ -9,7 +9,6 @@ use crate::context::EvalContext;
 use crate::error::ExprError;
 use crate::eval::context_stack::ContextStack;
 use crate::eval::stack_ops::EvalOp;
-use crate::eval::types::FunctionCacheEntry;
 use crate::types::{AstExpr, FunctionName, HString};
 use crate::types::{TryIntoFunctionName, TryIntoHeaplessString};
 
@@ -51,10 +50,12 @@ pub struct EvalEngine<'arena> {
 
     /// Context management
     ctx_stack: ContextStack,
-    /// Function cache
-    func_cache: BTreeMap<HString, Option<FunctionCacheEntry>>,
-    /// Parameter overrides for batch evaluation (avoids context modification)
-    param_overrides: Option<crate::types::BatchParamMap>,
+    /// Root context id for the current batch (set by `begin_batch`)
+    batch_ctx_id: Option<usize>,
+    /// Parameter overrides for batch evaluation (avoids context modification).
+    /// Owned by the engine permanently; `Expression` writes through to it, so
+    /// no map is rebuilt or moved per evaluation.
+    param_overrides: crate::types::BatchParamMap,
     /// Optional reference to local expression functions
     local_functions: Option<&'arena core::cell::RefCell<crate::types::ExpressionFunctionMap>>,
     /// Cache for parsed expression functions
@@ -80,8 +81,8 @@ impl<'arena> EvalEngine<'arena> {
 
             // Other fields
             ctx_stack: ContextStack::new(),
-            func_cache: BTreeMap::new(),
-            param_overrides: None,
+            batch_ctx_id: None,
+            param_overrides: crate::types::BatchParamMap::new(),
             local_functions: None,
             expr_func_cache: BTreeMap::new(),
         }
@@ -112,7 +113,7 @@ impl<'arena> EvalEngine<'arena> {
     pub fn arena_reset(&mut self) {
         self.arena_clear_stacks();
         self.ctx_stack.clear();
-        self.func_cache.clear();
+        self.batch_ctx_id = None;
         self.expr_func_cache.clear();
 
         // Reset high water marks
@@ -121,19 +122,31 @@ impl<'arena> EvalEngine<'arena> {
         self.arg_buffer_hwm = 0;
     }
 
-    /// Evaluate an expression
-    pub fn eval(
-        &mut self,
-        ast: &'arena AstExpr<'arena>,
-        ctx: Option<Rc<EvalContext>>,
-    ) -> Result<Real, ExprError> {
-        // Clear stacks efficiently for arena allocation
+    /// Start a batch: push the context and apply per-batch state one time.
+    ///
+    /// The context clear rewrites the whole fixed-capacity parent map, so it
+    /// is the expensive part of evaluation setup. Doing it here, once per
+    /// batch instead of once per expression, is the point of the
+    /// `begin_batch` / `eval_one` / `end_batch` split.
+    pub fn begin_batch(&mut self, ctx: Option<Rc<EvalContext>>) -> Result<(), ExprError> {
         self.arena_clear_stacks();
         self.ctx_stack.clear();
-        self.func_cache.clear();
-
-        // Initialize with root context
         let root_ctx_id = self.ctx_stack.push_context(ctx)?;
+        self.batch_ctx_id = Some(root_ctx_id);
+        Ok(())
+    }
+
+    /// Evaluate one expression inside the current batch.
+    ///
+    /// Only the operation and value stacks are cleared; the context stack and
+    /// parameter overrides set up by `begin_batch` stay in place.
+    pub fn eval_one(&mut self, ast: &'arena AstExpr<'arena>) -> Result<Real, ExprError> {
+        let root_ctx_id = self
+            .batch_ctx_id
+            .ok_or_else(|| ExprError::Other("eval_one called without begin_batch".to_string()))?;
+
+        // Clear only the stacks; a previous error may have left values behind.
+        self.arena_clear_stacks();
 
         // Push initial operation (no clone needed - just use reference!)
         self.op_stack.push(EvalOp::Eval {
@@ -158,6 +171,24 @@ impl<'arena> EvalEngine<'arena> {
         self.value_stack
             .pop()
             .ok_or_else(|| ExprError::Other("No result on value stack".to_string()))
+    }
+
+    /// End the current batch, releasing the context reference.
+    pub fn end_batch(&mut self) {
+        self.ctx_stack.clear();
+        self.batch_ctx_id = None;
+    }
+
+    /// Evaluate an expression
+    pub fn eval(
+        &mut self,
+        ast: &'arena AstExpr<'arena>,
+        ctx: Option<Rc<EvalContext>>,
+    ) -> Result<Real, ExprError> {
+        self.begin_batch(ctx)?;
+        let result = self.eval_one(ast);
+        self.end_batch();
+        result
     }
 
     /// Process a single operation
@@ -429,8 +460,8 @@ impl<'arena> EvalEngine<'arena> {
         }
 
         // Check parameter overrides second (batch evaluation parameters)
-        if let Some(ref overrides) = self.param_overrides {
-            if let Some(&value) = overrides.get(&name) {
+        if !self.param_overrides.is_empty() {
+            if let Some(&value) = self.param_overrides.get(&name) {
                 self.value_stack.push(value);
                 return Ok(());
             }
@@ -595,22 +626,33 @@ impl<'arena> EvalEngine<'arena> {
     /// Set parameter overrides for batch evaluation.
     /// These take precedence over context variables during lookup.
     pub fn set_param_overrides(&mut self, params: crate::types::BatchParamMap) {
-        self.param_overrides = Some(params);
+        self.param_overrides = params;
+    }
+
+    /// Set or update a single parameter override in place.
+    pub fn set_param_override(&mut self, name: &HString, value: Real) -> Result<(), ExprError> {
+        if let Some(slot) = self.param_overrides.get_mut(name) {
+            *slot = value;
+            return Ok(());
+        }
+        self.param_overrides
+            .insert(name.clone(), value)
+            .map(|_| ())
+            .map_err(|_| ExprError::CapacityExceeded("parameter overrides"))
     }
 
     /// Clear parameter overrides.
     pub fn clear_param_overrides(&mut self) {
-        self.param_overrides = None;
+        self.param_overrides.clear();
     }
 
-    /// Execute a function with parameter overrides, ensuring they are cleared afterwards.
-    /// This provides RAII-style cleanup for safe batch evaluation.
+    /// Execute a function with parameter overrides, ensuring the previous
+    /// overrides are restored afterwards.
     pub fn with_param_overrides<F, R>(&mut self, params: crate::types::BatchParamMap, f: F) -> R
     where
         F: FnOnce(&mut Self) -> R,
     {
-        let old_overrides = self.param_overrides.take();
-        self.param_overrides = Some(params);
+        let old_overrides = core::mem::replace(&mut self.param_overrides, params);
         let result = f(self);
         self.param_overrides = old_overrides;
         result

@@ -76,6 +76,7 @@ use alloc::vec::Vec;
 use bumpalo::Bump;
 use core::ffi::{CStr, c_char, c_void};
 use core::ptr;
+#[cfg(feature = "alloc_tracking")]
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 // Re-export for external visibility
@@ -91,6 +92,10 @@ struct BatchWithArena {
     magic: usize,                    // Magic number for validation
     arena: *mut Bump,                // Raw pointer to the arena we leaked
     batch: *mut Expression<'static>, // Raw pointer to the batch
+    // Default context for evaluate calls with a NULL ctx, built lazily on
+    // first use. Building one costs ~30 function registrations, so doing it
+    // per call would dominate small batches.
+    default_ctx: Option<alloc::rc::Rc<EvalContext>>,
 }
 
 impl Drop for BatchWithArena {
@@ -801,7 +806,9 @@ pub struct ExprArena {
 // ============================================================================
 
 /// Native function signature
-pub type NativeFunc = extern "C" fn(args: *const Real, n_args: usize) -> Real;
+// Option<extern fn> is the FFI-safe form of a nullable C function pointer;
+// cbindgen renders it as the same plain function-pointer typedef.
+pub type NativeFunc = Option<extern "C" fn(args: *const Real, n_args: usize) -> Real>;
 
 // ============================================================================
 // Context Management
@@ -935,6 +942,15 @@ pub extern "C" fn expr_context_add_function(
     if ctx.is_null() || name.is_null() {
         return -1;
     }
+
+    // Before the Phase A engine split, a NULL function pointer was rejected
+    // only by accident: the engine kept a clone of the last-used context
+    // alive, so Rc::get_mut below failed with -4 for ANY registration after
+    // an evaluate. The engine no longer holds that clone, so the NULL check
+    // must be explicit.
+    let Some(func) = func else {
+        return -1;
+    };
 
     let ctx_handle = unsafe { &mut *(ctx as *mut alloc::rc::Rc<EvalContext>) };
 
@@ -1154,6 +1170,7 @@ pub extern "C" fn expr_batch_new(size_hint: usize) -> *mut ExprBatch {
         magic: BATCH_MAGIC,
         arena: arena_ptr,
         batch: batch_ptr,
+        default_ctx: None,
     });
 
     Box::into_raw(wrapper) as *mut ExprBatch
@@ -1443,11 +1460,14 @@ pub extern "C" fn expr_batch_evaluate(batch: *mut ExprBatch, ctx: *mut ExprConte
         return -1;
     }
 
-    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let wrapper = unsafe { &mut *(batch as *mut BatchWithArena) };
     let builder = unsafe { &mut *wrapper.batch };
 
     let eval_ctx = if ctx.is_null() {
-        alloc::rc::Rc::new(EvalContext::new())
+        wrapper
+            .default_ctx
+            .get_or_insert_with(|| alloc::rc::Rc::new(EvalContext::new()))
+            .clone()
     } else {
         unsafe {
             let ctx_rc = &*(ctx as *const alloc::rc::Rc<EvalContext>);
@@ -1516,11 +1536,14 @@ pub extern "C" fn expr_batch_evaluate_ex(
         return ExprResult::from_ffi_error(FFI_ERROR_NULL_POINTER, "Null batch pointer");
     }
 
-    let wrapper = unsafe { &*(batch as *const BatchWithArena) };
+    let wrapper = unsafe { &mut *(batch as *mut BatchWithArena) };
     let builder = unsafe { &mut *wrapper.batch };
 
     let eval_ctx = if ctx.is_null() {
-        alloc::rc::Rc::new(EvalContext::new())
+        wrapper
+            .default_ctx
+            .get_or_insert_with(|| alloc::rc::Rc::new(EvalContext::new()))
+            .clone()
     } else {
         unsafe {
             let ctx_rc = &*(ctx as *const alloc::rc::Rc<EvalContext>);
